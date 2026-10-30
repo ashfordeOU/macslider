@@ -4,6 +4,15 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-10-30
+
+### Added
+- A proper installer: the disk image opens to Monorail beside your Applications folder, over a background that shows you to drag it across.
+- A new README with an animated banner, a how-it-works diagram, a guide to slide layouts, a comparison and an FAQ.
+
+### Changed
+- Links point to the repository's new home, github.com/ashfordeOU/monorail.
+
 ## [0.3.0] - 2026-10-30
 
 ### Changed
@@ -11,13 +20,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - Windows dragged into a single-window slide now follow your slide layout (side by side by default) instead of stacking. Right-click a window, or a slide's handle in the overview, for Slide Layout: side by side, up and down, grid, main + side, main + bottom or tabs.
 - The app icon fills macOS's icon shape exactly, so newer macOS shows it full size instead of on a grey plate.
 - Built with the newest Xcode available.
+- Updating keeps everything: the app's identity and signature are unchanged, so Accessibility and Screen Recording stay granted, and settings and layouts move over automatically. The app is installed as Monorail.app on update.
 
 ### Fixed
 - Menu bar menu commands (Reset to Smart Pairs, Undo Layout Change and the rest) now always run: the menu opens in a way that delivers the chosen item reliably.
 - Reset to smart pairs and Undo confirm what they did with a short message.
-
-### Changed (continued)
-- Updating keeps everything: the app's identity and signature are unchanged, so Accessibility and Screen Recording stay granted, and settings and layouts move over automatically. The app is installed as Monorail.app on update.
 
 ## [0.2.5] - 2026-10-30
 

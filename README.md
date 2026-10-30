@@ -1,60 +1,129 @@
 <div align="center">
 
-<img src="assets/icon.png" width="160" alt="Monorail icon">
+<img src="assets/readme/banner.svg" alt="Monorail — every window rides one rail" width="100%">
 
-# Monorail
+<br>
 
-**Monorail for Mac.** Every window rides one rail.
+[![Download Monorail](https://img.shields.io/badge/Download-Monorail%20for%20Mac-F66270?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/ashfordeOU/monorail/releases/latest)
 
-**A scrolling window manager for macOS.**
-Every window sits side by side on one endless strip. Nothing shrinks, nothing overlaps.
-
-[Download](https://github.com/ashfordeOU/monorail/releases/latest) ·
-[Shortcuts](#keyboard-shortcuts) ·
-[Build from source](#build-from-source) ·
-[License](#license)
-
-![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
-![Universal](https://img.shields.io/badge/Apple%20silicon%20%2B%20Intel-universal-blue)
-![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-green)
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-2A1430?logo=apple)
+![Universal](https://img.shields.io/badge/Apple%20silicon%20%2B%20Intel-universal-D63A80)
+![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-FF9E62)
 [![CI](https://github.com/ashfordeOU/monorail/actions/workflows/ci.yml/badge.svg)](https://github.com/ashfordeOU/monorail/actions/workflows/ci.yml)
+
+[Install](#install) · [Getting started](#getting-started) · [Shortcuts](#keyboard-shortcuts) · [FAQ](#faq) · [Build from source](#build-from-source)
 
 </div>
 
 ---
 
 Grid tilers squeeze every new window into the space that's already there.
-Monorail does the opposite: each window is a column on a horizontal strip that
-runs past the edges of your display. Open a window and it slides in next to the
-one you're using. Everything else keeps its size. Move focus and the strip
-glides just far enough to bring the window into view.
+**Monorail does the opposite.** Each window is a column on a horizontal strip
+that runs past the edges of your display. Open a window and it slides in next
+to the one you're using; everything else keeps its size. Move focus and the
+strip glides just far enough to bring the window into view.
+
+<p align="center"><img src="assets/readme/how-it-works.svg" alt="How Monorail works: windows on a strip that runs past the screen" width="100%"></p>
 
 ## Highlights
 
-- **One endless strip per display.** Each display, and each Space on it, has its own strip with its own focus and scroll position.
-- **Slides grouped by app.** Two Safari windows share a full-screen slide side by side; terminals tile four to a slide (2×2). Apps with one window pair up with another, so no space is wasted.
-- **Slider in the menu bar.** Click the menu bar icon for the slider and your slides as cards; right-click for the full menu.
-- **Slider bar.** A glass mini-map of the whole strip glides in while you move: every slide as a tile with its app icons, and a frame showing what's on screen. Drag it to slide every window along, click a tile to jump.
-- **Overview.** One key (<kbd>⌃⌥O</kbd>) shows every slide in every workspace, laid out in order. Click to jump there, drag windows between slides, drag slides to reorder.
-- **Workspaces.** Up to nine per display. <kbd>⌃⌥1</kbd>–<kbd>⌃⌥9</kbd> switches; add <kbd>⇧</kbd> to take the window with you.
-- **Slide mode: no chords to remember.** Tap the right ⌥ key, then press ← → to slide between windows. R sets the width, F fills the screen, Esc finishes.
-- **Scroll with your mouse.** Hold ⌥ and turn the wheel: each notch moves one window. Or just scroll over the menu bar, or click the ‹ › buttons next to the menu bar icon.
-- **Trackpad native.** Hold ⌥ and swipe two fingers, or turn on a plain three- or four-finger swipe. The strip follows your fingers and settles on the nearest window.
-- **Shortcuts too.** Focus, move, resize and arrange with Control-Option plus the arrow keys or H J K L. Every shortcut can be rebound.
-- **Slide layouts.** Up to six windows per slide as a grid (2×2, 3×2), columns, rows, main + side, main + bottom, or tabs. Resize the main window, make any window the main one, and set a layout per app.
-- **Either direction.** Run the strip left to right, or right to left with everything mirrored.
-- **Pinned columns.** Keep a column at the left or right edge while the rest of the strip scrolls.
-- **Smart floating.** Dialogs, panels and fixed-size windows float automatically. Per-app rules float apps or give them a default width and position.
-- **Safe by design.** Pause, quit or log out and every window is put back fully on screen. The layout is restored when Monorail restarts.
-- **Native and private.** Written in Swift with AppKit and SwiftUI. No account, no telemetry. The only permission is Accessibility; the only network request is an optional daily update check.
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🚝 One endless strip
+Every display, Space and workspace gets its own strip. New windows open next
+to the one you're using, nothing ever shrinks to make room, and windows off
+screen wait at the edges.
+
+</td>
+<td width="50%" valign="top">
+
+### 🧩 Smart slides
+Windows of the same app share a slide: two Safari windows side by side,
+terminals four to a slide. Lone windows pair up when you ask. Your own
+pairings stick until you **Reset to smart pairs**.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🎚️ The slider
+A glass mini-map of the strip glides in as you move. Hover a slide for a
+**live preview** of its windows, drag to slide everything along, click to jump.
+It's in the menu bar too.
+
+</td>
+<td valign="top">
+
+### 🗺️ Overview
+<kbd>⌃⌥O</kbd> shows every slide of every workspace on one colourful canvas.
+Click to jump, drag windows between slides, rename, close or minimise them
+right there.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### ⌨️ No chords needed
+Tap the right <kbd>⌥</kbd> for **slide mode**, then just press <kbd>←</kbd> <kbd>→</kbd>.
+Or hold <kbd>⌥</kbd> and turn the mouse wheel, swipe on the trackpad, or scroll
+over the menu bar. Full shortcuts are there when you want them.
+
+</td>
+<td valign="top">
+
+### 📐 Layouts that stay put
+Grid, side by side, up and down, main + side, main + bottom or tabs, up to six
+windows a slide. Resize one and its neighbours follow; apps that move
+themselves get snapped back.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🗂️ Workspaces
+Up to nine per display, each with its own name and colour. <kbd>⌃⌥1</kbd>–<kbd>⌃⌥9</kbd>
+switches; add <kbd>⇧</kbd> to take the window with you.
+
+</td>
+<td valign="top">
+
+### 🔒 Native, private, safe
+Swift, AppKit and SwiftUI. No account, no telemetry. One permission
+(Accessibility). Pause or quit and every window comes back on screen; undo any
+change with <kbd>⌃⌥Z</kbd>.
+
+</td>
+</tr>
+</table>
+
+<p align="center"><img src="assets/readme/layouts.svg" alt="Slide layouts: side by side, up and down, grids of four and six, main + side, main + bottom, columns and tabs" width="100%"></p>
+
+### How it compares
+
+| | Monorail | Grid tilers | Snapping tools |
+| --- | :---: | :---: | :---: |
+| New windows keep everyone's size | ✅ | ❌ squeezes the rest | ✅ |
+| Arranges windows for you | ✅ | ✅ | ❌ manual |
+| Unlimited windows per screen | ✅ on a strip | ❌ ever-smaller tiles | ❌ they overlap |
+| Mouse-first controls (wheel, slider, menu bar) | ✅ | ❌ | partly |
+| Groups windows by app | ✅ | ❌ | ❌ |
+| Live overview you can rearrange | ✅ | ❌ | ❌ |
+| Free and open source | ✅ AGPL | varies | mostly paid |
 
 ## Install
 
 ### Download
 
-1. Download **Monorail.dmg** from the [latest release](https://github.com/ashfordeOU/monorail/releases/latest).
-2. Open it and drag **Monorail** to **Applications**.
-3. Open Monorail and allow **Accessibility** access when asked.
+1. Download **Monorail-x.y.z.dmg** from the [latest release](https://github.com/ashfordeOU/monorail/releases/latest).
+2. Open it. The installer window shows Monorail next to your Applications folder: **drag Monorail onto Applications**.
+3. Open Monorail from Applications and allow **Accessibility** access when asked. The welcome tour walks you through it.
+
+<p align="center"><img src="assets/readme/installer.png" alt="The Monorail installer: drag Monorail into Applications" width="560"></p>
 
 > [!NOTE]
 > Release builds are not yet notarized by Apple. The first time you open Monorail,
@@ -383,13 +452,13 @@ and on in **Privacy & Security → Accessibility**.
 ### Project layout
 
 ```
-Sources/MonorailCore/   Layout model: strips, columns, widths, scrolling, keymap, settings
-Sources/Monorail/       macOS app: engine, input, overlays, menu bar, settings UI
+Sources/MonorailCore/    Layout model: strips, slides, layouts, grouping, keymap, settings (no AppKit, tested on macOS and Linux)
+Sources/Monorail/        macOS app: engine, input, overlays, slider, overview, menu bar, settings, updater
 Tests/                   Unit tests for the layout model
 Resources/Info.plist     App bundle metadata
-assets/icon.png          App icon master (rendered by scripts/render-icon.py)
-scripts/                 Build, package, install, icon and command-line tools
-.github/workflows/       CI, plus release builds on version tags
+assets/                  App icon, installer background and README artwork
+scripts/                 Build, package, install, signing, artwork and command-line tools
+.github/workflows/       CI on every push; signed releases on demand
 ```
 
 ## Troubleshooting
@@ -398,6 +467,26 @@ scripts/                 Build, package, install, icon and command-line tools
 - **A window won't tile.** Some apps have fixed-size windows, or open panels instead of standard windows. These float on purpose. Press <kbd>⌃⌥T</kbd> to tile one anyway.
 - **Windows jumped around after a display change.** Press <kbd>⌃⌥Esc</kbd> to retile.
 - **Everything's in a mess.** Pause with <kbd>⌃⌥Q</kbd>. Every window comes back on screen, and you can move them by hand.
+
+## FAQ
+
+**Does Monorail replace macOS Spaces or Mission Control?**
+No. It works alongside them: each Space keeps its own strip, and full-screen apps are left alone.
+
+**Will it fight with my other window tools?**
+Turn off other window managers' snapping (Rectangle, Magnet and the like) and Stage Manager. **Settings → General → Mac setup** checks for these for you.
+
+**What happens to my windows if I quit?**
+Every window is put back fully on screen, where you can move it by hand. Next time Monorail starts it restores your layout.
+
+**Why does it need Accessibility access?**
+macOS requires it before any app can move other apps' windows. That's the only permission Monorail needs. Live previews optionally use Screen Recording; nothing ever leaves your Mac.
+
+**Some app's windows won't tile.**
+Dialogs, file pickers and fixed-size windows float on purpose. Press <kbd>⌃⌥T</kbd> to tile one anyway, or set a rule for the app in **Settings → Apps**.
+
+**Is it free?**
+Yes. Monorail is free and open source under the GNU AGPL v3.0.
 
 ## Contributing
 

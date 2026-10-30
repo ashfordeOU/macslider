@@ -70,3 +70,41 @@ os.makedirs(out, exist_ok=True)
 render(1).save(os.path.join(out, "background.png"))
 render(2).save(os.path.join(out, "background@2x.png"))
 print("Wrote", out)
+
+
+def installer_preview():
+    """assets/readme/installer.png: the installer window as Finder shows it."""
+    s = 2
+    bg = Image.open(os.path.join(out, "background@2x.png")).convert("RGBA")
+    title_h = 28 * s
+    win = Image.new("RGBA", (W * s, H * s + title_h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(win)
+    d.rounded_rectangle((0, 0, W * s - 1, H * s + title_h - 1), radius=12 * s, fill=(236, 232, 236, 255))
+    win.paste(bg, (0, title_h))
+    for i, color in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):
+        cx, cy, r = (20 + i * 20) * s, 14 * s, 6 * s
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=color + (255,))
+    label = "Monorail"
+    f = font(13 * s, bold=True)
+    d.text(((W * s - d.textlength(label, font=f)) / 2, 6 * s), label, fill=(60, 50, 60, 255), font=f)
+    icon = Image.open(os.path.join(ROOT, "assets", "icon.png")).convert("RGBA").resize((128 * s, 128 * s), Image.LANCZOS)
+    win.alpha_composite(icon, ((170 - 64) * s, title_h + (200 - 64) * s))
+    # Applications folder: a simple blue folder.
+    fx, fy = (490 - 56) * s, title_h + (200 - 44) * s
+    d.rounded_rectangle((fx, fy, fx + 46 * s, fy + 20 * s), radius=6 * s, fill=(90, 170, 245, 255))
+    d.rounded_rectangle((fx, fy + 10 * s, fx + 112 * s, fy + 88 * s), radius=10 * s, fill=(110, 186, 252, 255))
+    d.rounded_rectangle((fx, fy + 22 * s, fx + 112 * s, fy + 88 * s), radius=10 * s, fill=(80, 160, 240, 255))
+    a = font(30 * s, bold=True)
+    d.text((fx + 56 * s - d.textlength("A", font=a) / 2, fy + 34 * s), "A", fill=(255, 255, 255, 230), font=a)
+    lf = font(13 * s)
+    for text, cx in (("Monorail", 170), ("Applications", 490)):
+        tw = d.textlength(text, font=lf)
+        d.text((cx * s - tw / 2, title_h + 272 * s), text, fill=(50, 40, 50, 255), font=lf)
+    path = os.path.join(ROOT, "assets", "readme", "installer.png")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    width = 1120  # shown at 560pt in the README
+    win.resize((width, int(win.height * width / win.width)), Image.LANCZOS).save(path, optimize=True)
+    print("Wrote", path)
+
+
+installer_preview()
