@@ -1,3 +1,5 @@
+import Foundation
+
 /// How Monorail treats the windows of one app.
 public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     public var bundleID: String
@@ -36,6 +38,40 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         self.tiles = tiles
         self.arrangement = arrangement
         self.workspace = workspace
+    }
+}
+
+/// A slide layout the user designed: columns side by side, each split into rows.
+public struct CustomLayout: Equatable, Hashable, Codable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    /// Rows in each column, e.g. [1, 2] = one big tile beside two stacked.
+    public var rows: [Int]
+
+    public init(id: String = UUID().uuidString, name: String, rows: [Int]) {
+        self.id = id
+        self.name = name
+        self.rows = rows
+    }
+
+    public var tiles: Int { rows.reduce(0, +) }
+}
+
+/// Apps that open together in one slide (like Android's app pairs).
+public struct AppPair: Equatable, Hashable, Codable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    public var bundleIDs: [String]
+    public var arrangement: Arrangement
+    public var customRows: [Int]?
+
+    public init(id: String = UUID().uuidString, name: String, bundleIDs: [String], arrangement: Arrangement,
+                customRows: [Int]? = nil) {
+        self.id = id
+        self.name = name
+        self.bundleIDs = bundleIDs
+        self.arrangement = arrangement
+        self.customRows = customRows
     }
 }
 
@@ -119,6 +155,25 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var tilesPerSlide = 2
     /// Push the pointer against the left or right screen edge to slide.
     public var hotEdges = false
+    /// Slide layouts designed in Settings.
+    public var customLayouts: [CustomLayout] = [
+        CustomLayout(id: "big-and-two", name: "Big + two", rows: [1, 2]),
+        CustomLayout(id: "two-big-two", name: "Two, big, two", rows: [2, 1, 2]),
+    ]
+    /// Saved app pairs.
+    public var appPairs: [AppPair] = []
+    /// Profiles: whole sets of workspaces ("Work", "Home").
+    public var profiles: [String] = ["Default"]
+    /// Show only the workspaces in use, plus one empty one.
+    public var dynamicWorkspaces = false
+    /// A light tap on Force Touch trackpads when the strip settles.
+    public var hapticFeedback = true
+    /// Hold ⌥ and pinch on the trackpad to open (pinch in) or close the overview.
+    public var pinchForOverview = true
+    /// Red dots on slides whose apps show a badge in the Dock.
+    public var attentionMarkers = true
+    /// Dragging a window to the top of the screen shows layouts to drop it into.
+    public var snapPicker = true
     /// Snap windows back when an app moves or resizes one by itself.
     public var keepWindowsInPlace = true
     /// After resizing a window in a slide, offer to rearrange the slide.
@@ -193,7 +248,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically, resizeAssist, workspaceNames, hotEdges
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically, resizeAssist, workspaceNames, hotEdges, customLayouts, appPairs, profiles, dynamicWorkspaces
+        case hapticFeedback, pinchForOverview, attentionMarkers, snapPicker
     }
 
     public init(from decoder: Decoder) throws {
@@ -239,6 +295,15 @@ public struct AppSettings: Equatable, Codable, Sendable {
         resizeAssist = value(.resizeAssist, d.resizeAssist)
         workspaceNames = value(.workspaceNames, d.workspaceNames)
         hotEdges = value(.hotEdges, d.hotEdges)
+        customLayouts = value(.customLayouts, d.customLayouts)
+        appPairs = value(.appPairs, d.appPairs)
+        profiles = value(.profiles, d.profiles)
+        if profiles.isEmpty { profiles = d.profiles }
+        dynamicWorkspaces = value(.dynamicWorkspaces, d.dynamicWorkspaces)
+        hapticFeedback = value(.hapticFeedback, d.hapticFeedback)
+        pinchForOverview = value(.pinchForOverview, d.pinchForOverview)
+        attentionMarkers = value(.attentionMarkers, d.attentionMarkers)
+        snapPicker = value(.snapPicker, d.snapPicker)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

@@ -270,7 +270,7 @@ private struct SliderBarView: View {
         var ux = min(max((x - left(tile)) / max(tile.width * scale, 1), 0), 0.999)
         let uy = min(max((Double(point.y) - 4) / max(height - 8, 1), 0), 0.999)
         if map.isRightToLeft { ux = 1 - ux }
-        let frames = tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split)
+        let frames = tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split, rows: tile.customRows)
         let index = frames.firstIndex { $0.contains(x: ux, y: uy) } ?? 0
         return tile.windows.indices.contains(index) ? tile.windows[index].id : tile.windows.first?.id
     }
@@ -371,7 +371,7 @@ private struct TileView: View {
                 .fill(tile.isFocused ? Color.accentColor.opacity(0.35) : Color.primary.opacity(0.10))
             if tile.windows.count > 1 {
                 // Hint at the slide's layout with thin tile outlines.
-                TileOutlines(frames: tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split))
+                TileOutlines(frames: tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split, rows: tile.customRows))
                     .stroke(Color.primary.opacity(0.18), lineWidth: 1)
                     .padding(3)
             }
@@ -389,7 +389,15 @@ private struct TileView: View {
             }
             .padding(.horizontal, 3)
         }
+        .overlay(alignment: .topTrailing) {
+            if tile.windows.contains(where: \.needsAttention) {
+                Circle().fill(Color.red).frame(width: 6, height: 6).padding(2)
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(tile.windows.map(\.appName).joined(separator: " and ")
+            + (tile.windows.contains(where: \.needsAttention) ? ", needs attention" : ""))
     }
 }
 
@@ -614,7 +622,7 @@ private struct PreviewView: View {
                     }
                 }
                 GeometryReader { geometry in
-                    let frames = tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split)
+                    let frames = tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split, rows: tile.customRows)
                     ZStack(alignment: .topLeading) {
                         ForEach(Array(tile.windows.enumerated()), id: \.element.id) { index, window in
                             let unit = frames[index]
@@ -852,7 +860,7 @@ private struct SlideCard: View {
                 RoundedRectangle(cornerRadius: 7)
                     .fill(tile.isFocused ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.08))
                 if tile.windows.count > 1 {
-                    TileOutlines(frames: tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split))
+                    TileOutlines(frames: tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split, rows: tile.customRows))
                         .stroke(Color.primary.opacity(0.25), lineWidth: 1)
                         .padding(4)
                 }

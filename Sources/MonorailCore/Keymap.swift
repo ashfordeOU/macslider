@@ -42,6 +42,7 @@ public enum KeyCode {
     public static let p: UInt16 = 35, l: UInt16 = 37, j: UInt16 = 38, k: UInt16 = 40, n: UInt16 = 45
     public static let m: UInt16 = 46
     public static let equal: UInt16 = 24, minus: UInt16 = 27, comma: UInt16 = 43, period: UInt16 = 47
+    public static let semicolon: UInt16 = 41, grave: UInt16 = 50, zero: UInt16 = 29
     public static let rightBracket: UInt16 = 30, leftBracket: UInt16 = 33
     public static let returnKey: UInt16 = 36, tab: UInt16 = 48, space: UInt16 = 49
     public static let delete: UInt16 = 51, escape: UInt16 = 53
@@ -182,6 +183,11 @@ public struct Keymap: Equatable, Codable, Sendable {
             .sendToNextDisplay: [s(KeyCode.d, co), s(KeyCode.n, co)],
             .retile: [s(KeyCode.escape, co)],
             .undo: [s(KeyCode.z, co)],
+            .setMark: [s(KeyCode.semicolon, cos)],
+            .jumpToMark: [s(KeyCode.semicolon, co)],
+            .toggleScratchpad: [s(KeyCode.grave, co)],
+            .makeScratchpad: [s(KeyCode.grave, cos)],
+            .nextProfile: [s(KeyCode.zero, co)],
             // Snapping (floats the window first): Control-Option-Command plus a key.
             .snapLeftHalf: [s(KeyCode.left, coc)],
             .snapRightHalf: [s(KeyCode.right, coc)],

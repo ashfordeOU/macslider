@@ -26,6 +26,8 @@ public struct Column: Equatable, Codable, Sendable {
     public var arrangement: Arrangement
     /// The main window's share of the column in the main layouts.
     public var split: Double
+    /// Rows per column for a custom layout, e.g. [1, 2] = one big tile beside two.
+    public var customRows: [Int]?
     /// Pinned columns stay at a screen edge while the rest of the strip scrolls.
     public var pin: PinSide?
     /// Set when the user arranged this column by hand. Automatic grouping
@@ -41,7 +43,8 @@ public struct Column: Equatable, Codable, Sendable {
         arrangement: Arrangement = .stack,
         split: Double = Arrangement.defaultSplit,
         pin: PinSide? = nil,
-        isCustom: Bool = false
+        isCustom: Bool = false,
+        customRows: [Int]? = nil
     ) {
         self.windows = windows
         self.active = active
@@ -52,6 +55,7 @@ public struct Column: Equatable, Codable, Sendable {
         self.split = split
         self.pin = pin
         self.isCustom = isCustom
+        self.customRows = customRows
     }
 
     /// More than six windows in one slide is too crowded to use.
@@ -65,10 +69,10 @@ public struct Column: Equatable, Codable, Sendable {
     public var isTiled: Bool { arrangement != .stack }
 
     /// Tile rectangles in unit coordinates for the column's windows.
-    public var unitFrames: [Rect] { arrangement.unitFrames(count: windows.count, split: split) }
+    public var unitFrames: [Rect] { arrangement.unitFrames(count: windows.count, split: split, rows: customRows) }
 
     private enum CodingKeys: String, CodingKey {
-        case windows, active, width, isFullWidth, isTabbed, arrangement, split, isGrid, pin, isCustom
+        case windows, active, width, isFullWidth, isTabbed, arrangement, split, isGrid, pin, isCustom, customRows
     }
 
     public init(from decoder: Decoder) throws {
@@ -83,7 +87,8 @@ public struct Column: Equatable, Codable, Sendable {
                 ?? ((try c.decodeIfPresent(Bool.self, forKey: .isGrid)) == true ? .grid : .stack),
             split: try c.decodeIfPresent(Double.self, forKey: .split) ?? Arrangement.defaultSplit,
             pin: try c.decodeIfPresent(PinSide.self, forKey: .pin),
-            isCustom: try c.decodeIfPresent(Bool.self, forKey: .isCustom) ?? false
+            isCustom: try c.decodeIfPresent(Bool.self, forKey: .isCustom) ?? false,
+            customRows: try c.decodeIfPresent([Int].self, forKey: .customRows)
         )
         active = min(max(active, 0), max(windows.count - 1, 0))
     }
@@ -99,6 +104,7 @@ public struct Column: Equatable, Codable, Sendable {
         try c.encode(split, forKey: .split)
         try c.encodeIfPresent(pin, forKey: .pin)
         try c.encode(isCustom, forKey: .isCustom)
+        try c.encodeIfPresent(customRows, forKey: .customRows)
     }
 }
 
@@ -269,7 +275,8 @@ public struct Strip: Equatable, Codable, Sendable {
             let target = index + (direction == .up ? -1 : 1)
             return column.windows.indices.contains(target) ? target : nil
         }
-        return column.arrangement.neighbour(of: index, count: column.windows.count, split: column.split, direction)
+        return column.arrangement.neighbour(
+            of: index, count: column.windows.count, split: column.split, rows: column.customRows, direction)
     }
 
     /// Entering a column sideways lands on a tile on the near edge.
@@ -277,7 +284,7 @@ public struct Strip: Equatable, Codable, Sendable {
         let column = columns[focusedColumn]
         guard !column.isTabbed, column.windows.count > 1 else { return }
         columns[focusedColumn].active = column.arrangement.entryTile(
-            count: column.windows.count, split: column.split, fromRight: fromRight,
+            count: column.windows.count, split: column.split, rows: column.customRows, fromRight: fromRight,
             preferred: column.active, crossY: crossY)
     }
 
@@ -404,11 +411,13 @@ public struct Strip: Equatable, Codable, Sendable {
     /// Inserts a new column holding `windows` as grid tiles.
     public mutating func insertSlide(
         _ windows: [WindowID], width: Double, arrangement: Arrangement = .grid,
-        position: InsertPosition = .afterFocused, focus: Bool = true
+        position: InsertPosition = .afterFocused, focus: Bool = true, custom: Bool = false, rows: [Int]? = nil
     ) {
         let fresh = windows.filter { !contains($0) }
         guard !fresh.isEmpty else { return }
-        let column = Column(windows: fresh, active: fresh.count - 1, width: width, arrangement: arrangement)
+        let column = Column(
+            windows: fresh, active: fresh.count - 1, width: width, arrangement: arrangement, isCustom: custom,
+            customRows: arrangement == .custom ? rows : nil)
         let index: Int
         switch position {
         case .afterFocused: index = columns.isEmpty ? 0 : focusedColumn + 1
@@ -552,6 +561,24 @@ public struct Strip: Equatable, Codable, Sendable {
         return true
     }
 
+    /// Swaps two windows of one slide, as when one is dragged onto the
+    /// other's tile: each takes the other's place and size.
+    @discardableResult
+    public mutating func swapTiles(_ a: WindowID, _ b: WindowID) -> Bool {
+        guard let first = locate(a), let second = locate(b), first.column == second.column,
+            first.row != second.row
+        else { return false }
+        let c = first.column
+        columns[c].windows.swapAt(first.row, second.row)
+        columns[c].isCustom = true
+        if columns[c].active == first.row {
+            columns[c].active = second.row
+        } else if columns[c].active == second.row {
+            columns[c].active = first.row
+        }
+        return true
+    }
+
     /// Replaces the strip's columns, e.g. when a saved layout is applied.
     public mutating func replaceColumns(_ columns: [Column], keepingFocusOn window: WindowID? = nil) {
         self.columns = columns.filter { !$0.windows.isEmpty }
@@ -678,10 +705,11 @@ public struct Strip: Equatable, Codable, Sendable {
         }
     }
 
-    public mutating func setArrangement(_ arrangement: Arrangement) {
+    public mutating func setArrangement(_ arrangement: Arrangement, rows: [Int]? = nil) {
         guard columns.indices.contains(focusedColumn) else { return }
         columns[focusedColumn].isTabbed = false
         columns[focusedColumn].arrangement = arrangement
+        columns[focusedColumn].customRows = arrangement == .custom ? rows : nil
     }
 
     /// Grows or shrinks the main window of the focused column's main layout.

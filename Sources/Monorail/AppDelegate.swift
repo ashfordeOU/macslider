@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let hotEdges = HotEdges()
     private let coach = CoachTips()
     private let popover = SliderPopover()
+    private let snapPicker = SnapPicker()
     private let statusMenu = NSMenu()
     private let navigation = SettingsNavigation()
     private var statusItem: NSStatusItem!
@@ -130,6 +131,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
         engine.onNotice = { [weak self] text in self?.toast.show(text) }
+        engine.onAskForLetter = { [weak self] action in self?.readMarkLetter(for: action) }
+        engine.onWindowDrag = { [weak self] id in self?.snapPicker.windowDragStarted(id) }
+        snapPicker.snap = { [weak self] id, position in self?.engine.snapWindow(id, to: position) }
         engine.onResized = { [weak self] id, frame, name, hasOthers in
             self?.resizeAssist.show(for: id, frame: frame, appName: name, hasOthers: hasOthers)
         }
@@ -152,6 +156,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard !Self.isOverMenuBar(point) else { return true }
             let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
             return self?.sliderBar.contains(CGPoint(x: point.x, y: primaryHeight - point.y)) ?? false
+        }
+        input.onPinch = { [weak self] open in
+            if open { self?.overview.show() } else { self?.overview.close() }
         }
         input.onSlideModeChange = { [weak self] on in
             if on { self?.slideHUD.show() } else { self?.slideHUD.hide() }
@@ -193,6 +200,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         input.scrollModifier = settings.scrollModifier
         input.scrollOverMenuBar = settings.scrollOverMenuBar
         input.slideTrigger = settings.slideTrigger
+        input.pinchForOverview = settings.pinchForOverview
+        snapPicker.isEnabled = settings.snapPicker
         updateArrowItems(visible: settings.showNavigationArrows)
         updater.setAutomatic(settings.checkForUpdates)
         updater.installAutomatically = settings.installUpdatesAutomatically
@@ -292,13 +301,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         commands.rename = { [weak self] id in self?.renameWindow(id) }
         commands.moveToWorkspace = { [weak self] id, index in self?.engine.moveWindow(id, toWorkspace: index) }
         commands.workspaceNames = { [weak self] in
-            guard let settings = self?.store.settings else { return [] }
-            return (0..<settings.workspaceCount).map(settings.workspaceName)
+            guard let self else { return [] }
+            return (0..<self.engine.workspaceCount).map(self.store.settings.workspaceName)
         }
         commands.currentWorkspace = { [weak self] id in self?.engine.workspaceIndex(of: id) }
         commands.setLayout = { [weak self] id, arrangement in self?.engine.setSlideLayout(of: id, to: arrangement) }
         commands.currentLayout = { [weak self] id in self?.engine.slideLayout(of: id) ?? nil }
+        commands.customLayouts = { [weak self] in self?.store.settings.customLayouts ?? [] }
+        commands.setCustomLayout = { [weak self] id, rows in self?.engine.setSlideLayout(of: id, to: .custom, rows: rows) }
+        commands.currentRows = { [weak self] id in self?.engine.slideRows(of: id) }
+        commands.saveAppPair = { [weak self] id in self?.saveAppPair(from: id) }
         return commands
+    }
+
+    /// Marks: after the shortcut, the next key typed is the mark's letter.
+    private func readMarkLetter(for action: Action) {
+        let setting = action == .setMark
+        toast.show(setting ? "Mark this window: type a letter" : "Jump to mark: type its letter")
+        input.captureNextKey = { [weak self] letter in
+            guard let self, let letter else { return }
+            if setting { self.engine.setMark(letter) } else { self.engine.jumpToMark(letter) }
+        }
+    }
+
+    private func saveAppPair(from id: WindowID) {
+        guard var pair = engine.appPair(from: id) else {
+            toast.show("A pair needs windows of at least two apps in one slide")
+            return
+        }
+        guard let name = TextPrompt.ask(
+            title: "Save app pair",
+            message: "Open these apps side by side in one slide any time, from App Pairs in the menu bar.",
+            initial: pair.name, placeholder: pair.name, button: "Save")
+        else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty { pair.name = trimmed }
+        store.settings.appPairs.removeAll { $0.name == pair.name }
+        store.settings.appPairs.append(pair)
+        toast.show("Saved app pair “\(pair.name)”")
     }
 
     private func renameWindow(_ id: WindowID) {
@@ -341,7 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         button.imagePosition = .imageLeading
         if store.settings.showColumnIndicator, !engine.isPaused, let status = engine.status() {
             let position = "\(status.focusedColumn)/\(status.columnCount)"
-            button.title = store.settings.workspaceCount > 1 ? " \(status.workspace) · \(position)" : " \(position)"
+            button.title = engine.workspaceCount > 1 ? " \(status.workspace) · \(position)" : " \(position)"
             button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .regular)
         } else {
             button.title = ""
@@ -390,23 +430,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Search Windows…", #selector(showSwitcher), action: .windowSwitcher))
         menu.addItem(item("Reset to Smart Pairs", #selector(regroup), action: .regroup))
         menu.addItem(savedLayoutsMenu())
+        menu.addItem(appPairsMenu())
         let undoItem = item("Undo Layout Change", #selector(undoLayout), action: .undo)
         undoItem.isEnabled = engine.canUndo
         menu.addItem(undoItem)
         menu.addItem(item("Retile Windows", #selector(retile), action: .retile))
 
-        if store.settings.workspaceCount > 1 {
+        let workspaceCount = engine.workspaceCount
+        if workspaceCount > 1 {
             let workspaces = NSMenu()
+            workspaces.autoenablesItems = false
             let current = engine.status()?.workspace
-            for n in 1...store.settings.workspaceCount {
+            for n in 1...workspaceCount {
                 let action = Action.allCases.first { $0.workspaceNumber == n }!
-                let entry = item(store.settings.workspaceName(n - 1), #selector(switchWorkspaceFromMenu(_:)), action: action)
+                var title = store.settings.workspaceName(n - 1)
+                if engine.isParked(n - 1) { title += " (parked)" }
+                let entry = item(title, #selector(switchWorkspaceFromMenu(_:)), action: action)
                 entry.tag = n
                 entry.state = current == n ? .on : .off
                 workspaces.addItem(entry)
             }
+            workspaces.addItem(.separator())
+            let park = NSMenu()
+            for n in 1...workspaceCount {
+                let parked = engine.isParked(n - 1)
+                let entry = item(
+                    "\(parked ? "Bring Back" : "Park") \(store.settings.workspaceName(n - 1))",
+                    #selector(toggleParkFromMenu(_:)))
+                entry.tag = n
+                park.addItem(entry)
+            }
+            let parkParent = NSMenuItem(title: "Park Workspace", action: nil, keyEquivalent: "")
+            parkParent.submenu = park
+            parkParent.toolTip = "Minimise a workspace’s windows to the Dock and bring them back to the same slides later"
+            workspaces.addItem(parkParent)
             let parent = NSMenuItem(title: "Workspaces", action: nil, keyEquivalent: "")
             parent.submenu = workspaces
+            menu.addItem(parent)
+        }
+        if store.settings.profiles.count > 1 {
+            let profiles = NSMenu()
+            for (index, name) in store.settings.profiles.enumerated() {
+                let entry = item(name, #selector(switchProfileFromMenu(_:)))
+                entry.tag = index
+                entry.state = engine.activeProfile == index ? .on : .off
+                profiles.addItem(entry)
+            }
+            let parent = NSMenuItem(title: "Profile: \(engine.profileName)", action: nil, keyEquivalent: "")
+            parent.submenu = profiles
             menu.addItem(parent)
         }
 
@@ -458,6 +529,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showOverview() { overview.show() }
+
+    @objc private func toggleParkFromMenu(_ sender: NSMenuItem) {
+        let index = sender.tag - 1
+        afterMenu { delegate in
+            if delegate.engine.isParked(index) {
+                delegate.engine.unparkWorkspace(index)
+            } else {
+                delegate.engine.parkWorkspace(index)
+            }
+        }
+    }
+
+    @objc private func switchProfileFromMenu(_ sender: NSMenuItem) {
+        let index = sender.tag
+        afterMenu { $0.engine.switchProfile(to: index) }
+    }
+
+    /// App Pairs ▸ each saved pair, to open its apps in one slide.
+    private func appPairsMenu() -> NSMenuItem {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let pairs = store.settings.appPairs
+        if pairs.isEmpty {
+            let hint = NSMenuItem(
+                title: "Right-click a slide’s preview ▸ Save Slide as App Pair", action: nil, keyEquivalent: "")
+            hint.isEnabled = false
+            menu.addItem(hint)
+        }
+        for pair in pairs {
+            let entry = item(pair.name, #selector(openPairFromMenu(_:)))
+            entry.representedObject = pair.id
+            entry.image = NSImage(systemSymbolName: pair.arrangement.symbol, accessibilityDescription: nil)
+            menu.addItem(entry)
+        }
+        if !pairs.isEmpty {
+            menu.addItem(.separator())
+            let delete = NSMenu()
+            for pair in pairs {
+                let entry = item(pair.name, #selector(deletePairFromMenu(_:)))
+                entry.representedObject = pair.id
+                delete.addItem(entry)
+            }
+            let parent = NSMenuItem(title: "Delete", action: nil, keyEquivalent: "")
+            parent.submenu = delete
+            menu.addItem(parent)
+        }
+        let parent = NSMenuItem(title: "App Pairs", action: nil, keyEquivalent: "")
+        parent.submenu = menu
+        return parent
+    }
+
+    @objc private func openPairFromMenu(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String,
+            let pair = store.settings.appPairs.first(where: { $0.id == id })
+        else { return }
+        afterMenu { $0.engine.openPair(pair) }
+    }
+
+    @objc private func deletePairFromMenu(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        store.settings.appPairs.removeAll { $0.id == id }
+    }
     @objc private func regroup() { afterMenu { $0.engine.perform(.regroup) } }
     @objc private func installUpdate() { afterMenu { $0.updater.installAvailable() } }
 
@@ -496,7 +629,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let name = TextPrompt.ask(
                 title: "Save layout",
                 message: "Saves how the windows on this display are arranged in every workspace. Apply it any time from Saved Layouts.",
-                initial: "", placeholder: "Coding, Writing, Meetings…"),
+                initial: "", placeholder: "Coding, Writing, Meetings…", button: "Save"),
                 !name.trimmingCharacters(in: .whitespaces).isEmpty
             else { return }
             delegate.engine.saveLayout(named: name.trimmingCharacters(in: .whitespaces))
@@ -528,7 +661,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !trusted { return "Monorail needs Accessibility access" }
         if engine.isPaused { return "Monorail is paused" }
         if let status = engine.status() {
-            let workspace = store.settings.workspaceCount > 1
+            let workspace = engine.workspaceCount > 1
                 ? "\(store.settings.workspaceName(status.workspace - 1)) · " : ""
             if status.columnCount == 0 { return "\(workspace)No windows yet" }
             return "\(workspace)Slide \(status.focusedColumn) of \(status.columnCount)"

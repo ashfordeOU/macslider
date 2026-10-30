@@ -9,6 +9,12 @@ final class SwitcherModel: ObservableObject {
     }
     @Published var selection = 0
     @Published var windows: [Engine.WindowSummary] = []
+    @Published var thumbnails: [WindowID: NSImage] = [:]
+
+    var selected: Engine.WindowSummary? {
+        let list = filtered
+        return list.indices.contains(selection) ? list[selection] : nil
+    }
 
     var filtered: [Engine.WindowSummary] {
         let terms = query.lowercased().split(separator: " ")
@@ -36,25 +42,56 @@ struct SwitcherView: View {
             }
             .padding(14)
             Divider()
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(Array(model.filtered.enumerated()), id: \.element.id) { index, window in
-                            row(window, selected: index == model.selection)
-                                .id(index)
-                                .onTapGesture { choose(window.id) }
+            HStack(spacing: 0) {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(Array(model.filtered.enumerated()), id: \.element.id) { index, window in
+                                row(window, selected: index == model.selection)
+                                    .id(index)
+                                    .onTapGesture { choose(window.id) }
+                            }
                         }
+                        .padding(6)
                     }
-                    .padding(6)
+                    .onChange(of: model.selection) { proxy.scrollTo($0) }
                 }
-                .onChange(of: model.selection) { proxy.scrollTo($0) }
+                .frame(width: 380)
+                Divider()
+                preview.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if model.filtered.isEmpty {
                 Text("No matching windows").foregroundStyle(.secondary).padding()
             }
         }
-        .frame(width: 560, height: 380)
+        .frame(width: 780, height: 420)
         .background(.regularMaterial)
+    }
+
+    /// A live picture of the chosen window.
+    @ViewBuilder private var preview: some View {
+        if let window = model.selected {
+            VStack(spacing: 10) {
+                if let image = model.thumbnails[window.id] {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                } else if let icon = window.icon {
+                    Image(nsImage: icon).resizable().frame(width: 96, height: 96)
+                }
+                HStack(spacing: 6) {
+                    Text(window.appName).font(.headline)
+                    WindowBadges(window: window)
+                }
+                Text(window.title).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(16)
+        } else {
+            Color.clear
+        }
     }
 
     private func row(_ window: Engine.WindowSummary, selected: Bool) -> some View {
@@ -68,12 +105,16 @@ struct SwitcherView: View {
                     .font(.caption).foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
             }
             Spacer()
+            WindowBadges(window: window)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .foregroundStyle(selected ? Color.white : Color.primary)
         .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.accentColor : Color.clear))
         .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(window.accessibilityDescription)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 
     private func submit() {
@@ -119,6 +160,10 @@ final class SwitcherController {
         model.windows = windows()
         model.query = ""
         model.selection = model.windows.firstIndex { !$0.isFocused } ?? 0
+        model.thumbnails = [:]
+        if WindowThumbnails.isAllowed {
+            WindowThumbnails.capture(model.windows.map(\.id)) { [weak self] images in self?.model.thumbnails = images }
+        }
         let panel = self.panel ?? makePanel()
         self.panel = panel
         if let screen = NSScreen.main {
@@ -132,7 +177,7 @@ final class SwitcherController {
 
     private func makePanel() -> SwitcherPanel {
         let panel = SwitcherPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 380),
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 420),
             styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false

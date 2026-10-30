@@ -18,6 +18,12 @@ struct WindowCommands {
     var setLayout: (WindowID, Arrangement?) -> Void = { _, _ in }
     /// The slide's layout (inner nil = tabs); outer nil if the window isn't tiled.
     var currentLayout: (WindowID) -> Arrangement?? = { _ in nil }
+    /// The user's own layouts, and setting one on a slide.
+    var customLayouts: () -> [CustomLayout] = { [] }
+    var setCustomLayout: (WindowID, [Int]) -> Void = { _, _ in }
+    var currentRows: (WindowID) -> [Int]? = { _ in nil }
+    /// Saves the slide's apps as an app pair.
+    var saveAppPair: (WindowID) -> Void = { _ in }
 }
 
 /// "Slide Layout ▸" for the slide holding a window.
@@ -28,7 +34,7 @@ struct SlideLayoutMenu: View {
     var body: some View {
         let current = commands.currentLayout(window)
         Menu("Slide Layout") {
-            ForEach([Arrangement.columns, .stack, .grid, .mainLeft, .mainTop], id: \.self) { arrangement in
+            ForEach(Arrangement.standard, id: \.self) { arrangement in
                 Button {
                     commands.setLayout(window, arrangement)
                 } label: {
@@ -43,6 +49,18 @@ struct SlideLayoutMenu: View {
                 commands.setLayout(window, nil)
             } label: {
                 if current == .some(.none) { Label("Tabs", systemImage: "checkmark") } else { Text("Tabs") }
+            }
+            let custom = commands.customLayouts()
+            if !custom.isEmpty {
+                Divider()
+                let rows = current == .some(.some(.custom)) ? commands.currentRows(window) : nil
+                ForEach(custom) { layout in
+                    Button {
+                        commands.setCustomLayout(window, layout.rows)
+                    } label: {
+                        if rows == layout.rows { Label(layout.name, systemImage: "checkmark") } else { Text(layout.name) }
+                    }
+                }
             }
         }
     }
@@ -95,7 +113,10 @@ struct WindowContextMenu: View {
         Divider()
         Button("Focus") { commands.focus(window) }
         Button("Give It Its Own Slide") { commands.ownSlide(window) }
-        if commands.currentLayout(window) != nil { SlideLayoutMenu(window: window, commands: commands) }
+        if commands.currentLayout(window) != nil {
+            SlideLayoutMenu(window: window, commands: commands)
+            Button("Save Slide as App Pair…") { commands.saveAppPair(window) }
+        }
         let names = commands.workspaceNames()
         if names.count > 1 {
             Menu("Move to Workspace") {
@@ -124,11 +145,13 @@ extension View {
 
 /// A small modal text prompt (renaming windows and workspaces).
 enum TextPrompt {
-    static func ask(title: String, message: String, initial: String, placeholder: String = "") -> String? {
+    static func ask(
+        title: String, message: String, initial: String, placeholder: String = "", button: String = "Rename"
+    ) -> String? {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
-        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: button)
         alert.addButton(withTitle: "Cancel")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.stringValue = initial

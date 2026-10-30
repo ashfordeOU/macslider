@@ -77,6 +77,11 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case snapMaximize = "snap-maximize"
     case snapCenter = "snap-center"
     case snapRestore = "snap-restore"
+    case setMark = "set-mark"
+    case jumpToMark = "jump-to-mark"
+    case toggleScratchpad = "scratchpad"
+    case makeScratchpad = "make-scratchpad"
+    case nextProfile = "next-profile"
     case retile
     case undo
     case togglePause = "toggle-pause"
@@ -132,6 +137,11 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .snapMaximize: return "Snap: maximise"
         case .snapCenter: return "Snap: centre"
         case .snapRestore: return "Snap: restore"
+        case .setMark: return "Mark window (then a letter)"
+        case .jumpToMark: return "Jump to mark (then a letter)"
+        case .toggleScratchpad: return "Show / hide scratchpad"
+        case .makeScratchpad: return "Make this window the scratchpad"
+        case .nextProfile: return "Next profile"
         case .retile: return "Retile everything"
         case .undo: return "Undo last layout change"
         case .togglePause: return "Pause / resume"

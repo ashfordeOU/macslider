@@ -104,6 +104,8 @@ private struct GeneralPane: View {
                         }
                     }
                 }
+                Toggle("Only show workspaces in use, plus one empty one", isOn: $store.settings.dynamicWorkspaces)
+                Toggle("Red dots on windows whose apps have a badge in the Dock", isOn: $store.settings.attentionMarkers)
                 Toggle("Check for updates automatically", isOn: $store.settings.checkForUpdates)
                 Toggle("Install updates automatically", isOn: $store.settings.installUpdatesAutomatically)
                     .disabled(!store.settings.checkForUpdates)
@@ -113,6 +115,7 @@ private struct GeneralPane: View {
                     Text("At the start of the strip").tag(Strip.InsertPosition.start)
                 }
             }
+            ProfilesSection(store: store)
             Section {
                 ForEach(checks) { check in
                     HStack(alignment: .top, spacing: 10) {
@@ -178,8 +181,9 @@ private struct LayoutPane: View {
                     Text("Windows per slide: \(store.settings.tilesPerSlide)")
                 }
                 .disabled(!store.settings.groupByApp)
+                Toggle("Drag a window to the top of the screen to pick a snap layout", isOn: $store.settings.snapPicker)
                 Picker("Slide layout", selection: $store.settings.slideArrangement) {
-                    ForEach(Arrangement.allCases, id: \.self) { arrangement in
+                    ForEach(Arrangement.standard, id: \.self) { arrangement in
                         Label(arrangement.title, systemImage: arrangement.symbol).tag(arrangement)
                     }
                 }
@@ -189,6 +193,7 @@ private struct LayoutPane: View {
                 Text("Windows of the same app share a full-screen slide. Lone windows of different apps pair up when you regroup, or as they open if you turn that on. Windows that come back — unhidden, unminimised, reopened from the Dock or after a relaunch — return to exactly where they were. Terminals get four tiles per slide — change tiles and layout per app under Apps. ⌃⌥A regroups everything; ⌃⌥G cycles a slide through Grid, Columns, Main + side, Main + bottom and Rows; ⌃⌥. and ⌃⌥, resize the main window; ⌃⌥M makes a window the main one. Right to left mirrors the whole strip.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            CustomLayoutsSection(store: store)
             Section("Spacing") {
                 LabeledSlider(title: "Gap between windows", value: $store.settings.layout.gap, range: 0...40)
                 LabeledSlider(title: "Gap at screen edges", value: $store.settings.layout.edgeGap, range: 0...40)
@@ -311,8 +316,10 @@ private struct InputPane: View {
             }
             Section {
                 Toggle("Hot edges: rest the pointer on the left or right screen edge to slide", isOn: $store.settings.hotEdges)
+                Toggle("Hold ⌥ and pinch on the trackpad for the overview", isOn: $store.settings.pinchForOverview)
+                Toggle("Haptic tap as the strip lands on a slide (Force Touch trackpads)", isOn: $store.settings.hapticFeedback)
             } header: {
-                Text("Screen edges")
+                Text("Gestures & screen edges")
             }
             Section("Focus") {
                 Toggle("Focus follows mouse", isOn: $store.settings.focusFollowsMouse)
@@ -439,7 +446,7 @@ private struct AppsPane: View {
                             .disabled(rule.float)
                             Picker("Layout", selection: $rule.arrangement) {
                                 Text("Default").tag(Arrangement?.none)
-                                ForEach(Arrangement.allCases, id: \.self) { Text($0.title).tag(Arrangement?.some($0)) }
+                                ForEach(Arrangement.standard, id: \.self) { Text($0.title).tag(Arrangement?.some($0)) }
                             }
                             .frame(width: 200)
                             .disabled(rule.float)
@@ -461,8 +468,175 @@ private struct AppsPane: View {
                 Text("Floating apps stay where you put them. Dialogs, panels and fixed-size windows always float. Rules apply to windows opened after the change; press ⌃⌥T to float or tile a window right now.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            Section {
+                if store.settings.appPairs.isEmpty {
+                    Text("No app pairs yet.").foregroundStyle(.secondary)
+                }
+                ForEach($store.settings.appPairs) { $pair in
+                    HStack {
+                        Image(systemName: pair.arrangement.symbol)
+                        TextField("Name", text: $pair.name).textFieldStyle(.roundedBorder).frame(width: 200)
+                        Text(pair.bundleIDs.map(Self.appName).joined(separator: " · "))
+                            .font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                        Spacer()
+                        Button {
+                            store.settings.appPairs.removeAll { $0.id == pair.id }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            } header: {
+                Text("App pairs")
+            } footer: {
+                Text("Right-click a window in a slide’s preview or the overview and choose Save Slide as App Pair. Open a pair from App Pairs in the menu bar: Monorail launches its apps and puts them in one slide.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
+    }
+}
+
+extension AppsPane {
+    static func appName(_ bundleID: String) -> String {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+            .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
+            ?? bundleID
+    }
+}
+
+// MARK: - Profiles
+
+/// Profiles: whole sets of workspaces, like separate desks for work and home.
+private struct ProfilesSection: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        Section {
+            ForEach(store.settings.profiles.indices, id: \.self) { index in
+                HStack {
+                    TextField("Profile \(index + 1)", text: name(index)).textFieldStyle(.roundedBorder).frame(width: 220)
+                    Spacer()
+                    if store.settings.profiles.count > 1 {
+                        Button {
+                            store.settings.profiles.remove(at: index)
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+            Button("Add Profile") { store.settings.profiles.append("Profile \(store.settings.profiles.count + 1)") }
+                .disabled(store.settings.profiles.count >= 9)
+        } header: {
+            Text("Profiles")
+        } footer: {
+            Text("Each profile has its own workspaces and windows. Switch with ⌃⌥0 or from the menu bar; the other profiles’ windows wait out of sight.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    private func name(_ index: Int) -> Binding<String> {
+        Binding(
+            get: { store.settings.profiles.indices.contains(index) ? store.settings.profiles[index] : "" },
+            set: { if store.settings.profiles.indices.contains(index) { store.settings.profiles[index] = $0 } }
+        )
+    }
+}
+
+// MARK: - Custom layouts
+
+/// Design slide layouts: columns side by side, each split into rows.
+private struct CustomLayoutsSection: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        Section {
+            ForEach($store.settings.customLayouts) { $layout in
+                HStack(alignment: .center, spacing: 14) {
+                    LayoutDiagram(rows: layout.rows).frame(width: 84, height: 52)
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("Name", text: $layout.name).textFieldStyle(.roundedBorder).frame(width: 200)
+                        HStack(spacing: 10) {
+                            ForEach(layout.rows.indices, id: \.self) { column in
+                                Stepper(value: rowBinding($layout, column), in: 1...4) {
+                                    Text("\(layout.rows[column])").monospacedDigit()
+                                }
+                                .fixedSize()
+                                .help("Rows in column \(column + 1)")
+                            }
+                            Button {
+                                if layout.tiles < Column.maximumWindows { layout.rows.append(1) }
+                            } label: {
+                                Image(systemName: "plus.rectangle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Add a column")
+                            .disabled(layout.rows.count >= 4 || layout.tiles >= Column.maximumWindows)
+                            Button {
+                                if layout.rows.count > 1 { layout.rows.removeLast() }
+                            } label: {
+                                Image(systemName: "minus.rectangle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Remove the last column")
+                            .disabled(layout.rows.count <= 1)
+                        }
+                    }
+                    Spacer()
+                    Button {
+                        store.settings.customLayouts.removeAll { $0.id == layout.id }
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            Button("New Layout") {
+                store.settings.customLayouts.append(CustomLayout(name: "My layout", rows: [1, 2]))
+            }
+        } header: {
+            Text("Custom slide layouts")
+        } footer: {
+            Text("Each column is split into the number of rows shown (up to six windows a slide). Use them from a slide’s right-click menu ▸ Slide Layout.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Rows of one column, kept within six windows in all.
+    private func rowBinding(_ layout: Binding<CustomLayout>, _ column: Int) -> Binding<Int> {
+        Binding(
+            get: { layout.wrappedValue.rows.indices.contains(column) ? layout.wrappedValue.rows[column] : 1 },
+            set: { value in
+                guard layout.wrappedValue.rows.indices.contains(column) else { return }
+                let others = layout.wrappedValue.tiles - layout.wrappedValue.rows[column]
+                layout.wrappedValue.rows[column] = min(value, Column.maximumWindows - others)
+            }
+        )
+    }
+}
+
+/// A small drawing of a custom layout.
+private struct LayoutDiagram: View {
+    let rows: [Int]
+
+    var body: some View {
+        GeometryReader { geometry in
+            let frames = Arrangement.customFrames(count: max(rows.reduce(0, +), 1), rows: rows)
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(frames.enumerated()), id: \.offset) { _, unit in
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.accentColor.opacity(0.35))
+                        .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Color.accentColor.opacity(0.8)))
+                        .frame(
+                            width: max(unit.width * geometry.size.width - 3, 2),
+                            height: max(unit.height * geometry.size.height - 3, 2))
+                        .offset(x: unit.minX * geometry.size.width + 1.5, y: unit.minY * geometry.size.height + 1.5)
+                }
+            }
+        }
     }
 }
 
@@ -480,6 +654,8 @@ private struct ShortcutsPane: View {
         ("Workspaces", Action.allCases.filter { $0.workspaceNumber != nil || $0.moveToWorkspaceNumber != nil }),
         ("Jump", [.focusColumn1, .focusColumn2, .focusColumn3, .focusColumn4, .focusColumn5,
                   .focusColumn6, .focusColumn7, .focusColumn8, .focusColumn9]),
+        ("Snap floating windows", Action.allCases.filter { $0.snapPosition != nil } + [.snapRestore]),
+        ("Marks, scratchpad & profiles", [.setMark, .jumpToMark, .toggleScratchpad, .makeScratchpad, .nextProfile]),
         ("Monorail", [.undo, .togglePause, .retile]),
     ]
 

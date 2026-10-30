@@ -48,6 +48,11 @@ final class InputMonitor {
     /// One notch of a mouse wheel: true for the next column, false for the previous.
     var onStep: (Bool) -> Void = { _ in }
     var onSlideModeChange: (Bool) -> Void = { _ in }
+    /// Hold ⌥ and pinch: true to open the overview (pinch in), false to close it.
+    var pinchForOverview = true
+    var onPinch: (Bool) -> Void = { _ in }
+    /// Set to read the next key typed (a mark's letter); called with nil on Escape.
+    var captureNextKey: ((String?) -> Void)?
 
     private(set) var isSlideMode = false
     private var tap: CFMachPort?
@@ -57,6 +62,11 @@ final class InputMonitor {
     private var triggerDownAt: CFTimeInterval?
     private var triggerInterrupted = false
     private var lastStep: CFTimeInterval = 0
+    private var pinchTotal: Double = 0
+    private var pinchFired = false
+
+    /// Trackpad pinches (NSEvent.EventType.magnify).
+    private static let magnifyType: UInt32 = 30
 
     var isActive: Bool { tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
 
@@ -65,7 +75,7 @@ final class InputMonitor {
     func start() -> Bool {
         guard tap == nil else { return true }
         let types: [CGEventType] = [.keyDown, .flagsChanged, .scrollWheel]
-        let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
+        let mask = types.reduce(CGEventMask(1) << Self.magnifyType) { $0 | (CGEventMask(1) << $1.rawValue) }
         guard
             let tap = CGEvent.tapCreate(
                 tap: .cgSessionEventTap,
@@ -149,6 +159,13 @@ final class InputMonitor {
             guard !isSuspended else { return pass }
             let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
             let modifiers = Modifiers(event.flags)
+            if let capture = captureNextKey {
+                captureNextKey = nil
+                let letter = keyCode == KeyCode.escape
+                    ? nil : NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased()
+                DispatchQueue.main.async { capture(letter.flatMap { $0.isEmpty ? nil : String($0.prefix(1)) }) }
+                return nil
+            }
             if isSlideMode {
                 switch SlideMode.resolve(keyCode: keyCode, modifiers: modifiers) {
                 case .action(let action):
@@ -172,8 +189,35 @@ final class InputMonitor {
             if triggerDownAt != nil { triggerInterrupted = true }
             return handleScroll(event) ? nil : pass
         default:
+            if type.rawValue == Self.magnifyType { return handleMagnify(event) ? nil : pass }
             return pass
         }
+    }
+
+    /// ⌥ + pinch: returns true if the gesture is Monorail's.
+    private func handleMagnify(_ event: CGEvent) -> Bool {
+        guard pinchForOverview, !isSuspended, !isPaused(), Modifiers(event.flags) == [.option],
+            let gesture = NSEvent(cgEvent: event)
+        else {
+            pinchTotal = 0
+            pinchFired = false
+            return false
+        }
+        if gesture.phase == .began {
+            pinchTotal = 0
+            pinchFired = false
+        }
+        pinchTotal += Double(gesture.magnification)
+        if !pinchFired && abs(pinchTotal) > 0.18 {
+            pinchFired = true
+            let open = pinchTotal < 0
+            DispatchQueue.main.async { self.onPinch(open) }
+        }
+        if gesture.phase == .ended || gesture.phase == .cancelled {
+            pinchTotal = 0
+            pinchFired = false
+        }
+        return true
     }
 
     /// Returns true if the scroll moved the strip (and should not reach the app).

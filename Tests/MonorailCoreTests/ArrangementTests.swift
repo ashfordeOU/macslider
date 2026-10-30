@@ -128,4 +128,54 @@ final class ArrangementTests: XCTestCase {
         XCTAssertEqual(strip.focusedWindow, 2)
         XCTAssertFalse(strip.moveOthersOut(keeping: 2))
     }
+
+    func testCustomLayouts() {
+        // [1, 2]: one tall tile beside two stacked.
+        XCTAssertEqual(Arrangement.customFrames(count: 3, rows: [1, 2]), [
+            Rect(x: 0, y: 0, width: 0.5, height: 1), Rect(x: 0.5, y: 0, width: 0.5, height: 0.5),
+            Rect(x: 0.5, y: 0.5, width: 0.5, height: 0.5),
+        ])
+        // Fewer windows than cells: the last cells are left out.
+        XCTAssertEqual(Arrangement.customFrames(count: 2, rows: [1, 2]).count, 2)
+        XCTAssertEqual(Arrangement.customFrames(count: 2, rows: [1, 2])[1], Rect(x: 0.5, y: 0, width: 0.5, height: 1))
+        // More windows than cells: the last column takes them.
+        XCTAssertEqual(Arrangement.customFrames(count: 4, rows: [1, 2]).last, Rect(x: 0.5, y: 2.0 / 3.0, width: 0.5, height: 1.0 / 3.0))
+
+        var strip = slide([1, 2, 3], .grid)
+        strip.setArrangement(.custom, rows: [2, 1])
+        XCTAssertEqual(strip.columns[0].customRows, [2, 1])
+        strip.focus(3)
+        XCTAssertTrue(strip.moveFocus(.left))
+        XCTAssertEqual(strip.focusedWindow, 1, "navigation follows the custom cells")
+        strip.setArrangement(.grid)
+        XCTAssertNil(strip.columns[0].customRows)
+    }
+}
+
+final class SwapTilesTests: XCTestCase {
+    func testSwapTilesExchangesPlacesAndKeepsFocus() {
+        var strip = Strip()
+        strip.insertSlide([1, 2, 3], width: 1, arrangement: .mainLeft)
+        strip.focus(1)
+        XCTAssertTrue(strip.swapTiles(1, 3))
+        XCTAssertEqual(strip.columns[0].windows, [3, 2, 1])
+        XCTAssertEqual(strip.focusedWindow, 1)
+        XCTAssertTrue(strip.columns[0].isCustom)
+    }
+
+    func testSwapTilesNeedsSameSlide() {
+        var strip = Strip()
+        strip.insertSlide([1, 2], width: 1)
+        strip.insertSlide([3], width: 1)
+        XCTAssertFalse(strip.swapTiles(1, 3))
+        XCTAssertFalse(strip.swapTiles(1, 1))
+    }
+
+    func testInsertSlideKeepsCustomRows() {
+        var strip = Strip()
+        strip.insertSlide([1, 2, 3], width: 1, arrangement: .custom, custom: true, rows: [1, 2])
+        XCTAssertEqual(strip.columns[0].customRows, [1, 2])
+        XCTAssertTrue(strip.columns[0].isCustom)
+        XCTAssertEqual(strip.columns[0].unitFrames[0], Rect(x: 0, y: 0, width: 0.5, height: 1))
+    }
 }

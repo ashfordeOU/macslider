@@ -8,6 +8,8 @@ final class OverviewModel: ObservableObject {
     @Published var strips: [Engine.OverviewStrip] = []
     @Published var thumbnails: [WindowID: NSImage] = [:]
     @Published var previewsAllowed = WindowThumbnails.isAllowed
+    /// The window chosen with the arrow keys.
+    @Published var selection: WindowID?
 
     func loadThumbnails() {
         previewsAllowed = WindowThumbnails.isAllowed
@@ -61,6 +63,8 @@ struct OverviewActions {
     var close: () -> Void
     var renameWorkspace: (Int) -> Void = { _ in }
     var commands = WindowCommands()
+    var park: (Int) -> Void = { _ in }
+    var unpark: (Int) -> Void = { _ in }
 }
 
 /// The overview's backdrop: a deep, colourful gradient with soft glows and a
@@ -136,9 +140,10 @@ struct OverviewView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Overview").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            Text("Click to jump · drag a window onto a slide to pair it (your pairings stay until you reset) · drag between slides to give it its own · drag ≡ to reorder · esc to close")
+            Text("Click or arrow keys + return to jump · drag a window onto a slide to pair it · between slides for its own · onto the bin to close it · drag ≡ to reorder · esc to close")
                 .font(.callout).foregroundStyle(.white.opacity(0.7))
             Spacer()
+            CloseDropTarget { id in actions.commands.close(id) }
             Button {
                 actions.resetPairs()
             } label: {
@@ -184,6 +189,11 @@ private struct StripRow: View {
                 .buttonStyle(.plain)
                 .contextMenu {
                     Button("Rename “\(strip.title)”…") { actions.renameWorkspace(strip.workspace) }
+                    if strip.parkedCount > 0 {
+                        Button("Bring Back Parked Windows") { actions.unpark(strip.workspace) }
+                    } else if !strip.columns.isEmpty {
+                        Button("Park Workspace (minimise its windows)") { actions.park(strip.workspace) }
+                    }
                 }
                 Button {
                     actions.renameWorkspace(strip.workspace)
@@ -193,6 +203,16 @@ private struct StripRow: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.white.opacity(0.5))
                 .help("Rename this workspace")
+                if strip.parkedCount > 0 {
+                    Button {
+                        actions.unpark(strip.workspace)
+                    } label: {
+                        Label("Parked · \(strip.parkedCount) in the Dock — bring back", systemImage: "parkingsign.circle")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white.opacity(0.8))
+                }
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -328,7 +348,7 @@ private struct ColumnCard: View {
             .padding(4)
         } else {
             GeometryReader { geometry in
-                let frames = column.arrangement.unitFrames(count: windows.count, split: column.split)
+                let frames = column.arrangement.unitFrames(count: windows.count, split: column.split, rows: column.customRows)
                 ZStack(alignment: .topLeading) {
                     ForEach(Array(windows.enumerated()), id: \.element.id) { index, window in
                         let unit = frames[index]
@@ -347,7 +367,7 @@ private struct ColumnCard: View {
     }
 
     private func tile(_ window: Engine.WindowSummary) -> some View {
-        WindowTile(window: window, thumbnail: model.thumbnails[window.id])
+        WindowTile(window: window, thumbnail: model.thumbnails[window.id], isSelected: model.selection == window.id)
             .onTapGesture { actions.focus(window.id) }
             .windowControls(window.id, actions.commands)
             .onDrag { DragItem.window(window.id).provider }
@@ -357,6 +377,7 @@ private struct ColumnCard: View {
 private struct WindowTile: View {
     let window: Engine.WindowSummary
     let thumbnail: NSImage?
+    var isSelected = false
     @State private var hovering = false
 
     var body: some View {
@@ -389,12 +410,73 @@ private struct WindowTile: View {
             .background(Capsule().fill(Color.black.opacity(0.55)))
             .padding(4)
         }
+        .overlay(alignment: .topTrailing) { WindowBadges(window: window).padding(5) }
         .clipShape(RoundedRectangle(cornerRadius: 7))
         .overlay(
             RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(window.isFocused ? Color.accentColor : Color.white.opacity(hovering ? 0.6 : 0.12),
-                              lineWidth: window.isFocused ? 2 : 1))
+                .strokeBorder(
+                    isSelected ? Color.white : (window.isFocused ? Color.accentColor : Color.white.opacity(hovering ? 0.6 : 0.12)),
+                    lineWidth: isSelected ? 3 : (window.isFocused ? 2 : 1)))
         .onHover { hovering = $0 }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(window.accessibilityDescription)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+/// A bin in the overview's header: drop a window on it to close the window.
+private struct CloseDropTarget: View {
+    let close: (WindowID) -> Void
+    @State private var targeted = false
+
+    var body: some View {
+        Label("Drop to close", systemImage: targeted ? "trash.fill" : "trash")
+            .font(.callout)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .foregroundStyle(.white.opacity(targeted ? 1 : 0.7))
+            .background(Capsule().fill(targeted ? Color.red.opacity(0.7) : Color.white.opacity(0.1)))
+            .animation(.easeOut(duration: 0.12), value: targeted)
+            .onDrop(of: [UTType.text], isTargeted: $targeted) { providers in
+                DragItem.load(providers) { item in
+                    if case .window(let id) = item { close(id) }
+                }
+            }
+            .help("Drag a window here to close it")
+    }
+}
+
+/// A red dot for windows whose app wants attention, and the window's mark.
+struct WindowBadges: View {
+    let window: Engine.WindowSummary
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let mark = window.mark {
+                Text(mark.uppercased())
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 15, height: 15)
+                    .background(Circle().fill(Color.black.opacity(0.6)))
+                    .help("Marked “\(mark)” · ⌃⌥; then \(mark) jumps here")
+            }
+            if window.needsAttention {
+                Circle().fill(Color.red).frame(width: 9, height: 9)
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.8), lineWidth: 1))
+                    .help("\(window.appName) has something new")
+            }
+        }
+    }
+}
+
+extension Engine.WindowSummary {
+    /// What VoiceOver reads for a window tile.
+    var accessibilityDescription: String {
+        var parts = [appName]
+        if !title.isEmpty { parts.append(title) }
+        if isFocused { parts.append("focused") }
+        if needsAttention { parts.append("needs attention") }
+        if let mark { parts.append("marked \(mark)") }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -402,8 +484,10 @@ private struct WindowTile: View {
 final class OverviewPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     var onEscape: () -> Void = {}
+    var onKey: (NSEvent) -> Bool = { _ in false }
 
     override func keyDown(with event: NSEvent) {
+        if onKey(event) { return }
         if event.keyCode == KeyCode.escape || event.keyCode == KeyCode.returnKey {
             onEscape()
         } else {
@@ -435,6 +519,7 @@ final class OverviewController {
     func show() {
         guard let engine else { return }
         model.strips = engine.overview()
+        model.selection = nil
         model.thumbnails = [:]
         model.loadThumbnails()
         let panel = self.panel ?? makePanel()
@@ -492,7 +577,66 @@ final class OverviewController {
             self?.refresh()
         }
         commands.currentLayout = { [weak self] id in self?.commands.currentLayout(id) ?? nil }
+        commands.customLayouts = { [weak self] in self?.commands.customLayouts() ?? [] }
+        commands.setCustomLayout = { [weak self] id, rows in
+            self?.commands.setCustomLayout(id, rows)
+            self?.refresh()
+        }
+        commands.currentRows = { [weak self] id in self?.commands.currentRows(id) }
+        commands.saveAppPair = { [weak self] id in
+            self?.close()
+            self?.commands.saveAppPair(id)
+        }
         return commands
+    }
+
+    /// Arrow keys move a selection through the windows, return jumps to it,
+    /// delete closes it.
+    private func handleKey(_ event: NSEvent) -> Bool {
+        let rows = model.strips.map { strip -> [WindowID] in
+            let ids = strip.columns.flatMap { $0.windows.map(\.id) }
+            return strip.isRightToLeft ? ids.reversed() : ids
+        }
+        let all = rows.flatMap { $0 }
+        guard !all.isEmpty else { return false }
+        let position: (row: Int, index: Int)? = model.selection.flatMap { id in
+            rows.indices.lazy.compactMap { r in rows[r].firstIndex(of: id).map { (r, $0) } }.first
+        }
+        func select(_ id: WindowID?) { model.selection = id }
+        switch event.keyCode {
+        case KeyCode.left, KeyCode.right:
+            guard let (r, i) = position else {
+                select(model.strips.flatMap { $0.columns.flatMap(\.windows) }.first(where: \.isFocused)?.id ?? all.first)
+                return true
+            }
+            let step = event.keyCode == KeyCode.right ? 1 : -1
+            select(rows[r][min(max(i + step, 0), rows[r].count - 1)])
+            return true
+        case KeyCode.up, KeyCode.down:
+            guard let (r, i) = position else {
+                select(all.first)
+                return true
+            }
+            let step = event.keyCode == KeyCode.down ? 1 : -1
+            var next = r + step
+            while rows.indices.contains(next), rows[next].isEmpty { next += step }
+            if rows.indices.contains(next) { select(rows[next][min(i, rows[next].count - 1)]) }
+            return true
+        case KeyCode.returnKey:
+            guard let id = model.selection else { return false }
+            close()
+            engine?.focusAndReveal(id)
+            return true
+        case KeyCode.delete, 117:
+            guard let id = model.selection else { return true }
+            let next = position.flatMap { r, i in rows[r].count > 1 ? rows[r][i == rows[r].count - 1 ? i - 1 : i + 1] : nil }
+            commands.close(id)
+            select(next)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.refresh() }
+            return true
+        default:
+            return false
+        }
     }
 
     private func refresh() {
@@ -515,6 +659,7 @@ final class OverviewController {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.moveToActiveSpace, .transient, .fullScreenAuxiliary]
         panel.onEscape = { [weak self] in self?.close() }
+        panel.onKey = { [weak self] event in self?.handleKey(event) ?? false }
 
         let actions = OverviewActions(
             focus: { [weak self] id in
@@ -542,7 +687,15 @@ final class OverviewController {
                 self?.close()
                 self?.renameWorkspace(index)
             },
-            commands: overviewCommands()
+            commands: overviewCommands(),
+            park: { [weak self] index in
+                self?.engine?.parkWorkspace(index)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self?.refresh() }
+            },
+            unpark: { [weak self] index in
+                self?.engine?.unparkWorkspace(index)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self?.refresh() }
+            }
         )
         // Frosted glass: blur whatever is behind the overview, then draw on top.
         let blur = NSVisualEffectView()
