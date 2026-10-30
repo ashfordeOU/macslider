@@ -10,6 +10,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - A new app icon, and a matching menu bar icon.
 - Your own pairings stick: slides you arrange by hand are kept as they are and saved, until you reset.
 - Reset to smart pairs (⌃⌥A, the menu, the menu bar slider or the overview) regroups every workspace by app in one step.
+- Layouts stay put: when an app resizes or moves its own window (as Firefox sometimes does), MacSlider snaps it back.
+
+### Changed
+- A slide holds at most six windows; a seventh gets a slide of its own.
 
 ### Fixed
 - Clicking an app in the Dock no longer rearranges the strip: hidden, minimised and reopened windows, and relaunched apps, return to exactly where they were.
@@ -21,7 +25,7 @@ Slides, overview and workspaces, and much easier to drive with or without the ke
 
 ### Added
 - Slides grouped by app: same-app windows share a full-screen slide (four per slide for terminals), single-window apps pair up.
-- Slide layouts: grid (2×2, 3×2, 3×3), columns, rows, main + side and main + bottom, with up to nine windows per slide.
+- Slide layouts: grid (2×2, 3×2), columns, rows, main + side and main + bottom.
 - Resize the main window (⌃⌥. / ⌃⌥,) and make any window the main one (⌃⌥M); per-app slide layouts.
 - Right-to-left strip direction, mirroring layout, keys, swipes, the slider bar and the overview.
 - Click the menu bar icon for a slider popover with slide cards; right-click for the menu.

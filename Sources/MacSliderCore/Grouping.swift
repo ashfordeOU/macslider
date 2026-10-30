@@ -48,7 +48,7 @@ public enum Grouping {
                 }
                 continue
             }
-            let size = max(capacity(name), 1)
+            let size = min(max(capacity(name), 1), Column.maximumWindows)
             for start in stride(from: 0, to: members.count, by: size) {
                 groups.append(Array(members[start..<min(start + size, members.count)]))
             }
@@ -87,7 +87,7 @@ public enum Grouping {
         }
 
         // Same app already on the strip: join a slide of that app with room.
-        let capacityForApp = max(capacity(newApp), 1)
+        let capacityForApp = min(max(capacity(newApp), 1), Column.maximumWindows)
         let sameApp = scrolling.filter { index in
             let column = strip.columns[index]
             return column.isTiled && column.windows.count < capacityForApp

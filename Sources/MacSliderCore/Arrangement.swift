@@ -2,7 +2,7 @@
 public enum Arrangement: String, Codable, CaseIterable, Sendable {
     /// One above the other.
     case stack
-    /// A grid that grows with the count: 2 side by side, 2×2, 3×2, 3×3…
+    /// A grid that grows with the count: 2 side by side, 2×2, 3×2.
     case grid
     /// Side by side, full height.
     case columns

@@ -113,6 +113,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var groupByApp = true
     /// Windows per slide when grouping, unless an app rule says otherwise.
     public var tilesPerSlide = 2
+    /// Snap windows back when an app moves or resizes one by itself.
+    public var keepWindowsInPlace = true
     /// Put a newly opened lone window into a slide with another app's lone
     /// window. When off, that only happens when regrouping (⌃⌥A).
     public var pairLoneWindowsOnOpen = false
@@ -151,7 +153,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
 
     /// Windows per slide for an app when grouping by app.
     public func tiles(for bundleID: String?) -> Int {
-        min(max(rule(for: bundleID)?.tiles ?? tilesPerSlide, 1), 9)
+        min(max(rule(for: bundleID)?.tiles ?? tilesPerSlide, 1), Column.maximumWindows)
     }
 
     /// Layout for a new slide of an app.
@@ -165,7 +167,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace
     }
 
     public init(from decoder: Decoder) throws {
@@ -199,7 +201,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         keymap = value(.keymap, d.keymap)
         hasCompletedOnboarding = value(.hasCompletedOnboarding, d.hasCompletedOnboarding)
         groupByApp = value(.groupByApp, d.groupByApp)
-        tilesPerSlide = min(max(value(.tilesPerSlide, d.tilesPerSlide), 1), 9)
+        tilesPerSlide = min(max(value(.tilesPerSlide, d.tilesPerSlide), 1), Column.maximumWindows)
         workspaceCount = min(max(value(.workspaceCount, d.workspaceCount), 1), 9)
         checkForUpdates = value(.checkForUpdates, d.checkForUpdates)
         sliderBar = value(.sliderBar, d.sliderBar)
@@ -207,6 +209,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         sliderBarEdge = value(.sliderBarEdge, d.sliderBarEdge)
         iconOpensSlider = value(.iconOpensSlider, d.iconOpensSlider)
         pairLoneWindowsOnOpen = value(.pairLoneWindowsOnOpen, d.pairLoneWindowsOnOpen)
+        keepWindowsInPlace = value(.keepWindowsInPlace, d.keepWindowsInPlace)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {
             // Version 2 added the terminal rules (four tiles per slide).

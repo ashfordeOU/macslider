@@ -109,4 +109,17 @@ final class GroupingTests: XCTestCase {
         strip.regroup([[1], [4]], width: 1)
         XCTAssertFalse(strip.columns.contains(where: \.isCustom))
     }
+
+    func testSlidesHoldAtMostSixWindows() {
+        var strip = Strip()
+        strip.insertSlide([1, 2, 3, 4, 5, 6], width: 1)
+        XCTAssertTrue(strip.columns[0].isFull)
+        strip.add(7, toColumn: 0)
+        XCTAssertEqual(strip.columns.map(\.windows), [[1, 2, 3, 4, 5, 6], [7]], "a full slide spills into a new one")
+        XCTAssertFalse(strip.consumeIntoLeft(), "can't stack into a full slide")
+        XCTAssertFalse(strip.moveWindow(7, intoColumn: 0))
+        let plan = Grouping.plan(Array(10...17), app: app, capacity: { _ in 9 })
+        XCTAssertEqual(plan.map(\.count), [6, 2])
+        XCTAssertEqual(AppSettings().tiles(for: "com.apple.Terminal"), 4)
+    }
 }

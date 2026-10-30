@@ -1328,6 +1328,12 @@ final class Engine {
             // Focused (e.g. with ⌘Tab) a window parked in another workspace: show that workspace.
             showWorkspace(of: key)
         }
+        // Catch apps that resized themselves while MacSlider wasn't looking.
+        if settings.keepWindowsInPlace, NSEvent.pressedMouseButtons == 0, let target = window.lastApplied,
+            let frame = window.element.frame, !Rect(frame).isClose(to: target, tolerance: 2)
+        {
+            snapBack(window)
+        }
         strip.focus(id)
         strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
         let changed = switchedWorkspace || strip != strips[key]
@@ -1349,6 +1355,15 @@ final class Engine {
             let frame = element.frame
         else { return }
         let actual = Rect(frame)
+        guard !actual.isClose(to: applied, tolerance: 2) else { return }
+
+        // No mouse button down means the app moved or resized itself (Firefox
+        // does this now and then). Put the window back where the user had it.
+        if NSEvent.pressedMouseButtons == 0 {
+            if settings.keepWindowsInPlace { snapBack(window) }
+            return
+        }
+
         if resized {
             guard abs(actual.width - applied.width) > 4, let display = display(for: key) else { return }
             // A tile in a slide doesn't own the column's width; snap it back after the resize.
@@ -1364,6 +1379,31 @@ final class Engine {
             guard abs(actual.x - applied.x) > 8 || abs(actual.y - applied.y) > 8 else { return }
         }
         whenMouseIsUp { [weak self] in self?.finishUserMove(window, resized: resized) }
+    }
+
+    /// Recent snap-backs per window, so MacSlider never fights an app that
+    /// insists on its own size (it gives up after a few tries).
+    private var snapBacks: [WindowID: [CFTimeInterval]] = [:]
+    private var snapBackTimers: [WindowID: Timer] = [:]
+
+    private func snapBack(_ window: ManagedWindow) {
+        snapBackTimers[window.id]?.invalidate()
+        // Wait for the app to finish whatever it is doing, then restore once.
+        snapBackTimers[window.id] = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
+            guard let self, self.isRunning, !self.isPaused, self.windows[window.id] === window,
+                let target = window.lastApplied, let frame = window.element.frame,
+                !window.element.isMinimized, !window.element.isFullScreen,
+                !Rect(frame).isClose(to: target, tolerance: 2)
+            else { return }
+            let now = CACurrentMediaTime()
+            let recent = (self.snapBacks[window.id] ?? []).filter { now - $0 < 10 }
+            guard recent.count < 4 else {
+                log.info("Window \(window.id) keeps resizing itself; leaving it be")
+                return
+            }
+            self.snapBacks[window.id] = recent + [now]
+            self.apply(target, to: window.id, sizeChanged: true)
+        }
     }
 
     private func finishUserMove(_ window: ManagedWindow, resized: Bool) {

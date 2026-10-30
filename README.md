@@ -39,7 +39,7 @@ glides just far enough to bring the window into view.
 - **Scroll with your mouse.** Hold ⌥ and turn the wheel: each notch moves one window. Or just scroll over the menu bar, or click the ‹ › buttons next to the menu bar icon.
 - **Trackpad native.** Hold ⌥ and swipe two fingers, or turn on a plain three- or four-finger swipe. The strip follows your fingers and settles on the nearest window.
 - **Shortcuts too.** Focus, move, resize and arrange with Control-Option plus the arrow keys or H J K L. Every shortcut can be rebound.
-- **Slide layouts.** Up to nine windows per slide as a grid (2×2, 3×2, 3×3), columns, rows, main + side, main + bottom, or tabs. Resize the main window, make any window the main one, and set a layout per app.
+- **Slide layouts.** Up to six windows per slide as a grid (2×2, 3×2), columns, rows, main + side, main + bottom, or tabs. Resize the main window, make any window the main one, and set a layout per app.
 - **Either direction.** Run the strip left to right, or right to left with everything mirrored.
 - **Pinned columns.** Keep a column at the left or right edge while the rest of the strip scrolls.
 - **Smart floating.** Dialogs, panels and fixed-size windows float automatically. Per-app rules float apps or give them a default width and position.
@@ -111,6 +111,11 @@ the strip with full-screen slides:
 - Open a second window of an app that is sharing a slide, and the two windows move to a slide of their own.
 - Windows that come back return to exactly where they were: unhidden, unminimised, reopened from the Dock after closing, or after quitting and relaunching the app.
 
+**Layouts stay put.** Some apps (Firefox, for one) occasionally resize or
+move their own windows. MacSlider notices that it wasn't you — no mouse button
+was down — and snaps the window straight back. Dragging and resizing by hand
+still work as before. Turn this off in **Settings → Layout** if you prefer.
+
 **Your own pairings stick.** Pair windows yourself (say one Safari and one
 Finder window) by dragging in the overview or with <kbd>⌃⌥[</kbd> / <kbd>⌃⌥]</kbd>,
 and MacSlider keeps that slide as you made it: new windows won't break it up
@@ -118,7 +123,7 @@ or squeeze into it, and it's saved across MacSlider restarts. To go back,
 **Reset to smart pairs** (<kbd>⌃⌥A</kbd>, the ✨ button in the menu bar slider,
 or the overview) regroups every workspace by app in one step.
 
-Change the tiles per slide (up to nine) and the layout for any app under **Settings → Apps**.
+Change the tiles per slide (up to six — more gets too crowded) and the layout for any app under **Settings → Apps**.
 
 ### Slide layouts
 
@@ -126,7 +131,7 @@ Change the tiles per slide (up to nine) and the layout for any app under **Setti
 
 | Layout | Arrangement |
 | --- | --- |
-| Grid | Grows with the count: 2 side by side, 2×2, 3×2, 3×3. A short last row stretches to fill. |
+| Grid | Grows with the count: 2 side by side, 2×2, 3×2. A short last row stretches to fill. |
 | Columns | All side by side, full height. |
 | Main + side | One large window, the rest stacked beside it. |
 | Main + bottom | One large window on top, the rest in a row below. |

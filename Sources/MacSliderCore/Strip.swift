@@ -54,6 +54,10 @@ public struct Column: Equatable, Codable, Sendable {
         self.isCustom = isCustom
     }
 
+    /// More than six windows in one slide is too crowded to use.
+    public static let maximumWindows = 6
+
+    public var isFull: Bool { windows.count >= Self.maximumWindows }
     public var effectiveWidth: Double { isFullWidth ? 1 : width }
     public var activeWindow: WindowID { windows[active] }
 
@@ -321,7 +325,7 @@ public struct Strip: Equatable, Codable, Sendable {
     /// Moves the focused window into the bottom of the column on its left.
     @discardableResult
     public mutating func consumeIntoLeft() -> Bool {
-        guard focusedColumn > 0, let window = focusedWindow else { return false }
+        guard focusedColumn > 0, !columns[focusedColumn - 1].isFull, let window = focusedWindow else { return false }
         let target = focusedColumn - 1
         var source = columns[focusedColumn]
         source.windows.remove(at: source.active)
@@ -341,7 +345,9 @@ public struct Strip: Equatable, Codable, Sendable {
     /// Moves the focused window into the bottom of the column on its right.
     @discardableResult
     public mutating func consumeIntoRight() -> Bool {
-        guard focusedColumn < columns.count - 1, let window = focusedWindow else { return false }
+        guard focusedColumn < columns.count - 1, !columns[focusedColumn + 1].isFull, let window = focusedWindow else {
+            return false
+        }
         var source = columns[focusedColumn]
         source.windows.remove(at: source.active)
         var target = focusedColumn + 1
@@ -411,6 +417,12 @@ public struct Strip: Equatable, Codable, Sendable {
     /// Adds a window that is not on the strip to the column at `index`.
     public mutating func add(_ window: WindowID, toColumn index: Int, focus: Bool = true, custom: Bool = false) {
         guard columns.indices.contains(index), !contains(window) else { return }
+        guard !columns[index].isFull else {
+            // A full slide: the window gets a slide of its own next to it.
+            columns.insert(Column(windows: [window], width: columns[index].width, arrangement: columns[index].arrangement), at: index + 1)
+            if focus { focusedColumn = index + 1 } else if index + 1 <= focusedColumn { focusedColumn += 1 }
+            return
+        }
         columns[index].windows.append(window)
         if custom { columns[index].isCustom = true }
         if focus {
@@ -423,7 +435,9 @@ public struct Strip: Equatable, Codable, Sendable {
     /// Returns false if nothing changed.
     @discardableResult
     public mutating func moveWindow(_ window: WindowID, intoColumn target: Int) -> Bool {
-        guard columns.indices.contains(target), let (source, _) = locate(window), source != target else {
+        guard columns.indices.contains(target), let (source, _) = locate(window), source != target,
+            !columns[target].isFull
+        else {
             return false
         }
         let anchor = columns[target].activeWindow
@@ -494,7 +508,7 @@ public struct Strip: Equatable, Codable, Sendable {
     /// column mates are still there, otherwise as a column at its old index.
     public mutating func restore(_ window: WindowID, to slot: Slot, focus: Bool = true) {
         guard !contains(window) else { return }
-        if let mate = slot.mates.first(where: contains), let (c, _) = locate(mate) {
+        if let mate = slot.mates.first(where: contains), let (c, _) = locate(mate), !columns[c].isFull {
             let row = min(slot.row, columns[c].windows.count)
             columns[c].windows.insert(window, at: row)
             if columns[c].active >= row && columns[c].windows.count > 1 { columns[c].active += 1 }

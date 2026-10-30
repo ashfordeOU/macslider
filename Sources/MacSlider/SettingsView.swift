@@ -146,10 +146,11 @@ private struct LayoutPane: View {
                 Picker("Strip direction", selection: $store.settings.layout.direction) {
                     ForEach(StripDirection.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
+                Toggle("Keep windows in place when an app resizes or moves them itself", isOn: $store.settings.keepWindowsInPlace)
                 Toggle("Group windows into slides by app", isOn: $store.settings.groupByApp)
                 Toggle("Pair lone windows of different apps as they open", isOn: $store.settings.pairLoneWindowsOnOpen)
                     .disabled(!store.settings.groupByApp)
-                Stepper(value: $store.settings.tilesPerSlide, in: 1...9) {
+                Stepper(value: $store.settings.tilesPerSlide, in: 1...Column.maximumWindows) {
                     Text("Windows per slide: \(store.settings.tilesPerSlide)")
                 }
                 .disabled(!store.settings.groupByApp)
@@ -395,7 +396,7 @@ private struct AppsPane: View {
                         HStack(spacing: 16) {
                             Picker("Per slide", selection: $rule.tiles) {
                                 Text("Default").tag(Int?.none)
-                                ForEach(1...9, id: \.self) { Text("\($0)").tag(Int?.some($0)) }
+                                ForEach(1...Column.maximumWindows, id: \.self) { Text("\($0)").tag(Int?.some($0)) }
                             }
                             .frame(width: 130)
                             .disabled(rule.float)
