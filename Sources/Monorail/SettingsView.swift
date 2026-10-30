@@ -335,23 +335,30 @@ private struct InputPane: View {
 private struct AppearancePane: View {
     @ObservedObject var store: SettingsStore
 
+    private var sliderBarOn: Binding<Bool> {
+        Binding(
+            get: { store.settings.sliderBar != .off },
+            set: { store.settings.sliderBar = $0 ? .always : .off })
+    }
+
     var body: some View {
         Form {
             Section {
-                Picker("Show the slider bar", selection: $store.settings.sliderBar) {
-                    Text("While sliding").tag(SliderBarMode.whileMoving)
-                    Text("Always").tag(SliderBarMode.always)
-                    Text("Never").tag(SliderBarMode.off)
+                Toggle("Show the slider bar", isOn: sliderBarOn)
+                if store.settings.sliderBar != .off {
+                    Picker("Show it", selection: $store.settings.sliderBar) {
+                        Text("Always (windows leave room for it)").tag(SliderBarMode.always)
+                        Text("Only while sliding").tag(SliderBarMode.whileMoving)
+                    }
+                    Picker("Position", selection: $store.settings.sliderBarEdge) {
+                        Text("Bottom of the screen").tag(SliderBarEdge.bottom)
+                        Text("Top of the screen").tag(SliderBarEdge.top)
+                    }
                 }
-                Picker("Position", selection: $store.settings.sliderBarEdge) {
-                    Text("Bottom of the screen").tag(SliderBarEdge.bottom)
-                    Text("Top of the screen").tag(SliderBarEdge.top)
-                }
-                .disabled(store.settings.sliderBar == .off)
             } header: {
                 Text("Slider bar")
             } footer: {
-                Text("A mini-map of every slide in the workspace. The highlighted frame is what's on screen: drag it, or anywhere on the bar, to slide your windows along, and click a slide to jump to it. When it's always shown, windows leave room for it.")
+                Text("A mini-map of every slide in the workspace: drag it to slide your windows along, click a slide to jump to it. Turn it off to use just the menu bar icon; windows then fill the screen right down to the Dock.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Section("Focus border") {

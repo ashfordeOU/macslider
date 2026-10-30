@@ -337,8 +337,11 @@ highlighted frame for the part that's on screen.
 - **Dots** on the left switch workspaces; hover one to see its name, right-click to rename it. The grid button on the right opens the overview.
 - In previews and the overview, every window has **close, minimise and full-screen** buttons, and a right-click menu to **rename** it, give it its own slide, or move it to another workspace.
 
-In **Settings → Appearance** you can keep it on screen all the time (windows
-then leave room for it), move it to the top, or turn it off.
+You choose during the welcome tour: the slider bar plus the menu bar icon, or
+the menu bar icon only. Switch any time with **Show the slider bar** in
+**Settings → Appearance**. When it's on, keep it on screen all the time (windows
+leave room for it) or only while sliding, at the bottom or the top. When it's
+off, windows fill the screen right down to the Dock.
 
 ### Workspaces
 

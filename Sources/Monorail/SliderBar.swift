@@ -697,7 +697,9 @@ private struct PreviewTile: View {
 
 /// What a left-click on the menu bar icon shows: the slider, the slides as
 /// cards you can click through, and quick controls.
-final class SliderPopover: NSObject, NSPopoverDelegate {
+/// It hangs right under the icon, like Control Center, and closes when you
+/// click anywhere else.
+final class SliderPopover {
     struct Controls {
         var isPaused: () -> Bool
         var resetPairs: () -> Void
@@ -711,60 +713,137 @@ final class SliderPopover: NSObject, NSPopoverDelegate {
     var controls = Controls(isPaused: { false }, resetPairs: {}, togglePause: {}, openSettings: {})
     var updater: Updater?
 
-    private let popover = NSPopover()
+    private var panel: NSPanel?
+    private var host: NSView?
+    private var clickMonitor: Any?
+    private weak var anchor: NSStatusBarButton?
     private let model = SliderBarModel()
     private let paused = PausedState()
 
-    var isShown: Bool { popover.isShown }
+    /// Space between the menu bar and the panel.
+    private static let gap: CGFloat = 6
+
+    var isShown: Bool { panel?.isVisible ?? false }
 
     func toggle(relativeTo button: NSStatusBarButton) {
-        if popover.isShown {
-            popover.performClose(nil)
+        if isShown {
+            close()
             return
         }
-        if popover.contentViewController == nil {
-            let close: () -> Void = { [weak self] in self?.popover.performClose(nil) }
-            var wrapped = actions
-            let focus = actions.focus
-            let overview = actions.showOverview
-            wrapped.focus = { id in
-                close()
-                focus(id)
-            }
-            wrapped.showOverview = {
-                close()
-                overview()
-            }
-            let controls = self.controls
-            let view = SliderPopoverView(
-                model: model, paused: paused, updater: updater ?? Updater(), actions: wrapped,
-                resetPairs: { [weak self] in
-                    controls.resetPairs()
-                    self?.refresh()
-                },
-                togglePause: { [weak self] in
-                    controls.togglePause()
-                    self?.paused.value = controls.isPaused()
-                },
-                openSettings: {
-                    close()
-                    controls.openSettings()
-                })
-            popover.contentViewController = NSHostingController(rootView: view)
-            popover.behavior = .transient
-            popover.animates = true
-            popover.delegate = self
-        }
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        anchor = button
         model.map = mapProvider()
         paused.value = controls.isPaused()
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        place()
+        panel.alphaValue = 0
+        panel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            panel.animator().alphaValue = 1
+        }
+        // Clicks in other apps close it; clicks in the panel are local and don't.
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
+            [weak self] _ in self?.close()
+        }
     }
 
-    /// Keeps an open popover in step with the strip.
+    func close() {
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+        clickMonitor = nil
+        panel?.orderOut(nil)
+    }
+
+    /// Keeps an open panel in step with the strip.
     func refresh() {
-        guard popover.isShown else { return }
+        guard isShown else { return }
         model.map = mapProvider()
         paused.value = controls.isPaused()
+        DispatchQueue.main.async { [weak self] in self?.place() }
+    }
+
+    /// Sizes the panel to its content and hangs it just below the icon,
+    /// centred on it but kept on screen.
+    private func place() {
+        guard let panel, let host, let button = anchor, let window = button.window else { return }
+        host.layoutSubtreeIfNeeded()
+        let size = host.fittingSize
+        let icon = window.convertToScreen(button.convert(button.bounds, to: nil))
+        let screen = window.screen ?? NSScreen.screens.first { $0.frame.contains(icon.origin) } ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? icon
+        var x = icon.midX - size.width / 2
+        x = min(max(x, visible.minX + 8), visible.maxX - size.width - 8)
+        let top = min(icon.minY, visible.maxY) - Self.gap
+        panel.setFrame(NSRect(x: x, y: top - size.height, width: size.width, height: size.height), display: true)
+    }
+
+    private func makePanel() -> NSPanel {
+        let close: () -> Void = { [weak self] in self?.close() }
+        var wrapped = actions
+        let focus = actions.focus
+        let overview = actions.showOverview
+        let rename = actions.renameWorkspace
+        wrapped.focus = { id in
+            close()
+            focus(id)
+        }
+        wrapped.showOverview = {
+            close()
+            overview()
+        }
+        wrapped.renameWorkspace = { index in
+            close()
+            rename(index)
+        }
+        let controls = self.controls
+        let view = SliderPopoverView(
+            model: model, paused: paused, updater: updater ?? Updater(), actions: wrapped,
+            resetPairs: { [weak self] in
+                controls.resetPairs()
+                self?.refresh()
+            },
+            togglePause: { [weak self] in
+                controls.togglePause()
+                self?.paused.value = controls.isPaused()
+            },
+            openSettings: {
+                close()
+                controls.openSettings()
+            })
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 300),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .popUpMenu
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .fullScreenAuxiliary]
+
+        let glass = NSVisualEffectView()
+        glass.material = .popover
+        glass.blendingMode = .behindWindow
+        glass.state = .active
+        glass.wantsLayer = true
+        glass.layer?.cornerRadius = 16
+        glass.layer?.cornerCurve = .continuous
+        glass.layer?.masksToBounds = true
+        glass.layer?.borderWidth = 0.5
+        glass.layer?.borderColor = NSColor.separatorColor.cgColor
+        let host = NSHostingView(rootView: view)
+        host.translatesAutoresizingMaskIntoConstraints = false
+        glass.addSubview(host)
+        NSLayoutConstraint.activate([
+            host.leadingAnchor.constraint(equalTo: glass.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: glass.trailingAnchor),
+            host.topAnchor.constraint(equalTo: glass.topAnchor),
+            host.bottomAnchor.constraint(equalTo: glass.bottomAnchor),
+        ])
+        panel.contentView = glass
+        self.host = host
+        return panel
     }
 }
 

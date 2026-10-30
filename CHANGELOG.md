@@ -4,6 +4,15 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- The welcome tour asks how you want to see your slides, with a picture of each: the slider bar plus the menu bar icon, or the menu bar icon only (windows then reach right down to the Dock).
+
+### Changed
+- The slider bar is a simple on/off switch in Settings → Appearance; when on, choose always or only while sliding, and top or bottom.
+- The slider from the menu bar icon now hangs right under the icon, like Control Center, and closes when you click anywhere else.
+
 ## [0.5.0] - 2026-10-30
 
 ### Added

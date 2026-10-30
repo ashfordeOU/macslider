@@ -105,7 +105,31 @@ struct WelcomeView: View {
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("2. Get around").fontWeight(.medium)
+                    Text("2. Choose how you see your slides").fontWeight(.medium)
+                    HStack(spacing: 12) {
+                        ViewChoice(
+                            title: "Slider bar + menu bar icon",
+                            detail: "A bar of your slides along the bottom of the screen.",
+                            withBar: true,
+                            selected: store.settings.sliderBar != .off
+                        ) { store.settings.sliderBar = .always }
+                        ViewChoice(
+                            title: "Menu bar icon only",
+                            detail: "Windows reach right down to the Dock. Click the icon for your slides.",
+                            withBar: false,
+                            selected: store.settings.sliderBar == .off
+                        ) { store.settings.sliderBar = .off }
+                    }
+                    Text("You can switch any time in Settings → Appearance.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(6)
+            }
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("3. Get around").fontWeight(.medium)
                     tip(
                         keys: store.settings.slideTrigger == .off ? "—" : "tap \(store.settings.slideTrigger.title)",
                         text: "Slide mode. Then just press ← → to slide between windows, ⇧← ⇧→ to move one, R for width, F to fill. Esc when done.")
@@ -126,7 +150,7 @@ struct WelcomeView: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("3. Practice").fontWeight(.medium)
+                        Text("4. Practice").fontWeight(.medium)
                         Spacer()
                         Text("\(practice.done.count) of \(PracticeTracker.tasks.count)")
                             .font(.callout).foregroundStyle(.secondary)
@@ -155,6 +179,100 @@ struct WelcomeView: View {
         .padding(24)
         .frame(width: 560)
         .onReceive(timer) { _ in trusted = Accessibility.isTrusted(prompt: false) }
+    }
+}
+
+/// One of the two ways to see your slides, drawn as a little screen.
+private struct ViewChoice: View {
+    let title: String
+    let detail: String
+    let withBar: Bool
+    let selected: Bool
+    let choose: () -> Void
+
+    var body: some View {
+        Button(action: choose) {
+            VStack(alignment: .leading, spacing: 8) {
+                MiniScreen(withBar: withBar).frame(height: 92)
+                HStack(spacing: 6) {
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    Text(title).fontWeight(.medium)
+                }
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(selected ? 0.08 : 0.03)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: selected ? 2 : 1))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+/// A sketch of a Mac screen: menu bar, two windows side by side, the Dock,
+/// and either the slider bar above the Dock or the menu bar icon's panel.
+private struct MiniScreen: View {
+    let withBar: Bool
+
+    var body: some View {
+        GeometryReader { geometry in
+            let w = geometry.size.width, h = geometry.size.height
+            let menu: CGFloat = 9, dock: CGFloat = 12, bar: CGFloat = withBar ? 13 : 0, gap: CGFloat = 4
+            let windowsTop = menu + gap
+            let windowsBottom = h - dock - gap - (withBar ? bar + gap : 0)
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(LinearGradient(
+                        colors: [Color(red: 0.2, green: 0.25, blue: 0.5), Color(red: 0.45, green: 0.2, blue: 0.45)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                Rectangle().fill(Color.white.opacity(0.25)).frame(width: w, height: menu)
+                // The Monorail icon in the menu bar.
+                RoundedRectangle(cornerRadius: 1.5).fill(Color.white)
+                    .frame(width: 10, height: 5).offset(x: w * 0.68, y: 2)
+                ForEach(0..<2, id: \.self) { i in
+                    let width = (w - gap * 3) / 2
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.white.opacity(i == 0 ? 0.9 : 0.75))
+                        .frame(width: width, height: windowsBottom - windowsTop)
+                        .offset(x: gap + CGFloat(i) * (width + gap), y: windowsTop)
+                }
+                if withBar {
+                    Capsule().fill(Color.black.opacity(0.45))
+                        .overlay(HStack(spacing: 3) {
+                            ForEach(0..<5, id: \.self) { i in
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(i == 1 ? Color.accentColor : Color.white.opacity(0.5))
+                                    .frame(width: 12, height: 6)
+                            }
+                        })
+                        .frame(width: w * 0.62, height: bar)
+                        .offset(x: w * 0.19, y: windowsBottom + gap)
+                } else {
+                    // The slider panel hanging from the icon.
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.black.opacity(0.6))
+                        .overlay(HStack(spacing: 3) {
+                            ForEach(0..<4, id: \.self) { i in
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(i == 1 ? Color.accentColor : Color.white.opacity(0.5))
+                                    .frame(width: 10, height: 7)
+                            }
+                        })
+                        .frame(width: 62, height: 20)
+                        .offset(x: w * 0.68 + 5 - 31, y: menu + 2)
+                        .shadow(radius: 3)
+                }
+                RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.35))
+                    .frame(width: w * 0.5, height: dock - 4).offset(x: w * 0.25, y: h - dock + 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
     }
 }
 
