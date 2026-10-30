@@ -8,11 +8,15 @@ usage() {
 Usage: macslider <action>
 
 Focus:    focus-left focus-right focus-up focus-down focus-first focus-last
-          focus-column-1 … focus-column-9 window-switcher
+          focus-column-1 … focus-column-9
 Move:     move-left move-right move-up move-down send-to-next-display
 Size:     cycle-width cycle-width-backward narrower wider full-width center
           toggle-fullscreen
-Columns:  stack-into-left unstack toggle-tabbed pin-left pin-right toggle-float
+Slides:   regroup cycle-layout main-larger main-smaller make-main
+          stack-into-left stack-into-right unstack-left unstack
+          toggle-tabbed pin-left pin-right toggle-float
+Spaces:   workspace-1 … workspace-9 move-to-workspace-1 … move-to-workspace-9
+View:     overview window-switcher
 App:      toggle-pause retile settings welcome
 USAGE
 }

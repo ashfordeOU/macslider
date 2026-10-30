@@ -311,11 +311,12 @@ private struct TileOutlines: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         for unit in frames {
+            let x = rect.minX + CGFloat(unit.minX) * rect.width + 1
+            let y = rect.minY + CGFloat(unit.minY) * rect.height + 1
+            let width = max(CGFloat(unit.width) * rect.width - 2, 1)
+            let height = max(CGFloat(unit.height) * rect.height - 2, 1)
             path.addRoundedRect(
-                in: CGRect(
-                    x: rect.minX + unit.minX * rect.width + 1, y: rect.minY + unit.minY * rect.height + 1,
-                    width: max(unit.width * rect.width - 2, 1), height: max(unit.height * rect.height - 2, 1)),
-                cornerSize: CGSize(width: 2, height: 2))
+                in: CGRect(x: x, y: y, width: width, height: height), cornerSize: CGSize(width: 2, height: 2))
         }
         return path
     }

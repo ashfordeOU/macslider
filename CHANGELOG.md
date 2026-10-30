@@ -10,7 +10,10 @@ Slides, overview and workspaces, and much easier to drive with or without the ke
 
 ### Added
 - Slides grouped by app: same-app windows share a full-screen slide (four per slide for terminals), single-window apps pair up.
-- Grid columns that tile windows two across, including 2×2.
+- Slide layouts: grid (2×2, 3×2, 3×3), columns, rows, main + side and main + bottom, with up to nine windows per slide.
+- Resize the main window (⌃⌥. / ⌃⌥,) and make any window the main one (⌃⌥M); per-app slide layouts.
+- Right-to-left strip direction, mirroring layout, keys, swipes, the slider bar and the overview.
+- Click the menu bar icon for a slider popover with slide cards; right-click for the menu.
 - Slider bar: a mini-map of the strip that glides in while you move; drag it to slide, click a slide to jump.
 - Overview (⌃⌥O): every slide of every workspace at once; click to jump, drag to group or reorder.
 - Workspaces: up to nine per display, ⌃⌥1–9 to switch, ⌃⌥⇧1–9 to move a window.

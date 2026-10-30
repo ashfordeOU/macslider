@@ -29,6 +29,7 @@ glides just far enough to bring the window into view.
 
 - **One endless strip per display.** Each display, and each Space on it, has its own strip with its own focus and scroll position.
 - **Slides grouped by app.** Two Safari windows share a full-screen slide side by side; terminals tile four to a slide (2×2). Apps with one window pair up with another, so no space is wasted.
+- **Slider in the menu bar.** Click the menu bar icon for the slider and your slides as cards; right-click for the full menu.
 - **Slider bar.** A glass mini-map of the whole strip glides in while you move: every slide as a tile with its app icons, and a frame showing what's on screen. Drag it to slide every window along, click a tile to jump.
 - **Overview.** One key (<kbd>⌃⌥O</kbd>) shows every slide in every workspace, laid out in order. Click to jump there, drag windows between slides, drag slides to reorder.
 - **Workspaces.** Up to nine per display. <kbd>⌃⌥1</kbd>–<kbd>⌃⌥9</kbd> switches; add <kbd>⇧</kbd> to take the window with you.
@@ -36,7 +37,8 @@ glides just far enough to bring the window into view.
 - **Scroll with your mouse.** Hold ⌥ and turn the wheel: each notch moves one window. Or just scroll over the menu bar, or click the ‹ › buttons next to the menu bar icon.
 - **Trackpad native.** Hold ⌥ and swipe two fingers, or turn on a plain three- or four-finger swipe. The strip follows your fingers and settles on the nearest window.
 - **Shortcuts too.** Focus, move, resize and arrange with Control-Option plus the arrow keys or H J K L. Every shortcut can be rebound.
-- **Stacks, grids and tabs.** Put several windows in one column: stacked, tiled two across, or as tabs with a clickable tab bar.
+- **Slide layouts.** Up to nine windows per slide as a grid (2×2, 3×2, 3×3), columns, rows, main + side, main + bottom, or tabs. Resize the main window, make any window the main one, and set a layout per app.
+- **Either direction.** Run the strip left to right, or right to left with everything mirrored.
 - **Pinned columns.** Keep a column at the left or right edge while the rest of the strip scrolls.
 - **Smart floating.** Dialogs, panels and fixed-size windows float automatically. Per-app rules float apps or give them a default width and position.
 - **Safe by design.** Pause, quit or log out and every window is put back fully on screen. The layout is restored when MacSlider restarts.
@@ -106,8 +108,31 @@ the strip with full-screen slides:
 - An app with a single window shares a slide with another single-window app, or has the slide to itself.
 - Open a second window of an app that is sharing a slide, and the two windows move to a slide of their own.
 
-Press <kbd>⌃⌥A</kbd> to regroup everything, or <kbd>⌃⌥G</kbd> to turn any
-column into a grid. Change the tiles per slide for any app under **Settings → Apps**.
+Press <kbd>⌃⌥A</kbd> to regroup everything. Change the tiles per slide (up to
+nine) and the layout for any app under **Settings → Apps**.
+
+### Slide layouts
+
+<kbd>⌃⌥G</kbd> (or <kbd>G</kbd> in slide mode) cycles the focused slide through:
+
+| Layout | Arrangement |
+| --- | --- |
+| Grid | Grows with the count: 2 side by side, 2×2, 3×2, 3×3. A short last row stretches to fill. |
+| Columns | All side by side, full height. |
+| Main + side | One large window, the rest stacked beside it. |
+| Main + bottom | One large window on top, the rest in a row below. |
+| Rows | All stacked, full width. |
+
+<kbd>⌃⌥.</kbd> and <kbd>⌃⌥,</kbd> make the main window larger or smaller;
+<kbd>⌃⌥M</kbd> makes the focused window the main one. <kbd>⌃⌥W</kbd> turns a
+slide into tabs. Arrow keys move between tiles by where they are on screen, then
+on to the next slide. Choose the layout for new slides in **Settings → Layout**.
+
+### Right to left
+
+Set **Strip direction** to **Right to left** in **Settings → Layout** and the
+first slide sits at the right edge, new windows open to its left, and keys,
+swipes, the slider bar and the overview all follow.
 
 Press <kbd>⌃⌥O</kbd> (or <kbd>O</kbd> in slide mode, or **Overview** in the
 menu bar) to see every slide of every workspace at once:
@@ -118,6 +143,10 @@ menu bar) to see every slide of every workspace at once:
 - Turn on **Show live previews** to see window contents. This needs Screen Recording permission; without it you see app icons and titles.
 
 ### Slider bar
+
+**Click the MacSlider icon** in the menu bar for the slider, every slide as a
+card, and pause, overview and settings buttons. Right-click (or ⌃-click) the
+icon for the full menu.
 
 While the strip moves, a slider bar fades in at the bottom of the screen:
 every slide in the workspace as a small tile with its apps' icons, and a
@@ -173,9 +202,11 @@ AZERTY, QWERTZ, Dvorak and other layouts.
 | Centre column | <kbd>⌃⌥C</kbd> |
 | macOS full screen | <kbd>⌃⌥⇧F</kbd> |
 | Group windows into slides by app | <kbd>⌃⌥A</kbd> |
-| Grid of tiles on / off | <kbd>⌃⌥G</kbd> |
 | Stack into the column on the left / right | <kbd>⌃⌥[</kbd> <kbd>⌃⌥]</kbd> |
 | Pop out of a stack to the left / right | <kbd>⌃⌥⇧[</kbd> <kbd>⌃⌥⇧]</kbd> |
+| Next slide layout | <kbd>⌃⌥G</kbd> |
+| Main window larger / smaller | <kbd>⌃⌥.</kbd> <kbd>⌃⌥,</kbd> |
+| Make main window | <kbd>⌃⌥M</kbd> |
 | Tabbed column on / off | <kbd>⌃⌥W</kbd> · <kbd>⌃⌥⇧T</kbd> |
 | Pin column to left / right edge | <kbd>⌃⌥P</kbd> <kbd>⌃⌥⇧P</kbd> |
 | Float / tile window | <kbd>⌃⌥T</kbd> |
@@ -202,11 +233,11 @@ Everything is set in a standard Settings window, and changes apply immediately.
 
 | Pane | What you can change |
 | --- | --- |
-| General | Launch at login, pause, workspaces per display, update checks, menu bar position indicator, where new windows open, Mac setup checks |
-| Layout | Grouping into slides by app and windows per slide, gaps between windows and at screen edges (down to zero), default width, width presets, centring behaviour, keep each window's own height, tab bar height |
+| General | Launch at login, pause, what clicking the menu bar icon does, workspaces per display, update checks, menu bar position indicator, where new windows open, Mac setup checks |
+| Layout | Strip direction, grouping into slides by app, windows per slide, slide layout, gaps between windows and at screen edges (down to zero), default width, width presets, centring behaviour, keep each window's own height, tab bar height |
 | Motion & Input | Slide mode key, scroll modifier, menu bar scrolling, ‹ › buttons, three/four-finger swipe, sensitivity, direction, animation speed, focus follows mouse, mouse follows focus |
 | Appearance | Slider bar (while sliding, always or never; top or bottom), focus border with colour and width, dimming of inactive windows |
-| Apps | Per-app rules: always float, windows per slide, default width, open at the start, next to focus or at the end |
+| Apps | Per-app rules: always float, windows per slide, slide layout, default width, open at the start, next to focus or at the end |
 | Shortcuts | Modifier prefix, every binding, extra bindings, restore defaults |
 
 Settings are saved to `~/Library/Application Support/MacSlider/settings.json`,
