@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import MacSliderCore
+import MonorailCore
 import os
 
 let log = Logger(subsystem: "org.ashforde.macslider", category: "engine")
@@ -12,7 +12,7 @@ struct ScreenKey: Hashable, Codable {
 }
 
 /// A strip lives on one display, one Mission Control Space and one
-/// MacSlider workspace (0-based).
+/// Monorail workspace (0-based).
 struct StripKey: Hashable, Codable {
     var display: String
     var space: UInt64
@@ -34,19 +34,19 @@ struct StripKey: Hashable, Codable {
     var screen: ScreenKey { ScreenKey(display: display, space: space) }
 }
 
-/// A window MacSlider knows about: tiled on a strip (`key` set) or floating.
+/// A window Monorail knows about: tiled on a strip (`key` set) or floating.
 final class ManagedWindow {
     let id: WindowID
     let pid: pid_t
     let element: AXUIElement
     let bundleID: String?
     let appName: String
-    /// The frame the window had before MacSlider first touched it.
+    /// The frame the window had before Monorail first touched it.
     let home: CGRect
-    /// The last frame MacSlider applied, to skip redundant moves and to tell
+    /// The last frame Monorail applied, to skip redundant moves and to tell
     /// the user's own moves apart from ours.
     var lastApplied: Rect?
-    /// When MacSlider last moved this window, to tell our moves from the user's.
+    /// When Monorail last moved this window, to tell our moves from the user's.
     var appliedAt: CFTimeInterval = 0
     /// The strip the window is tiled on, or nil when it floats.
     var key: StripKey?
@@ -489,7 +489,7 @@ final class Engine {
 
     // MARK: - Window commands (previews, overview)
 
-    /// Names the user gave windows in MacSlider; shown instead of the title.
+    /// Names the user gave windows in Monorail; shown instead of the title.
     private var names: [WindowID: String] = [:]
 
     func displayTitle(_ window: ManagedWindow) -> String {
@@ -498,7 +498,7 @@ final class Engine {
 
     func customName(of id: WindowID) -> String? { names[id] }
 
-    /// Renames a window in MacSlider (the app's own title is untouched).
+    /// Renames a window in Monorail (the app's own title is untouched).
     /// An empty name goes back to the window's title.
     func rename(_ id: WindowID, to name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
@@ -1278,7 +1278,7 @@ final class Engine {
         appMemory[Self.appKey(window)] = memory
     }
 
-    /// Where a returning window belongs, if MacSlider remembers. The app's
+    /// Where a returning window belongs, if Monorail remembers. The app's
     /// slot is only used when none of its windows are on that strip, so a
     /// genuinely new second window still opens normally.
     private func memory(for window: ManagedWindow) -> Memory? {
@@ -1470,7 +1470,7 @@ final class Engine {
             // Focused (e.g. with ⌘Tab) a window parked in another workspace: show that workspace.
             showWorkspace(of: key)
         }
-        // Catch apps that resized themselves while MacSlider wasn't looking.
+        // Catch apps that resized themselves while Monorail wasn't looking.
         if settings.keepWindowsInPlace, NSEvent.pressedMouseButtons == 0, let target = window.lastApplied,
             let frame = window.element.frame, !Rect(frame).isClose(to: target, tolerance: 2)
         {
@@ -1508,7 +1508,7 @@ final class Engine {
 
         if resized {
             guard abs(actual.width - applied.width) > 4, let display = display(for: key) else { return }
-            // Resizing a tile in a slide: the others follow live, then MacSlider offers options.
+            // Resizing a tile in a slide: the others follow live, then Monorail offers options.
             if let strip = strips[key], let (c, _) = strip.locate(window.id), strip.columns[c].windows.count > 1,
                 strip.columns[c].isTiled || strip.columns[c].isTabbed
             {
@@ -1630,7 +1630,7 @@ final class Engine {
         onStateChange()
     }
 
-    /// Recent snap-backs per window, so MacSlider never fights an app that
+    /// Recent snap-backs per window, so Monorail never fights an app that
     /// insists on its own size (it gives up after a few tries).
     private var snapBacks: [WindowID: [CFTimeInterval]] = [:]
     private var snapBackTimers: [WindowID: Timer] = [:]
@@ -1784,7 +1784,7 @@ final class Engine {
         saveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in self?.saveState() }
     }
 
-    /// Window IDs survive a restart of MacSlider (not of the apps), so saving
+    /// Window IDs survive a restart of Monorail (not of the apps), so saving
     /// the strips lets an update or relaunch pick up exactly where it left off.
     private func saveState() {
         let state = SavedState(

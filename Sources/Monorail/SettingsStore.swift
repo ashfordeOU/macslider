@@ -1,7 +1,7 @@
 #if os(macOS)
 import AppKit
 import Combine
-import MacSliderCore
+import MonorailCore
 import ServiceManagement
 
 /// Loads and saves `Settings`, and publishes changes to the UI and engine.
@@ -26,12 +26,21 @@ final class SettingsStore: ObservableObject {
     static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        return base.appendingPathComponent("MacSlider", isDirectory: true)
+        return base.appendingPathComponent("Monorail", isDirectory: true)
     }
 
     static var fileURL: URL { directory.appendingPathComponent("settings.json") }
 
+    /// Monorail was called MacSlider; move its settings folder over once.
+    private static func migrateFromOldName() {
+        let old = directory.deletingLastPathComponent().appendingPathComponent("MacSlider", isDirectory: true)
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: old.path), !manager.fileExists(atPath: directory.path) else { return }
+        try? manager.moveItem(at: old, to: directory)
+    }
+
     init() {
+        Self.migrateFromOldName()
         if let data = try? Data(contentsOf: Self.fileURL),
             let decoded = try? JSONDecoder().decode(AppSettings.self, from: data)
         {
@@ -93,8 +102,8 @@ struct SetupCheck: Identifiable {
                 id: "accessibility",
                 title: "Accessibility permission",
                 detail: trusted
-                    ? "Granted. MacSlider can arrange windows."
-                    : "Required to move and resize windows. Turn MacSlider on in Privacy & Security → Accessibility.",
+                    ? "Granted. Monorail can arrange windows."
+                    : "Required to move and resize windows. Turn Monorail on in Privacy & Security → Accessibility.",
                 state: trusted ? .ok : .warning,
                 fixURL: trusted ? nil : accessibilityURL
             ))

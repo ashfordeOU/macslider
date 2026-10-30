@@ -47,13 +47,13 @@ jobs:
         run: scripts/build-app.sh
       - name: Check signature
         run: |
-          codesign --display --requirements - dist/MacSlider.app 2>&1 | tee requirement.txt
+          codesign --display --requirements - dist/Monorail.app 2>&1 | tee requirement.txt
           grep -q 'certificate leaf' requirement.txt
       - name: Package
         run: scripts/package.sh
       - uses: actions/upload-artifact@v5
         with:
-          name: MacSlider-${{ github.sha }}
+          name: Monorail-${{ github.sha }}
           path: |
             dist/*.zip
             dist/*.dmg

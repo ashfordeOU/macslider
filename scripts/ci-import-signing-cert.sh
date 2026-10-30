@@ -5,7 +5,7 @@
 set -euo pipefail
 
 : "${MACSLIDER_SIGNING_CERT:?}" "${MACSLIDER_SIGNING_PASSWORD:?}"
-NAME="MacSlider Self-Signed"
+NAME="MacSlider Self-Signed"  # the certificate's name; kept so existing secrets and permissions stay valid
 TMP="${RUNNER_TEMP:-$(mktemp -d)}"
 KEYCHAIN="$TMP/signing.keychain-db"
 KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"

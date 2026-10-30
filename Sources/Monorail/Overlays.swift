@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import MacSliderCore
+import MonorailCore
 import SwiftUI
 
 /// Click-through panels drawn around and over other apps' windows:

@@ -27,7 +27,7 @@ enum StatusIcon {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = paused ? "MacSlider (paused)" : "MacSlider"
+        image.accessibilityDescription = paused ? "Monorail (paused)" : "Monorail"
         return image
     }
 }

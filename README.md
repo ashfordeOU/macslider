@@ -1,8 +1,10 @@
 <div align="center">
 
-<img src="assets/icon.png" width="160" alt="MacSlider icon">
+<img src="assets/icon.png" width="160" alt="Monorail icon">
 
-# MacSlider
+# Monorail
+
+**Monorail for Mac.** Every window rides one rail.
 
 **A scrolling window manager for macOS.**
 Every window sits side by side on one endless strip. Nothing shrinks, nothing overlaps.
@@ -22,7 +24,7 @@ Every window sits side by side on one endless strip. Nothing shrinks, nothing ov
 ---
 
 Grid tilers squeeze every new window into the space that's already there.
-MacSlider does the opposite: each window is a column on a horizontal strip that
+Monorail does the opposite: each window is a column on a horizontal strip that
 runs past the edges of your display. Open a window and it slides in next to the
 one you're using. Everything else keeps its size. Move focus and the strip
 glides just far enough to bring the window into view.
@@ -43,19 +45,19 @@ glides just far enough to bring the window into view.
 - **Either direction.** Run the strip left to right, or right to left with everything mirrored.
 - **Pinned columns.** Keep a column at the left or right edge while the rest of the strip scrolls.
 - **Smart floating.** Dialogs, panels and fixed-size windows float automatically. Per-app rules float apps or give them a default width and position.
-- **Safe by design.** Pause, quit or log out and every window is put back fully on screen. The layout is restored when MacSlider restarts.
+- **Safe by design.** Pause, quit or log out and every window is put back fully on screen. The layout is restored when Monorail restarts.
 - **Native and private.** Written in Swift with AppKit and SwiftUI. No account, no telemetry. The only permission is Accessibility; the only network request is an optional daily update check.
 
 ## Install
 
 ### Download
 
-1. Download **MacSlider.dmg** from the [latest release](https://github.com/ashfordeOU/macslider/releases/latest).
-2. Open it and drag **MacSlider** to **Applications**.
-3. Open MacSlider and allow **Accessibility** access when asked.
+1. Download **Monorail.dmg** from the [latest release](https://github.com/ashfordeOU/macslider/releases/latest).
+2. Open it and drag **Monorail** to **Applications**.
+3. Open Monorail and allow **Accessibility** access when asked.
 
 > [!NOTE]
-> Release builds are not yet notarized by Apple. The first time you open MacSlider,
+> Release builds are not yet notarized by Apple. The first time you open Monorail,
 > macOS may say it can't verify the developer. Open **System Settings → Privacy & Security**
 > and click **Open Anyway**. The Terminal installer below avoids this step.
 
@@ -69,10 +71,10 @@ This downloads the latest release, installs it in `/Applications` and opens it.
 
 ### Updates
 
-MacSlider updates itself. When a new version is out it offers **Install and
+Monorail updates itself. When a new version is out it offers **Install and
 Relaunch** (or shows **Update** in the menu bar slider): it downloads the
 release from GitHub, checks it against the published SHA-256 checksum and
-MacSlider's code signature, swaps it in and reopens, with your windows where
+Monorail's code signature, swaps it in and reopens, with your windows where
 they were. Turn on **Install updates automatically** in **Settings → General**
 to skip the question, or use **Check for Updates…** in the menu any time.
 
@@ -84,14 +86,14 @@ to skip the question, or use **Check for Updates…** in the menu any time.
 
 ## Getting started
 
-When MacSlider first opens, a short welcome tour walks you through granting
+When Monorail first opens, a short welcome tour walks you through granting
 Accessibility access and the easiest ways to get around.
 
 ### Slide mode
 
 Tap the **right ⌥ Option** key on its own. A small cheat sheet appears at
 the bottom of the screen, and until you press <kbd>Esc</kbd> (or pause for a
-few seconds) plain keys drive MacSlider:
+few seconds) plain keys drive Monorail:
 
 | Key | What it does |
 | --- | --- |
@@ -112,7 +114,7 @@ Holding the key as a normal modifier never turns slide mode on, only a tap does.
 
 ### Slides and the overview
 
-With **Group windows into slides by app** on (the default), MacSlider fills
+With **Group windows into slides by app** on (the default), Monorail fills
 the strip with full-screen slides:
 
 - Windows of the same app share a slide: two side by side, or four in a 2×2 grid for terminals (Terminal, iTerm, Ghostty, Warp, kitty, Alacritty, WezTerm).
@@ -131,14 +133,14 @@ Layout Change** in the menu) steps back through your recent layout changes:
 moves, resizes, pairings, layouts and resets.
 
 **Layouts stay put.** Some apps (Firefox, for one) occasionally resize or
-move their own windows. MacSlider notices that it wasn't you — no mouse button
+move their own windows. Monorail notices that it wasn't you — no mouse button
 was down — and snaps the window straight back. Dragging and resizing by hand
 still work as before. Turn this off in **Settings → Layout** if you prefer.
 
 **Your own pairings stick.** Pair windows yourself (say one Safari and one
 Finder window) by dragging in the overview or with <kbd>⌃⌥[</kbd> / <kbd>⌃⌥]</kbd>,
-and MacSlider keeps that slide as you made it: new windows won't break it up
-or squeeze into it, and it's saved across MacSlider restarts. To go back,
+and Monorail keeps that slide as you made it: new windows won't break it up
+or squeeze into it, and it's saved across Monorail restarts. To go back,
 **Reset to smart pairs** (<kbd>⌃⌥A</kbd>, the ✨ button in the menu bar slider,
 or the overview) regroups every workspace by app in one step.
 
@@ -177,7 +179,7 @@ menu bar) to see every slide of every workspace at once:
 
 ### Slider bar
 
-**Click the MacSlider icon** in the menu bar for the slider, every slide as a
+**Click the Monorail icon** in the menu bar for the slider, every slide as a
 card, and pause, overview and settings buttons. Right-click (or ⌃-click) the
 icon for the full menu.
 
@@ -209,7 +211,7 @@ workspace 2, slide 3 of 5). Switching to a window with ⌘Tab takes you to its w
 
 - Hold <kbd>⌥</kbd> and **scroll**. With a mouse wheel each notch moves one window; on a trackpad the strip follows your fingers.
 - **Scroll over the menu bar**. No keys needed.
-- **Click ‹ ›** next to the MacSlider icon in the menu bar.
+- **Click ‹ ›** next to the Monorail icon in the menu bar.
 - **Click** any window, even the thin edge of one off-screen, and the strip scrolls to show it.
 
 The menu bar icon shows where you are (`3/8`), lists the windows on the
@@ -280,7 +282,7 @@ Everything is set in a standard Settings window, and changes apply immediately.
 | Apps | Per-app rules: always float, windows per slide, slide layout, default width, open at the start, next to focus or at the end |
 | Shortcuts | Modifier prefix, every binding, extra bindings, restore defaults |
 
-Settings are saved to `~/Library/Application Support/MacSlider/settings.json`,
+Settings are saved to `~/Library/Application Support/Monorail/settings.json`,
 and the strip layout to `layout.json` in the same folder.
 
 **Mac setup** checks for Accessibility access, other window managers that
@@ -290,56 +292,56 @@ trackpad gestures. Each check links to the right System Settings pane.
 
 ## Automation
 
-Every action has a `macslider://` URL, so you can drive MacSlider from
+Every action has a `monorail://` URL (older `macslider://` links still work), so you can drive Monorail from
 Raycast, Alfred, Shortcuts, Keyboard Maestro or a shell script:
 
 ```bash
-open -g macslider://focus-right
+open -g monorail://focus-right
 ```
 
 The app also includes a small command-line tool. Link it onto your `PATH`:
 
 ```bash
-sudo ln -sf /Applications/MacSlider.app/Contents/Resources/macslider /usr/local/bin/macslider
+sudo ln -sf /Applications/Monorail.app/Contents/Resources/monorail /usr/local/bin/monorail
 ```
 
 Then run any action:
 
 ```bash
-macslider cycle-width
+monorail cycle-width
 ```
 
-Run `macslider --help` for the full list of actions. `settings` and `welcome`
+Run `monorail --help` for the full list of actions. `settings` and `welcome`
 open those windows.
 
 ## How it works
 
-MacSlider lays out each strip as a row of columns in its own coordinate
+Monorail lays out each strip as a row of columns in its own coordinate
 space and maps the visible part onto the display. macOS won't put a window
 entirely off-screen, so columns that scroll out of view are **parked** at the
 display edge with a few points showing. Click a parked window and it slides
 back into view.
 
-The layout model (`Sources/MacSliderCore`) is plain Swift with no AppKit
+The layout model (`Sources/MonorailCore`) is plain Swift with no AppKit
 code, so it is unit-tested on macOS and Linux. The app
-(`Sources/MacSlider`) applies that model to real windows:
+(`Sources/Monorail`) applies that model to real windows:
 
 - **Accessibility (`AXUIElement`, `AXObserver`)** moves and resizes windows and follows window creation, focus, minimising and closing.
 - **A `CGEventTap`** handles global shortcuts, slide mode and strip scrolling, and passes every other event straight through.
-- **Mission Control Spaces** are read through the system window server, so each Space keeps its own layout. If that lookup ever fails, MacSlider treats each display as one Space instead of breaking.
+- **Mission Control Spaces** are read through the system window server, so each Space keeps its own layout. If that lookup ever fails, Monorail treats each display as one Space instead of breaking.
 - **Multitouch input** is read directly from the trackpad for three- and four-finger swipes. It is only loaded when that option is on.
 - **Animations** use a short ease-out curve. Windows are resized once, then slid into place, so apps don't have to re-layout their content on every frame.
 
 ## Privacy
 
-MacSlider needs one permission, **Accessibility**, which macOS requires
+Monorail needs one permission, **Accessibility**, which macOS requires
 before any app can move other apps' windows. You can revoke it at any time in
 **System Settings → Privacy & Security → Accessibility**.
 
 Live previews in the overview are optional and need **Screen Recording**
 permission. Previews are drawn on your Mac and never stored or sent anywhere.
 
-MacSlider has no account, analytics or telemetry. Its only network requests go
+Monorail has no account, analytics or telemetry. Its only network requests go
 to this repository's GitHub releases: a daily check for a new version and,
 when you accept one, its download. Both can be turned off in **Settings → General**.
 
@@ -349,9 +351,9 @@ You need Xcode 15 or later (or the matching Swift toolchain) on macOS 13 or late
 
 ```bash
 git clone https://github.com/ashfordeOU/macslider.git
-cd macslider
+cd macslider   # the repository keeps its original name
 make test      # run the unit tests
-make app       # build dist/MacSlider.app (universal, ad-hoc signed)
+make app       # build dist/Monorail.app (universal, ad-hoc signed)
 make package   # also build the .zip, .dmg and SHA256SUMS
 make run       # build and open the app
 ```
@@ -359,9 +361,9 @@ make run       # build and open the app
 ### Signing
 
 macOS ties the Accessibility permission to the app's code signature. Release
-builds are signed with MacSlider's own certificate, so the permission carries
+builds are signed with Monorail's own certificate, so the permission carries
 over from one version to the next. (Updating from a release before 0.2.2 needs
-one last re-grant: remove MacSlider from **Privacy & Security → Accessibility**
+one last re-grant: remove Monorail from **Privacy & Security → Accessibility**
 with **–**, then open it again.)
 
 The certificate is self-signed and lives in two repository secrets,
@@ -375,14 +377,14 @@ scripts/make-signing-cert.sh
 
 Local builds are signed ad hoc unless you set `SIGN_IDENTITY` to a code-signing
 identity (a name or SHA-1 hash, such as a Developer ID) before running
-`scripts/build-app.sh`. After installing an ad-hoc build, switch MacSlider off
+`scripts/build-app.sh`. After installing an ad-hoc build, switch Monorail off
 and on in **Privacy & Security → Accessibility**.
 
 ### Project layout
 
 ```
-Sources/MacSliderCore/   Layout model: strips, columns, widths, scrolling, keymap, settings
-Sources/MacSlider/       macOS app: engine, input, overlays, menu bar, settings UI
+Sources/MonorailCore/   Layout model: strips, columns, widths, scrolling, keymap, settings
+Sources/Monorail/       macOS app: engine, input, overlays, menu bar, settings UI
 Tests/                   Unit tests for the layout model
 Resources/Info.plist     App bundle metadata
 assets/icon.png          App icon master (rendered by scripts/render-icon.py)
@@ -392,7 +394,7 @@ scripts/                 Build, package, install, icon and command-line tools
 
 ## Troubleshooting
 
-- **Shortcuts do nothing.** Check that MacSlider is enabled in **Privacy & Security → Accessibility**. Then use **Settings → General → Check again**.
+- **Shortcuts do nothing.** Check that Monorail is enabled in **Privacy & Security → Accessibility**. Then use **Settings → General → Check again**.
 - **A window won't tile.** Some apps have fixed-size windows, or open panels instead of standard windows. These float on purpose. Press <kbd>⌃⌥T</kbd> to tile one anyway.
 - **Windows jumped around after a display change.** Press <kbd>⌃⌥Esc</kbd> to retile.
 - **Everything's in a mess.** Pause with <kbd>⌃⌥Q</kbd>. Every window comes back on screen, and you can move them by hand.
@@ -405,6 +407,6 @@ Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md
 
 Copyright © 2026 Ashforde OÜ.
 
-MacSlider is free software: you can redistribute it and/or modify it under the
+Monorail is free software: you can redistribute it and/or modify it under the
 terms of the [GNU Affero General Public License v3.0](LICENSE) as published by
 the Free Software Foundation.

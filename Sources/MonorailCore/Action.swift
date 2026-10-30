@@ -1,4 +1,4 @@
-/// Everything MacSlider can do from a shortcut or a `macslider://` URL.
+/// Everything Monorail can do from a shortcut or a `monorail://` URL.
 /// Raw values are stable: they are stored in the config file and used as URL hosts.
 public enum Action: String, Codable, CaseIterable, Sendable {
     case focusLeft = "focus-left"
@@ -132,7 +132,7 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         return Int(rawValue.dropFirst(prefix.count))
     }
 
-    /// Parses `macslider://<action>` (or a bare action name).
+    /// Parses `monorail://<action>` (or the older `macslider://<action>`, or a bare name).
     public init?(url: String) {
         var name = Substring(url)
         if let scheme = url.firstIndex(of: ":"), url[scheme...].hasPrefix("://") {

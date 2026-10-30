@@ -39,7 +39,7 @@ public enum SlideTrigger: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// Slide mode: tap one key, then drive MacSlider with single keys, no chords.
+/// Slide mode: tap one key, then drive Monorail with single keys, no chords.
 public enum SlideMode {
     public enum Result: Equatable, Sendable {
         /// Run the action and stay in slide mode.

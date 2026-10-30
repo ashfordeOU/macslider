@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import MacSliderCore
+import MonorailCore
 import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Identifiable {
@@ -83,7 +83,7 @@ private struct GeneralPane: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Launch MacSlider at login", isOn: $launchAtLogin)
+                Toggle("Launch Monorail at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { LoginItem.setEnabled($0) }
                 Toggle("Pause tiling", isOn: $paused)
                     .onChange(of: paused) { setPaused($0) }
@@ -467,7 +467,7 @@ private struct ShortcutsPane: View {
         ("Workspaces", Action.allCases.filter { $0.workspaceNumber != nil || $0.moveToWorkspaceNumber != nil }),
         ("Jump", [.focusColumn1, .focusColumn2, .focusColumn3, .focusColumn4, .focusColumn5,
                   .focusColumn6, .focusColumn7, .focusColumn8, .focusColumn9]),
-        ("MacSlider", [.undo, .togglePause, .retile]),
+        ("Monorail", [.undo, .togglePause, .retile]),
     ]
 
     var body: some View {
@@ -599,7 +599,7 @@ private struct AboutPane: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 96, height: 96)
-            Text("MacSlider").font(.largeTitle).fontWeight(.semibold)
+            Text("Monorail").font(.largeTitle).fontWeight(.semibold)
             Text("Version \(version)").foregroundStyle(.secondary)
             Text("A scrolling window manager for macOS. Every window keeps its size on one endless strip.")
                 .multilineTextAlignment(.center)

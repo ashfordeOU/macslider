@@ -56,7 +56,7 @@ jobs:
           cat >> notes.md <<'NOTES'
 
           ### Install
-          Download **MacSlider-*.dmg**, drag MacSlider to Applications, then open it and allow Accessibility access.
+          Download **Monorail-*.dmg**, drag Monorail to Applications, then open it and allow Accessibility access.
           Or install from Terminal:
           ```bash
           curl -fsSL https://raw.githubusercontent.com/ashfordeOU/macslider/main/scripts/install.sh | bash
@@ -69,5 +69,5 @@ jobs:
             gh release upload "$TAG" dist/*.zip dist/*.dmg dist/SHA256SUMS --clobber
           else
             gh release create "$TAG" dist/*.zip dist/*.dmg dist/SHA256SUMS \
-              --title "MacSlider ${TAG#v}" --notes-file notes.md --target "$GITHUB_SHA"
+              --title "Monorail ${TAG#v}" --notes-file notes.md --target "$GITHUB_SHA"
           fi

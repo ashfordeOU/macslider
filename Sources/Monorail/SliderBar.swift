@@ -1,7 +1,7 @@
 #if os(macOS)
 import AppKit
 import Combine
-import MacSliderCore
+import MonorailCore
 import SwiftUI
 
 /// The slider bar: a small glass mini-map of the strip on each display. Each
@@ -738,7 +738,7 @@ private struct SliderPopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Text("MacSlider").font(.headline)
+                Text("Monorail").font(.headline)
                 if let map = model.map {
                     Text(map.workspaceCount > 1 ? "Workspace \(map.workspace + 1) · \(map.tiles.count) slides"
                                                 : "\(map.tiles.count) slides")

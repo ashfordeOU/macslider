@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import MacSliderCore
+import MonorailCore
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -288,7 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let current = engine.allWindowSummaries().first { $0.id == id }
         guard let name = TextPrompt.ask(
             title: "Rename window",
-            message: "Shown in MacSlider’s previews, overview and menus. Leave empty to use the window’s own title.",
+            message: "Shown in Monorail’s previews, overview and menus. Leave empty to use the window’s own title.",
             initial: engine.customName(of: id) ?? "",
             placeholder: current?.title ?? "")
         else { return }
@@ -391,9 +391,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(shortcutsMenu())
         menu.addItem(item("Welcome Tour…", #selector(showWelcomeFromMenu)))
         menu.addItem(item("Check for Updates…", #selector(checkForUpdates)))
-        menu.addItem(item("About MacSlider", #selector(showAbout)))
+        menu.addItem(item("About Monorail", #selector(showAbout)))
         menu.addItem(.separator())
-        menu.addItem(item("Quit MacSlider", #selector(quit), key: "q"))
+        menu.addItem(item("Quit Monorail", #selector(quit), key: "q"))
     }
 
     /// Every shortcut, so nobody has to remember them. Choosing one runs it.
@@ -438,15 +438,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func checkForUpdates() { updater.check(userInitiated: true) }
 
     private func headerTitle(trusted: Bool) -> String {
-        if !trusted { return "MacSlider needs Accessibility access" }
-        if engine.isPaused { return "MacSlider is paused" }
+        if !trusted { return "Monorail needs Accessibility access" }
+        if engine.isPaused { return "Monorail is paused" }
         if let status = engine.status() {
             let workspace = store.settings.workspaceCount > 1
                 ? "\(store.settings.workspaceName(status.workspace - 1)) · " : ""
             if status.columnCount == 0 { return "\(workspace)No windows yet" }
             return "\(workspace)Slide \(status.focusedColumn) of \(status.columnCount)"
         }
-        return "MacSlider is running"
+        return "Monorail is running"
     }
 
     private func item(_ title: String, _ selector: Selector, key: String = "", action: Action? = nil) -> NSMenuItem {
@@ -506,7 +506,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 setPaused: { [weak self] in self?.engine.setPaused($0) }
             )
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-            window.title = "MacSlider Settings"
+            window.title = "Monorail Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
             window.center()
@@ -523,7 +523,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.welcomeWindow?.close()
             }
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-            window.title = "Welcome to MacSlider"
+            window.title = "Welcome to Monorail"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()

@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import MacSliderCore
+import MonorailCore
 
 /// Moves windows to their targets over a short ease-out animation.
 ///

@@ -13,7 +13,7 @@ package: app
 	scripts/package.sh
 
 run: app
-	open dist/MacSlider.app
+	open dist/Monorail.app
 
 clean:
 	rm -rf .build dist

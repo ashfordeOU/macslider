@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds dist/MacSlider.app as a universal (Apple silicon + Intel) binary.
+# Builds dist/Monorail.app as a universal (Apple silicon + Intel) binary.
 #
 # Signing: set SIGN_IDENTITY to a codesigning identity (name or SHA-1) to
 # sign with it, e.g. the "MacSlider Self-Signed" certificate CI imports or a
@@ -9,17 +9,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION="$(tr -d '[:space:]' < VERSION)"
 BUILD="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
-APP="dist/MacSlider.app"
+APP="dist/Monorail.app"
 
-echo "==> Building MacSlider ${VERSION} (${BUILD})"
+echo "==> Building Monorail ${VERSION} (${BUILD})"
 swift build -c release --arch arm64 --arch x86_64
 BIN_DIR="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
 
 echo "==> Assembling ${APP}"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/MacSlider" "$APP/Contents/MacOS/MacSlider"
-cp scripts/macslider "$APP/Contents/Resources/macslider"
+cp "$BIN_DIR/Monorail" "$APP/Contents/MacOS/Monorail"
+cp scripts/monorail "$APP/Contents/Resources/monorail"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
 sed -e "s/__VERSION__/${VERSION}/" -e "s/__BUILD__/${BUILD}/" Resources/Info.plist > "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
@@ -50,4 +50,4 @@ codesign --verify --strict "$APP"
 codesign --display --requirements - "$APP" 2>&1 | grep designated || true
 
 echo "==> Done: $APP"
-lipo -info "$APP/Contents/MacOS/MacSlider"
+lipo -info "$APP/Contents/MacOS/Monorail"

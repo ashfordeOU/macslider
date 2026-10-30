@@ -1,11 +1,11 @@
 #!/bin/sh
-# Command-line control for MacSlider: `macslider <action>`.
-# Runs the action through the macslider:// URL scheme without stealing focus.
+# Command-line control for Monorail: `monorail <action>`.
+# Runs the action through the monorail:// URL scheme without stealing focus.
 set -eu
 
 usage() {
     cat <<'USAGE'
-Usage: macslider <action>
+Usage: monorail <action>
 
 Focus:    focus-left focus-right focus-up focus-down focus-first focus-last
           focus-column-1 … focus-column-9
@@ -28,7 +28,7 @@ if [ $# -ne 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
 fi
 
 case "$1" in
-    *[!a-z0-9-]*) echo "macslider: invalid action: $1" >&2; exit 64 ;;
+    *[!a-z0-9-]*) echo "monorail: invalid action: $1" >&2; exit 64 ;;
 esac
 
-exec open -g "macslider://$1"
+exec open -g "monorail://$1"

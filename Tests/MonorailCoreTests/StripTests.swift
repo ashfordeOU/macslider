@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import MacSliderCore
+@testable import MonorailCore
 
 final class StripTests: XCTestCase {
     // 1000pt wide viewport, no gaps: usable width 1000, a ½ column is 500pt.

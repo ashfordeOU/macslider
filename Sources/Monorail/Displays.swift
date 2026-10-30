@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import MacSliderCore
+import MonorailCore
 
 /// A connected display, with frames in Accessibility coordinates
 /// (origin at the top-left of the primary display, y growing downward).
@@ -46,7 +46,7 @@ struct Display: Equatable {
 }
 
 /// Mission Control Spaces, through the private SkyLight API. Looked up at
-/// runtime so that, if Apple ever removes a symbol, MacSlider falls back to
+/// runtime so that, if Apple ever removes a symbol, Monorail falls back to
 /// treating every display as having a single Space instead of crashing.
 enum Spaces {
     private typealias MainConnectionFn = @convention(c) () -> Int32

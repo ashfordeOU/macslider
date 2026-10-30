@@ -1,4 +1,4 @@
-/// How MacSlider treats the windows of one app.
+/// How Monorail treats the windows of one app.
 public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     public var bundleID: String
     /// Display name, for Settings only.
@@ -128,7 +128,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var workspaceNames: [String] = []
     /// Look for new versions on GitHub once a day.
     public var checkForUpdates = true
-    /// Install new versions without asking (MacSlider relaunches itself).
+    /// Install new versions without asking (Monorail relaunches itself).
     public var installUpdatesAutomatically = false
     /// Bumped when new default app rules ship, so existing settings pick them up once.
     public var rulesVersion = AppSettings.currentRulesVersion

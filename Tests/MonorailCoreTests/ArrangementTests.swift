@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import MacSliderCore
+@testable import MonorailCore
 
 final class ArrangementTests: XCTestCase {
     let flat = LayoutConfig(gap: 0, edgeGap: 0)

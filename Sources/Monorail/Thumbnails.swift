@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import MacSliderCore
+import MonorailCore
 import ScreenCaptureKit
 import SwiftUI
 
@@ -11,7 +11,7 @@ import SwiftUI
 enum WindowThumbnails {
     static var isAllowed: Bool { CGPreflightScreenCaptureAccess() }
 
-    /// Set once the user has asked for previews in this run of MacSlider.
+    /// Set once the user has asked for previews in this run of Monorail.
     /// macOS only applies a new Screen Recording permission after a relaunch.
     private(set) static var requested = false
 
@@ -45,13 +45,13 @@ enum WindowThumbnails {
         }
     }
 
-    /// Quits and reopens MacSlider, so a new Screen Recording permission applies.
+    /// Quits and reopens Monorail, so a new Screen Recording permission applies.
     static func relaunch() {
         let script = #"while kill -0 "$1" 2>/dev/null; do sleep 0.2; done; /usr/bin/open "$2""#
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = [
-            "-c", script, "macslider-relaunch",
+            "-c", script, "monorail-relaunch",
             String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath,
         ]
         guard (try? process.run()) != nil else { return }
@@ -129,7 +129,7 @@ struct LivePreviewsButton: View {
         Group {
             if needsRelaunch {
                 button("Relaunch to turn on previews", symbol: "arrow.clockwise") { WindowThumbnails.relaunch() }
-                    .help("macOS applies Screen Recording permission after MacSlider restarts. Your windows stay put.")
+                    .help("macOS applies Screen Recording permission after Monorail restarts. Your windows stay put.")
             } else {
                 button("Show live previews…", symbol: "eye") {
                     WindowThumbnails.requestAccess()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Renders the MacSlider app icon to assets/icon.png (1024x1024).
+"""Renders the Monorail app icon to assets/icon.png (1024x1024).
 
 The design is an "M" built from three windows on a warm coral tile: the
 outer two stand tall, the middle one has slid down out of place, leaving a

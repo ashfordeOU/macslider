@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import MacSliderCore
+import MonorailCore
 import SwiftUI
 
 /// The small popup that appears next to a window after you resize it in a

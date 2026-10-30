@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import MacSliderCore
+@testable import MonorailCore
 
 final class KeymapTests: XCTestCase {
     func testDefaultKeymapHasNoDuplicateShortcuts() {
@@ -49,6 +49,7 @@ final class KeymapTests: XCTestCase {
 
     func testActionFromURL() {
         XCTAssertEqual(Action(url: "macslider://focus-left"), .focusLeft)
+        XCTAssertEqual(Action(url: "monorail://focus-right"), .focusRight)
         XCTAssertEqual(Action(url: "macslider://Center/"), .center)
         XCTAssertEqual(Action(url: "toggle-pause"), .togglePause)
         XCTAssertNil(Action(url: "macslider://nope"))

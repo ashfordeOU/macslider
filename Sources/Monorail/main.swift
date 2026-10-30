@@ -7,5 +7,5 @@ app.delegate = delegate
 app.setActivationPolicy(.accessory)
 app.run()
 #else
-print("MacSlider is a macOS app. Only MacSliderCore builds on this platform.")
+print("Monorail is a macOS app. Only MonorailCore builds on this platform.")
 #endif

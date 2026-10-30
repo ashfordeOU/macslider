@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import MacSliderCore
+import MonorailCore
 
 extension Modifiers {
     init(_ flags: CGEventFlags) {

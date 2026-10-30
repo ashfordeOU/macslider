@@ -33,7 +33,7 @@ public struct Shortcut: Hashable, Codable, Sendable {
     public var displayString: String { modifiers.symbols + KeyCode.name(for: keyCode) }
 }
 
-/// macOS virtual key codes (`kVK_*`) for the keys MacSlider uses by default.
+/// macOS virtual key codes (`kVK_*`) for the keys Monorail uses by default.
 public enum KeyCode {
     public static let a: UInt16 = 0, s: UInt16 = 1, d: UInt16 = 2, f: UInt16 = 3, h: UInt16 = 4
     public static let g: UInt16 = 5, z: UInt16 = 6, x: UInt16 = 7, c: UInt16 = 8, v: UInt16 = 9

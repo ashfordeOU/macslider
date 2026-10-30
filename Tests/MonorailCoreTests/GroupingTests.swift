@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import MacSliderCore
+@testable import MonorailCore
 
 final class GroupingTests: XCTestCase {
     // Windows 1-3 Safari, 4 Notes, 5 Mail, 6 Music, 10-14 Terminal.

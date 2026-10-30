@@ -1,5 +1,5 @@
 #!/bin/bash
-# Creates MacSlider's self-signed code-signing certificate and hands it to
+# Creates Monorail's self-signed code-signing certificate and hands it to
 # GitHub, so every release is signed with the same identity and macOS keeps
 # the Accessibility permission across updates.
 #
@@ -10,7 +10,7 @@
 # except as an encrypted GitHub secret.
 set -euo pipefail
 
-NAME="MacSlider Self-Signed"
+NAME="MacSlider Self-Signed"  # the certificate's name; kept so existing secrets and permissions stay valid
 REPO="ashfordeOU/macslider"
 OPENSSL=/usr/bin/openssl   # macOS LibreSSL writes .p12 files the keychain can import
 [ -x "$OPENSSL" ] || OPENSSL=openssl

@@ -4,9 +4,9 @@ import CryptoKit
 import Security
 import SwiftUI
 
-/// Keeps MacSlider up to date from GitHub releases: finds a newer version,
+/// Keeps Monorail up to date from GitHub releases: finds a newer version,
 /// downloads it, checks its SHA-256 checksum and code signature, swaps it in
-/// and relaunches. Checking GitHub is MacSlider's only network request, and
+/// and relaunches. Checking GitHub is Monorail's only network request, and
 /// it can be turned off in Settings.
 final class Updater: ObservableObject {
     static let releasesURL = URL(string: "https://github.com/ashfordeOU/macslider/releases/latest")!
@@ -26,7 +26,7 @@ final class Updater: ObservableObject {
 
     /// Install without asking when a check finds a new version.
     var installAutomatically = false
-    /// Called just before MacSlider quits to relaunch the new version.
+    /// Called just before Monorail quits to relaunch the new version.
     var willRelaunch: () -> Void = {}
 
     private var timer: Timer?
@@ -70,7 +70,7 @@ final class Updater: ObservableObject {
                 guard Self.isNewer(release.version, than: self.currentVersion) else {
                     self.available = nil
                     if userInitiated {
-                        self.alert("MacSlider is up to date", "Version \(self.currentVersion) is the latest.")
+                        self.alert("Monorail is up to date", "Version \(self.currentVersion) is the latest.")
                     }
                     return
                 }
@@ -95,7 +95,8 @@ final class Updater: ObservableObject {
                 .flatMap { $0["browser_download_url"] as? String }
                 .flatMap(URL.init(string:))
         }
-        guard let archive = asset({ $0.hasPrefix("MacSlider-") && $0.hasSuffix(".zip") }),
+        guard let archive = asset({ $0.hasPrefix("Monorail-") && $0.hasSuffix(".zip") })
+                ?? asset({ $0.hasPrefix("MacSlider-") && $0.hasSuffix(".zip") }),
             let checksums = asset({ $0 == "SHA256SUMS" })
         else { return nil }
         let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
@@ -120,9 +121,9 @@ final class Updater: ObservableObject {
 
     private func offer(_ release: Release) {
         let alert = NSAlert()
-        alert.messageText = "MacSlider \(release.version) is available"
+        alert.messageText = "Monorail \(release.version) is available"
         alert.informativeText =
-            "You have version \(currentVersion). MacSlider can download and install it for you, then reopen with your windows where they are."
+            "You have version \(currentVersion). Monorail can download and install it for you, then reopen with your windows where they are."
         alert.addButton(withTitle: "Install and Relaunch")
         alert.addButton(withTitle: "Skip This Version")
         alert.addButton(withTitle: "Later")
@@ -145,7 +146,7 @@ final class Updater: ObservableObject {
 
         var errorDescription: String? {
             switch self {
-            case .notWritable(let path): return "MacSlider can’t replace itself at \(path)."
+            case .notWritable(let path): return "Monorail can’t replace itself at \(path)."
             case .download: return "The download didn’t complete."
             case .checksum: return "The download didn’t match its published checksum."
             case .unpack: return "The download couldn’t be opened."
@@ -162,7 +163,7 @@ final class Updater: ObservableObject {
             return
         }
         isInstalling = true
-        hud.show("Updating MacSlider to \(release.version)…")
+        hud.show("Updating Monorail to \(release.version)…")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let app = try Self.downloadAndVerify(release)
@@ -181,7 +182,7 @@ final class Updater: ObservableObject {
     /// and checks its signature. Runs off the main thread.
     private static func downloadAndVerify(_ release: Release) throws -> URL {
         let work = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MacSlider-update-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("Monorail-update-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
 
         guard let archive = try? Data(contentsOf: release.archive),
@@ -200,7 +201,9 @@ final class Updater: ObservableObject {
         unpack.arguments = ["-x", "-k", zip.path, work.path]
         try unpack.run()
         unpack.waitUntilExit()
-        let app = work.appendingPathComponent("MacSlider.app")
+        // Releases ship Monorail.app; MacSlider.app was its earlier name.
+        let app = ["Monorail.app", "MacSlider.app"].map { work.appendingPathComponent($0) }
+            .first { FileManager.default.fileExists(atPath: $0.path) } ?? work.appendingPathComponent("Monorail.app")
         guard unpack.terminationStatus == 0, FileManager.default.fileExists(atPath: app.path) else {
             throw UpdateError.unpack
         }
@@ -219,7 +222,7 @@ final class Updater: ObservableObject {
 
     /// The new app must carry a valid signature that satisfies this app's own
     /// designated requirement (same identifier, same certificate), so only
-    /// builds signed with MacSlider's certificate can replace it. A local
+    /// builds signed with Monorail's certificate can replace it. A local
     /// ad-hoc build has no certificate to compare, so it only checks validity.
     private static func signatureMatchesRunningApp(_ app: URL) -> Bool {
         var newCode: SecStaticCode?
@@ -244,17 +247,19 @@ final class Updater: ObservableObject {
         return SecStaticCodeCheckValidity(newCode, flags, requirement) == errSecSuccess
     }
 
-    /// Hands over to a small script that waits for MacSlider to quit, swaps
+    /// Hands over to a small script that waits for Monorail to quit, swaps
     /// the app bundle (rolling back if that fails) and opens the new version.
+    /// The new version is installed next to the running one as Monorail.app,
+    /// which also renames copies installed under the old name, MacSlider.app.
     private func relaunch(into app: URL, replacing destination: URL) {
         let script = """
-            pid="$1"; new="$2"; dest="$3"
+            pid="$1"; new="$2"; old="$3"; dest="$(dirname "$old")/Monorail.app"
             while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
-            rm -rf "$dest.previous"
-            if mv "$dest" "$dest.previous" && /usr/bin/ditto "$new" "$dest"; then
-                rm -rf "$dest.previous"
+            rm -rf "$old.previous"
+            if mv "$old" "$old.previous" && /usr/bin/ditto "$new" "$dest"; then
+                rm -rf "$old.previous"
             else
-                rm -rf "$dest"; mv "$dest.previous" "$dest"
+                rm -rf "$dest"; mv "$old.previous" "$old"; dest="$old"
             fi
             /usr/bin/xattr -dr com.apple.quarantine "$dest" 2>/dev/null
             rm -rf "$(dirname "$new")"
@@ -263,7 +268,7 @@ final class Updater: ObservableObject {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = [
-            "-c", script, "macslider-update",
+            "-c", script, "monorail-update",
             String(ProcessInfo.processInfo.processIdentifier), app.path, destination.path,
         ]
         do {
@@ -274,14 +279,14 @@ final class Updater: ObservableObject {
             fail(error)
             return
         }
-        hud.show("Restarting MacSlider…")
+        hud.show("Restarting Monorail…")
         willRelaunch()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { NSApp.terminate(nil) }
     }
 
     private func fail(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "MacSlider couldn’t update itself"
+        alert.messageText = "Monorail couldn’t update itself"
         alert.informativeText = "\(error.localizedDescription) You can download the new version from GitHub instead."
         alert.addButton(withTitle: "Open Download Page")
         alert.addButton(withTitle: "Cancel")
