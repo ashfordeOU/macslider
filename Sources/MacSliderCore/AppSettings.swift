@@ -9,6 +9,8 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     public var width: Double?
     /// Where new windows of this app join the strip, overriding the default.
     public var position: Strip.InsertPosition?
+    /// How many of this app's windows share one slide when grouping by app.
+    public var tiles: Int?
 
     public var id: String { bundleID }
 
@@ -17,13 +19,15 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         name: String,
         float: Bool = false,
         width: Double? = nil,
-        position: Strip.InsertPosition? = nil
+        position: Strip.InsertPosition? = nil,
+        tiles: Int? = nil
     ) {
         self.bundleID = bundleID
         self.name = name
         self.float = float
         self.width = width
         self.position = position
+        self.tiles = tiles
     }
 }
 
@@ -81,6 +85,17 @@ public struct AppSettings: Equatable, Codable, Sendable {
     /// Per-app rules.
     public var appRules: [AppRule] = AppSettings.defaultAppRules
     public var keymap: Keymap = .default
+    /// Group windows into full-screen slides by app as they open.
+    public var groupByApp = true
+    /// Windows per slide when grouping, unless an app rule says otherwise.
+    public var tilesPerSlide = 2
+    /// Workspaces per display (1...9). Each has its own strip.
+    public var workspaceCount = 4
+    /// Look for new versions on GitHub once a day.
+    public var checkForUpdates = true
+    /// Bumped when new default app rules ship, so existing settings pick them up once.
+    public var rulesVersion = AppSettings.currentRulesVersion
+    public static let currentRulesVersion = 2
     /// Set once the welcome tour has been shown.
     public var hasCompletedOnboarding = false
 
@@ -89,6 +104,13 @@ public struct AppSettings: Equatable, Codable, Sendable {
         AppRule(bundleID: "com.apple.calculator", name: "Calculator", float: true),
         AppRule(bundleID: "com.apple.ActivityMonitor", name: "Activity Monitor", float: true),
         AppRule(bundleID: "com.apple.archiveutility", name: "Archive Utility", float: true),
+        AppRule(bundleID: "com.apple.Terminal", name: "Terminal", tiles: 4),
+        AppRule(bundleID: "com.googlecode.iterm2", name: "iTerm", tiles: 4),
+        AppRule(bundleID: "com.mitchellh.ghostty", name: "Ghostty", tiles: 4),
+        AppRule(bundleID: "dev.warp.Warp-Stable", name: "Warp", tiles: 4),
+        AppRule(bundleID: "net.kovidgoyal.kitty", name: "kitty", tiles: 4),
+        AppRule(bundleID: "org.alacritty", name: "Alacritty", tiles: 4),
+        AppRule(bundleID: "com.github.wez.wezterm", name: "WezTerm", tiles: 4),
     ]
 
     public init() {}
@@ -98,12 +120,18 @@ public struct AppSettings: Equatable, Codable, Sendable {
         return appRules.first { $0.bundleID == bundleID }
     }
 
+    /// Windows per slide for an app when grouping by app.
+    public func tiles(for bundleID: String?) -> Int {
+        min(max(rule(for: bundleID)?.tiles ?? tilesPerSlide, 1), 9)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case layout, animate, animationDuration, modifierSwipe, scrollModifier, scrollOverMenuBar
         case showNavigationArrows, slideTrigger, swipeFingers, swipeSensitivity, invertSwipe
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
-        case appRules, keymap, hasCompletedOnboarding
+        case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
+        case checkForUpdates, rulesVersion
     }
 
     public init(from decoder: Decoder) throws {
@@ -136,5 +164,16 @@ public struct AppSettings: Equatable, Codable, Sendable {
         appRules = value(.appRules, d.appRules)
         keymap = value(.keymap, d.keymap)
         hasCompletedOnboarding = value(.hasCompletedOnboarding, d.hasCompletedOnboarding)
+        groupByApp = value(.groupByApp, d.groupByApp)
+        tilesPerSlide = value(.tilesPerSlide, d.tilesPerSlide)
+        workspaceCount = min(max(value(.workspaceCount, d.workspaceCount), 1), 9)
+        checkForUpdates = value(.checkForUpdates, d.checkForUpdates)
+        rulesVersion = value(.rulesVersion, 1)
+        if rulesVersion < Self.currentRulesVersion {
+            // Version 2 added the terminal rules (four tiles per slide).
+            let known = Set(appRules.map(\.bundleID))
+            appRules += Self.defaultAppRules.filter { $0.tiles != nil && !known.contains($0.bundleID) }
+            rulesVersion = Self.currentRulesVersion
+        }
     }
 }

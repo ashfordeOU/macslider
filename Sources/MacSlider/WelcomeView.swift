@@ -4,8 +4,34 @@ import MacSliderCore
 import SwiftUI
 
 /// First-run tour: grant Accessibility, then learn the easy ways to get around.
+/// Remembers which core moves the user has tried, for the practice pad.
+final class PracticeTracker: ObservableObject {
+    struct Task: Identifiable {
+        var id: String { title }
+        var title: String
+        var actions: Set<Action>
+    }
+
+    static let tasks = [
+        Task(title: "Slide to another window", actions: [.focusLeft, .focusRight]),
+        Task(title: "Move a window along", actions: [.moveLeft, .moveRight]),
+        Task(title: "Change a window’s width", actions: [.cycleWidth, .cycleWidthBackward, .narrower, .wider]),
+        Task(title: "Fill the screen", actions: [.toggleFullWidth]),
+        Task(title: "Open the overview", actions: [.overview]),
+    ]
+
+    @Published private(set) var done: Set<String> = []
+
+    func record(_ action: Action) {
+        for task in Self.tasks where task.actions.contains(action) && !done.contains(task.id) {
+            done.insert(task.id)
+        }
+    }
+}
+
 struct WelcomeView: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject var practice: PracticeTracker
     let onFinish: () -> Void
     @State private var trusted = Accessibility.isTrusted(prompt: false)
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -77,9 +103,32 @@ struct WelcomeView: View {
                         text: "Hold \(store.settings.scrollModifier.symbols) and use the mouse wheel or trackpad. Each wheel notch moves one window.")
                     tip(keys: "menu bar", text: "Scroll over the menu bar, or click ‹ › next to the MacSlider icon. No keys needed.")
                     tip(keys: "click", text: "Click any window, even the thin edge of one off-screen, to bring it into view.")
+                    tip(keys: shortcut(.overview), text: "Overview: see every slide at once, click one to jump there, drag to rearrange.")
                     Text("Prefer shortcuts? \(shortcut(.focusLeft)) \(shortcut(.focusRight)) focus, \(shortcut(.cycleWidth)) width, \(shortcut(.toggleFullWidth)) fill. All of them can be changed in Settings.")
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(6)
+            }
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("3. Practice").fontWeight(.medium)
+                        Spacer()
+                        Text("\(practice.done.count) of \(PracticeTracker.tasks.count)")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    Text("Open two or three windows, then try each move. They tick off as you go.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    ForEach(PracticeTracker.tasks) { task in
+                        HStack(spacing: 8) {
+                            Image(systemName: practice.done.contains(task.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(practice.done.contains(task.id) ? Color.green : Color.secondary)
+                            Text(task.title)
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(6)

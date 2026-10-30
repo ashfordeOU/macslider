@@ -5,10 +5,33 @@ import os
 
 let log = Logger(subsystem: "org.ashforde.macslider", category: "engine")
 
-/// A strip lives on one display and one Mission Control Space.
+/// One display on one Mission Control Space.
+struct ScreenKey: Hashable, Codable {
+    var display: String
+    var space: UInt64
+}
+
+/// A strip lives on one display, one Mission Control Space and one
+/// MacSlider workspace (0-based).
 struct StripKey: Hashable, Codable {
     var display: String
     var space: UInt64
+    var workspace: Int
+
+    init(screen: ScreenKey, workspace: Int) {
+        display = screen.display
+        space = screen.space
+        self.workspace = workspace
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        display = try c.decode(String.self, forKey: .display)
+        space = try c.decode(UInt64.self, forKey: .space)
+        workspace = try c.decodeIfPresent(Int.self, forKey: .workspace) ?? 0
+    }
+
+    var screen: ScreenKey { ScreenKey(display: display, space: space) }
 }
 
 /// A window MacSlider knows about: tiled on a strip (`key` set) or floating.
@@ -55,9 +78,13 @@ final class Engine {
     var onStateChange: () -> Void = {}
     /// Called for the "Search windows" action.
     var onShowSwitcher: () -> Void = {}
+    /// Called for the "Overview" action.
+    var onShowOverview: () -> Void = {}
 
     private var windows: [WindowID: ManagedWindow] = [:]
     private var strips: [StripKey: Strip] = [:]
+    /// The workspace shown on each display and Space.
+    private var activeWorkspace: [ScreenKey: Int] = [:]
     private var observers: [pid_t: AXObserver] = [:]
     private var displays: [Display] = []
     private let animator = Animator()
@@ -158,10 +185,21 @@ final class Engine {
         case .windowSwitcher:
             onShowSwitcher()
             return
+        case .overview:
+            onShowOverview()
+            return
         default:
             break
         }
         guard isRunning, !isPaused else { return }
+        if let n = action.workspaceNumber {
+            switchWorkspace(to: n - 1)
+            return
+        }
+        if let n = action.moveToWorkspaceNumber {
+            moveFocusedWindow(toWorkspace: n - 1)
+            return
+        }
         animator.finishNow()
 
         switch action {
@@ -206,7 +244,18 @@ final class Engine {
             strip.centerFocused(config: config, viewportWidth: width)
             reveal = false
         case .consumeIntoLeft: strip.consumeIntoLeft()
+        case .consumeIntoRight: strip.consumeIntoRight()
+        case .expelLeft: strip.expelLeft()
         case .expel: strip.expel()
+        case .toggleGrid: strip.toggleGrid()
+        case .regroup:
+            let groups = Grouping.plan(
+                strip.columns.filter { $0.pin == nil }.flatMap(\.windows),
+                app: { [weak self] id in self?.windows[id].map(Self.appKey) ?? "" },
+                capacity: { [weak self] app in self?.settings.tiles(for: app) ?? 2 },
+                pairSize: settings.tilesPerSlide
+            )
+            strip.regroup(groups, width: 1)
         case .pinLeft: strip.togglePin(.left)
         case .pinRight: strip.togglePin(.right)
         case .toggleTabbed: strip.toggleTabbed()
@@ -225,6 +274,7 @@ final class Engine {
     /// Focuses any managed window, scrolling its strip to show it.
     func focusAndReveal(_ id: WindowID) {
         guard let window = windows[id] else { return }
+        if let key = window.key { showWorkspace(of: key) }
         if let key = window.key, var strip = strips[key], let display = display(for: key) {
             strip.focus(id)
             strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
@@ -266,14 +316,191 @@ final class Engine {
         guard let frame = window.element.frame, let display = display(containing: frame) ?? displays.first else {
             return
         }
-        let key = currentKey(display)
+        place(window, in: currentKey(display), display: display, focus: true)
+        layout(animated: true)
+    }
+
+    /// Adds a window to a strip: grouped into a slide by app when grouping is
+    /// on, otherwise as a column of its own.
+    private func place(
+        _ window: ManagedWindow, in key: StripKey, display: Display, focus: Bool, width: Double? = nil
+    ) {
         var strip = strips[key] ?? Strip()
         let rule = settings.rule(for: window.bundleID)
-        strip.insert(window.id, width: rule?.width ?? settings.layout.defaultWidth, position: .afterFocused, focus: true)
-        strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+        let position = rule?.position ?? settings.newWindowPosition
+        if settings.groupByApp {
+            let decision = Grouping.decide(
+                newApp: Self.appKey(window),
+                strip: strip,
+                app: { [weak self] id in self?.windows[id].map(Self.appKey) },
+                capacity: { [weak self] app in self?.settings.tiles(for: app) ?? 2 },
+                pairSize: settings.tilesPerSlide
+            )
+            switch decision {
+            case .join(let column):
+                strip.add(window.id, toColumn: column, focus: focus)
+            case .pairWith(let other):
+                strip.remove(other)
+                strip.insertSlide([other, window.id], width: 1, position: .afterFocused, focus: focus)
+            case .newSlide:
+                strip.insertSlide([window.id], width: 1, position: position, focus: focus)
+            }
+        } else {
+            strip.insert(
+                window.id, width: width ?? rule?.width ?? settings.layout.defaultWidth,
+                position: position, focus: focus)
+        }
+        if focus { strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width) }
         strips[key] = strip
         window.key = key
+        scheduleSave()
+    }
+
+    /// Windows are grouped by app bundle, or by name for apps without one.
+    static func appKey(_ window: ManagedWindow) -> String {
+        window.bundleID ?? window.appName
+    }
+
+    // MARK: - Workspaces
+
+    /// Shows workspace `index` on the active display.
+    func switchWorkspace(to index: Int) {
+        guard index >= 0, index < settings.workspaceCount, let (display, key) = activeContext(),
+            index != key.workspace
+        else { return }
+        activeWorkspace[key.screen] = index
+        let newKey = currentKey(display)
+        if var strip = strips[newKey] {
+            strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+            strips[newKey] = strip
+        }
         layout(animated: true)
+        if let target = strips[newKey]?.focusedWindow { focus(target, warpMouse: false) }
+        scheduleSave()
+        onStateChange()
+    }
+
+    /// Makes the workspace that holds `key` the visible one on its display.
+    private func showWorkspace(of key: StripKey) {
+        guard (activeWorkspace[key.screen] ?? 0) != key.workspace else { return }
+        activeWorkspace[key.screen] = key.workspace
+        onStateChange()
+    }
+
+    private func moveFocusedWindow(toWorkspace index: Int) {
+        guard index >= 0, index < settings.workspaceCount, let id = focusedWindowID(), let window = windows[id],
+            let key = window.key, key.workspace != index, let display = display(for: key)
+        else { return }
+        let width = strips[key].flatMap { strip in strip.locate(id).map { strip.columns[$0.column].width } }
+        removeFromStrip(window)
+        var target = key
+        target.workspace = index
+        place(window, in: target, display: display, focus: true, width: width)
+        layout(animated: true)
+        if let next = strips[key]?.focusedWindow { focus(next, warpMouse: false) }
+        onStateChange()
+    }
+
+    // MARK: - Overview
+
+    struct OverviewColumn: Identifiable {
+        var id: Int
+        var windows: [WindowSummary]
+        var width: Double
+        var isGrid: Bool
+        var isTabbed: Bool
+        var isFocused: Bool
+        var pin: PinSide?
+    }
+
+    struct OverviewStrip: Identifiable {
+        var id: StripKey { key }
+        var key: StripKey
+        var title: String
+        var isActive: Bool
+        var columns: [OverviewColumn]
+        var aspectRatio: Double
+    }
+
+    /// Every workspace on the displays' current Spaces, for the overview.
+    func overview() -> [OverviewStrip] {
+        let focused = focusedWindowID()
+        var result: [OverviewStrip] = []
+        for display in displays {
+            let current = currentKey(display)
+            for workspace in 0..<settings.workspaceCount {
+                let key = StripKey(screen: current.screen, workspace: workspace)
+                let strip = strips[key] ?? Strip()
+                let columns = strip.columns.enumerated().map { index, column in
+                    OverviewColumn(
+                        id: index,
+                        windows: column.windows.compactMap { id in
+                            windows[id].map { summary($0, focused: id == focused) }
+                        },
+                        width: column.effectiveWidth,
+                        isGrid: column.isGrid,
+                        isTabbed: column.isTabbed,
+                        isFocused: index == strip.focusedColumn && key == current,
+                        pin: column.pin
+                    )
+                }
+                var title = settings.workspaceCount > 1 ? "Workspace \(workspace + 1)" : "Windows"
+                if displays.count > 1 { title = "\(display.name) · \(title)" }
+                result.append(
+                    OverviewStrip(
+                        key: key, title: title, isActive: key == current, columns: columns,
+                        aspectRatio: display.visibleFrame.width / max(display.visibleFrame.height, 1)))
+            }
+        }
+        return result
+    }
+
+    /// Drag and drop in the overview: moves `id` into column `column` of the
+    /// strip `target`, or into a new column at `newColumnAt`.
+    func overviewMove(_ id: WindowID, to target: StripKey, column: Int? = nil, newColumnAt: Int? = nil) {
+        guard let window = windows[id], let source = window.key else { return }
+        let width = strips[source].flatMap { strip in strip.locate(id).map { strip.columns[$0.column].width } }
+            ?? settings.layout.defaultWidth
+        if source == target {
+            guard var strip = strips[target] else { return }
+            if let column {
+                strip.moveWindow(id, intoColumn: column)
+            } else if let newColumnAt {
+                strip.moveWindow(id, toNewColumnAt: newColumnAt, width: width)
+            }
+            strips[target] = strip
+        } else {
+            // Work out the target position before removing, in case both strips are the same list.
+            removeFromStrip(window)
+            var strip = strips[target] ?? Strip()
+            if let column, strip.columns.indices.contains(column) {
+                strip.add(id, toColumn: column, focus: true)
+            } else {
+                strip.insert(id, width: width, position: .end, focus: true)
+                if let newColumnAt { strip.moveColumn(from: strip.columns.count - 1, to: newColumnAt) }
+            }
+            strips[target] = strip
+            window.key = target
+        }
+        layout(animated: true)
+        scheduleSave()
+        onStateChange()
+    }
+
+    /// Reorders whole columns in the overview.
+    func overviewMoveColumn(from: Int, to: Int, in key: StripKey) {
+        guard var strip = strips[key] else { return }
+        strip.moveColumn(from: from, to: to > from ? to - 1 : to)
+        strips[key] = strip
+        layout(animated: true)
+        scheduleSave()
+    }
+
+    /// Shows a workspace from the overview without focusing a particular window.
+    func overviewShow(_ key: StripKey) {
+        showWorkspace(of: key)
+        layout(animated: true)
+        if let target = strips[key]?.focusedWindow { focus(target, warpMouse: false) }
     }
 
     private func sendToNextDisplay() {
@@ -283,12 +510,7 @@ final class Engine {
         let width = strips[key].flatMap { strip in strip.locate(id).map { strip.columns[$0.column].width } }
         removeFromStrip(window)
         let next = displays[(index + 1) % displays.count]
-        let nextKey = currentKey(next)
-        var strip = strips[nextKey] ?? Strip()
-        strip.insert(id, width: width ?? settings.layout.defaultWidth, position: .afterFocused, focus: true)
-        strip.revealFocused(config: settings.layout, viewportWidth: next.viewport.width)
-        strips[nextKey] = strip
-        window.key = nextKey
+        place(window, in: currentKey(next), display: next, focus: true, width: width)
         window.lastApplied = nil
         layout(animated: false)
         focus(id, warpMouse: true)
@@ -384,13 +606,18 @@ final class Engine {
     // MARK: - Queries for the UI
 
     struct Status {
+        var workspace: Int
         var focusedColumn: Int
         var columnCount: Int
     }
 
     func status() -> Status? {
-        guard isRunning, let (_, key) = activeContext(), let strip = strips[key], !strip.isEmpty else { return nil }
-        return Status(focusedColumn: strip.focusedColumn + 1, columnCount: strip.columns.count)
+        guard isRunning, let (_, key) = activeContext() else { return nil }
+        let strip = strips[key] ?? Strip()
+        return Status(
+            workspace: key.workspace + 1,
+            focusedColumn: strip.isEmpty ? 0 : strip.focusedColumn + 1,
+            columnCount: strip.columns.count)
     }
 
     struct WindowSummary: Identifiable {
@@ -445,7 +672,7 @@ final class Engine {
         var targets: [WindowID: (from: Rect, to: Rect)] = [:]
         for display in displays {
             let key = currentKey(display)
-            guard let strip = strips[key], !strip.isEmpty else { continue }
+            let strip = strips[key] ?? Strip()
             for placement in strip.layout(config: settings.layout, viewport: display.viewport) {
                 guard let window = windows[placement.window] else { continue }
                 var frame = placement.frame
@@ -457,7 +684,19 @@ final class Engine {
                 let from = window.lastApplied ?? window.element.frame.map(Rect.init) ?? frame
                 targets[placement.window] = (from, frame)
             }
-        }
+            // Windows of the other workspaces wait in the bottom-right corner,
+            // a point from fully hidden (macOS won't move them all the way off).
+            for (otherKey, other) in strips where otherKey.screen == key.screen && otherKey != key {
+                for id in other.allWindows {
+                    guard let window = windows[id] else { continue }
+                    let current = window.lastApplied ?? window.element.frame.map(Rect.init)
+                    guard let current else { continue }
+                    let hidden = Rect(
+                        x: display.frame.maxX - 1, y: display.frame.maxY - 1,
+                        width: current.width, height: current.height)
+                    targets[id] = (current, hidden)
+                }
+            }
 
         if animated && settings.animate {
             disableEnhancedUI(for: Set(targets.keys.compactMap { windows[$0]?.pid }))
@@ -583,7 +822,9 @@ final class Engine {
     // MARK: - Displays
 
     private func currentKey(_ display: Display) -> StripKey {
-        StripKey(display: display.uuid, space: Spaces.current(displayUUID: display.uuid))
+        let screen = ScreenKey(display: display.uuid, space: Spaces.current(displayUUID: display.uuid))
+        let workspace = min(activeWorkspace[screen] ?? 0, settings.workspaceCount - 1)
+        return StripKey(screen: screen, workspace: workspace)
     }
 
     private func display(for key: StripKey) -> Display? {
@@ -626,8 +867,8 @@ final class Engine {
         }
 
         // Drop restored or stale entries for windows that no longer exist on the current Spaces.
-        let current = Set(displays.map(currentKey))
-        for key in strips.keys where current.contains(key) {
+        let currentScreens = Set(displays.map { currentKey($0).screen })
+        for key in strips.keys where currentScreens.contains(key.screen) {
             for id in strips[key]!.allWindows where windows[id]?.key != key {
                 strips[key]!.remove(id)
             }
@@ -727,17 +968,7 @@ final class Engine {
         let floats = rule?.float == true || element.hasFixedSize || !element.isSettable(kAXSizeAttribute)
         if floats && !force { return false }
 
-        var strip = strips[key] ?? Strip()
-        strip.insert(
-            id,
-            width: rule?.width ?? settings.layout.defaultWidth,
-            position: rule?.position ?? settings.newWindowPosition,
-            focus: focus
-        )
-        if focus { strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width) }
-        strips[key] = strip
-        window.key = key
-        scheduleSave()
+        place(window, in: key, display: display, focus: focus)
         return true
     }
 
@@ -871,9 +1102,14 @@ final class Engine {
             updateOverlays()
             return
         }
+        let switchedWorkspace = key != currentKey(display)
+        if switchedWorkspace {
+            // Focused (e.g. with ⌘Tab) a window parked in another workspace: show that workspace.
+            showWorkspace(of: key)
+        }
         strip.focus(id)
         strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
-        let changed = strip != strips[key]
+        let changed = switchedWorkspace || strip != strips[key]
         strips[key] = strip
         if changed {
             layout(animated: true)
@@ -1019,6 +1255,7 @@ final class Engine {
 
     private struct SavedState: Codable {
         var strips: [StripKey: Strip]
+        var activeWorkspace: [ScreenKey: Int]?
     }
 
     private static var stateURL: URL { SettingsStore.directory.appendingPathComponent("layout.json") }
@@ -1031,7 +1268,7 @@ final class Engine {
     /// Window IDs survive a restart of MacSlider (not of the apps), so saving
     /// the strips lets an update or relaunch pick up exactly where it left off.
     private func saveState() {
-        let state = SavedState(strips: strips.filter { !$0.value.isEmpty })
+        let state = SavedState(strips: strips.filter { !$0.value.isEmpty }, activeWorkspace: activeWorkspace)
         do {
             try FileManager.default.createDirectory(at: SettingsStore.directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(state).write(to: Self.stateURL, options: .atomic)
@@ -1045,6 +1282,7 @@ final class Engine {
             let state = try? JSONDecoder().decode(SavedState.self, from: data)
         else { return }
         strips = state.strips
+        activeWorkspace = state.activeWorkspace ?? [:]
     }
 }
 

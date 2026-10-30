@@ -9,6 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let input = InputMonitor()
     private let trackpad = TrackpadSwipe.shared
     private let switcher = SwitcherController()
+    private lazy var overview = OverviewController(engine: engine)
+    private let updater = Updater()
+    private let practice = PracticeTracker()
     private let navigation = SettingsNavigation()
     private var statusItem: NSStatusItem!
     private var arrowItems: [NSStatusItem] = []
@@ -77,9 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         engine.onStateChange = { [weak self] in self?.updateStatusItem() }
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
+        engine.onShowOverview = { [weak self] in self?.overview.toggle() }
 
         input.isPaused = { [weak self] in self?.engine.isPaused ?? false }
-        input.onAction = { [weak self] action in self?.engine.perform(action) }
+        input.onAction = { [weak self] action in
+            self?.practice.record(action)
+            self?.engine.perform(action)
+        }
         input.onScroll = { [weak self] delta in self?.engine.swipe(by: delta) }
         input.onScrollEnd = { [weak self] in self?.engine.endSwipe() }
         input.onStep = { [weak self] forward in self?.engine.step(forward: forward) }
@@ -125,6 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         input.scrollOverMenuBar = settings.scrollOverMenuBar
         input.slideTrigger = settings.slideTrigger
         updateArrowItems(visible: settings.showNavigationArrows)
+        updater.setAutomatic(settings.checkForUpdates)
 
         trackpad.fingers = settings.swipeFingers.rawValue
         if settings.swipeFingers == .off { trackpad.stop() } else if engine.isRunning { trackpad.start() }
@@ -210,7 +218,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         button.image = image
         button.imagePosition = .imageLeading
         if store.settings.showColumnIndicator, !engine.isPaused, let status = engine.status() {
-            button.title = " \(status.focusedColumn)/\(status.columnCount)"
+            let position = "\(status.focusedColumn)/\(status.columnCount)"
+            button.title = store.settings.workspaceCount > 1 ? " \(status.workspace) · \(position)" : " \(position)"
             button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .regular)
         } else {
             button.title = ""
@@ -249,22 +258,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(
             item(engine.isPaused ? "Resume Tiling" : "Pause Tiling", #selector(togglePause), action: .togglePause))
+        menu.addItem(item("Overview", #selector(showOverview), action: .overview))
         menu.addItem(item("Search Windows…", #selector(showSwitcher), action: .windowSwitcher))
+        menu.addItem(item("Group Windows by App", #selector(regroup), action: .regroup))
         menu.addItem(item("Retile Windows", #selector(retile), action: .retile))
+
+        if store.settings.workspaceCount > 1 {
+            let workspaces = NSMenu()
+            let current = engine.status()?.workspace
+            for n in 1...store.settings.workspaceCount {
+                let action = Action.allCases.first { $0.workspaceNumber == n }!
+                let entry = item("Workspace \(n)", #selector(switchWorkspaceFromMenu(_:)), action: action)
+                entry.tag = n
+                entry.state = current == n ? .on : .off
+                workspaces.addItem(entry)
+            }
+            let parent = NSMenuItem(title: "Workspaces", action: nil, keyEquivalent: "")
+            parent.submenu = workspaces
+            menu.addItem(parent)
+        }
 
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(showSettingsFromMenu), key: ","))
-        menu.addItem(item("Keyboard Shortcuts…", #selector(showShortcuts)))
+        menu.addItem(shortcutsMenu())
         menu.addItem(item("Welcome Tour…", #selector(showWelcomeFromMenu)))
+        menu.addItem(item("Check for Updates…", #selector(checkForUpdates)))
         menu.addItem(item("About MacSlider", #selector(showAbout)))
         menu.addItem(.separator())
         menu.addItem(item("Quit MacSlider", #selector(quit), key: "q"))
     }
 
+    /// Every shortcut, so nobody has to remember them. Choosing one runs it.
+    private func shortcutsMenu() -> NSMenuItem {
+        let menu = NSMenu()
+        let slide = NSMenuItem(
+            title: store.settings.slideTrigger == .off
+                ? "Slide mode is off"
+                : "Tap \(store.settings.slideTrigger.title) for slide mode, then ← → R F C…",
+            action: nil, keyEquivalent: "")
+        slide.isEnabled = false
+        menu.addItem(slide)
+        menu.addItem(.separator())
+        for action in Action.allCases where action.columnNumber == nil {
+            let shortcuts = store.settings.keymap.shortcuts(for: action).map(\.displayString)
+            let title = shortcuts.isEmpty ? action.title : "\(action.title)    \(shortcuts.joined(separator: "  "))"
+            let entry = NSMenuItem(title: title, action: #selector(performFromMenu(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.representedObject = action.rawValue
+            menu.addItem(entry)
+        }
+        menu.addItem(.separator())
+        menu.addItem(item("Change Shortcuts…", #selector(showShortcuts)))
+        let parent = NSMenuItem(title: "Keyboard Shortcuts", action: nil, keyEquivalent: "")
+        parent.submenu = menu
+        return parent
+    }
+
+    @objc private func performFromMenu(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let action = Action(rawValue: raw) else { return }
+        // Let the menu close and focus return to the previous app first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.engine.perform(action) }
+    }
+
+    @objc private func switchWorkspaceFromMenu(_ sender: NSMenuItem) {
+        engine.switchWorkspace(to: sender.tag - 1)
+    }
+
+    @objc private func showOverview() { overview.show() }
+    @objc private func regroup() { engine.perform(.regroup) }
+    @objc private func checkForUpdates() { updater.check(userInitiated: true) }
+
     private func headerTitle(trusted: Bool) -> String {
         if !trusted { return "MacSlider needs Accessibility access" }
         if engine.isPaused { return "MacSlider is paused" }
-        if let status = engine.status() { return "Column \(status.focusedColumn) of \(status.columnCount)" }
+        if let status = engine.status() {
+            let workspace = store.settings.workspaceCount > 1 ? "Workspace \(status.workspace) · " : ""
+            if status.columnCount == 0 { return "\(workspace)No windows yet" }
+            return "\(workspace)Slide \(status.focusedColumn) of \(status.columnCount)"
+        }
         return "MacSlider is running"
     }
 
@@ -336,7 +407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func showWelcome() {
         if welcomeWindow == nil {
-            let view = WelcomeView(store: store) { [weak self] in
+            let view = WelcomeView(store: store, practice: practice) { [weak self] in
                 guard let self else { return }
                 self.store.settings.hasCompletedOnboarding = true
                 self.welcomeWindow?.close()

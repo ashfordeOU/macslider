@@ -27,14 +27,37 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case toggleFullWidth = "full-width"
     case center
     case consumeIntoLeft = "stack-into-left"
+    case consumeIntoRight = "stack-into-right"
+    case expelLeft = "unstack-left"
     case expel = "unstack"
     case toggleFloat = "toggle-float"
     case pinLeft = "pin-left"
     case pinRight = "pin-right"
     case toggleTabbed = "toggle-tabbed"
+    case toggleGrid = "toggle-grid"
+    case regroup
+    case overview
     case toggleNativeFullScreen = "toggle-fullscreen"
     case windowSwitcher = "window-switcher"
     case sendToNextDisplay = "send-to-next-display"
+    case workspace1 = "workspace-1"
+    case workspace2 = "workspace-2"
+    case workspace3 = "workspace-3"
+    case workspace4 = "workspace-4"
+    case workspace5 = "workspace-5"
+    case workspace6 = "workspace-6"
+    case workspace7 = "workspace-7"
+    case workspace8 = "workspace-8"
+    case workspace9 = "workspace-9"
+    case moveToWorkspace1 = "move-to-workspace-1"
+    case moveToWorkspace2 = "move-to-workspace-2"
+    case moveToWorkspace3 = "move-to-workspace-3"
+    case moveToWorkspace4 = "move-to-workspace-4"
+    case moveToWorkspace5 = "move-to-workspace-5"
+    case moveToWorkspace6 = "move-to-workspace-6"
+    case moveToWorkspace7 = "move-to-workspace-7"
+    case moveToWorkspace8 = "move-to-workspace-8"
+    case moveToWorkspace9 = "move-to-workspace-9"
     case retile
     case togglePause = "toggle-pause"
 
@@ -57,11 +80,16 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .toggleFullWidth: return "Toggle full width"
         case .center: return "Centre column"
         case .consumeIntoLeft: return "Stack into left column"
-        case .expel: return "Unstack window"
+        case .consumeIntoRight: return "Stack into right column"
+        case .expelLeft: return "Pop out of stack to the left"
+        case .expel: return "Pop out of stack to the right"
         case .toggleFloat: return "Float / tile window"
         case .pinLeft: return "Pin column to left edge"
         case .pinRight: return "Pin column to right edge"
         case .toggleTabbed: return "Tabbed column on / off"
+        case .toggleGrid: return "Grid of tiles on / off"
+        case .regroup: return "Group windows by app"
+        case .overview: return "Overview of all windows"
         case .toggleNativeFullScreen: return "macOS full screen"
         case .windowSwitcher: return "Search windows"
         case .sendToNextDisplay: return "Send to next display"
@@ -69,6 +97,8 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .togglePause: return "Pause / resume"
         default:
             if let n = columnNumber { return "Focus column \(n)" }
+            if let n = workspaceNumber { return "Switch to workspace \(n)" }
+            if let n = moveToWorkspaceNumber { return "Move window to workspace \(n)" }
             return rawValue
         }
     }
@@ -76,6 +106,20 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     /// 1...9 for the "focus column N" actions.
     public var columnNumber: Int? {
         let prefix = "focus-column-"
+        guard rawValue.hasPrefix(prefix) else { return nil }
+        return Int(rawValue.dropFirst(prefix.count))
+    }
+
+    /// 1...9 for the "switch to workspace N" actions.
+    public var workspaceNumber: Int? {
+        let prefix = "workspace-"
+        guard rawValue.hasPrefix(prefix) else { return nil }
+        return Int(rawValue.dropFirst(prefix.count))
+    }
+
+    /// 1...9 for the "move window to workspace N" actions.
+    public var moveToWorkspaceNumber: Int? {
+        let prefix = "move-to-workspace-"
         guard rawValue.hasPrefix(prefix) else { return nil }
         return Int(rawValue.dropFirst(prefix.count))
     }

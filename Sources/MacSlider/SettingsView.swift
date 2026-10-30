@@ -66,7 +66,7 @@ struct SettingsView: View {
                 .tabItem { Label(SettingsTab.about.title, systemImage: SettingsTab.about.symbol) }
                 .tag(SettingsTab.about)
         }
-        .frame(width: 620, height: 560)
+        .frame(width: 720, height: 620)
     }
 }
 
@@ -88,6 +88,10 @@ private struct GeneralPane: View {
                 Toggle("Pause tiling", isOn: $paused)
                     .onChange(of: paused) { setPaused($0) }
                 Toggle("Show column position in the menu bar", isOn: $store.settings.showColumnIndicator)
+                Stepper(value: $store.settings.workspaceCount, in: 1...9) {
+                    Text("Workspaces per display: \(store.settings.workspaceCount)")
+                }
+                Toggle("Check for updates automatically", isOn: $store.settings.checkForUpdates)
                 Picker("New windows open", selection: $store.settings.newWindowPosition) {
                     Text("Next to the focused window").tag(Strip.InsertPosition.afterFocused)
                     Text("At the end of the strip").tag(Strip.InsertPosition.end)
@@ -137,6 +141,18 @@ private struct LayoutPane: View {
 
     var body: some View {
         Form {
+            Section {
+                Toggle("Group windows into slides by app", isOn: $store.settings.groupByApp)
+                Stepper(value: $store.settings.tilesPerSlide, in: 1...4) {
+                    Text("Windows per slide: \(store.settings.tilesPerSlide)")
+                }
+                .disabled(!store.settings.groupByApp)
+            } header: {
+                Text("Slides")
+            } footer: {
+                Text("Windows of the same app share a full-screen slide; apps with one window pair up with another. Terminals get four tiles per slide — change this per app under Apps. Press ⌃⌥A to regroup everything, ⌃⌥G to turn any column into a grid.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             Section("Spacing") {
                 LabeledSlider(title: "Gap between windows", value: $store.settings.layout.gap, range: 0...40)
                 LabeledSlider(title: "Gap at screen edges", value: $store.settings.layout.edgeGap, range: 0...40)
@@ -339,6 +355,12 @@ private struct AppsPane: View {
                             }
                             .frame(width: 150)
                             .disabled(rule.float)
+                            Picker("Per slide", selection: $rule.tiles) {
+                                Text("Default").tag(Int?.none)
+                                ForEach(1...4, id: \.self) { Text("\($0)").tag(Int?.some($0)) }
+                            }
+                            .frame(width: 130)
+                            .disabled(rule.float)
                             Picker("Opens", selection: $rule.position) {
                                 Text("Default").tag(Strip.InsertPosition?.none)
                                 Text("Next").tag(Strip.InsertPosition?.some(.afterFocused))
@@ -376,10 +398,12 @@ private struct ShortcutsPane: View {
     @ObservedObject var store: SettingsStore
 
     private static let groups: [(String, [Action])] = [
-        ("Focus", [.focusLeft, .focusRight, .focusUp, .focusDown, .focusFirst, .focusLast, .windowSwitcher]),
+        ("Focus", [.focusLeft, .focusRight, .focusUp, .focusDown, .focusFirst, .focusLast, .overview, .windowSwitcher]),
         ("Move", [.moveLeft, .moveRight, .moveUp, .moveDown, .sendToNextDisplay]),
         ("Size", [.cycleWidth, .cycleWidthBackward, .narrower, .wider, .toggleFullWidth, .center, .toggleNativeFullScreen]),
-        ("Columns", [.consumeIntoLeft, .expel, .toggleTabbed, .pinLeft, .pinRight, .toggleFloat]),
+        ("Slides & columns", [.regroup, .toggleGrid, .consumeIntoLeft, .consumeIntoRight, .expelLeft, .expel,
+                              .toggleTabbed, .pinLeft, .pinRight, .toggleFloat]),
+        ("Workspaces", Action.allCases.filter { $0.workspaceNumber != nil || $0.moveToWorkspaceNumber != nil }),
         ("Jump", [.focusColumn1, .focusColumn2, .focusColumn3, .focusColumn4, .focusColumn5,
                   .focusColumn6, .focusColumn7, .focusColumn8, .focusColumn9]),
         ("MacSlider", [.togglePause, .retile]),

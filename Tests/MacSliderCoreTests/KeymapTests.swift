@@ -14,7 +14,7 @@ final class KeymapTests: XCTestCase {
     }
 
     func testEveryActionHasADefaultShortcut() {
-        for action in Action.allCases {
+        for action in Action.allCases where action.columnNumber == nil {
             XCTAssertFalse(Keymap.default.shortcuts(for: action).isEmpty, "\(action) has no default")
         }
     }
@@ -54,6 +54,12 @@ final class KeymapTests: XCTestCase {
         XCTAssertNil(Action(url: "macslider://nope"))
         XCTAssertEqual(Action.focusColumn7.columnNumber, 7)
         XCTAssertEqual(Action.focusColumn7.title, "Focus column 7")
+        XCTAssertEqual(Action(url: "macslider://workspace-3")?.workspaceNumber, 3)
+        XCTAssertEqual(Action.moveToWorkspace2.moveToWorkspaceNumber, 2)
+        XCTAssertNil(Action.moveToWorkspace2.workspaceNumber)
+        XCTAssertEqual(
+            Keymap.default.action(for: Shortcut(keyCode: KeyCode.digits[0], modifiers: [.control, .option])),
+            .workspace1)
     }
 
     func testReplacingPrefixKeepsShift() {
@@ -72,6 +78,8 @@ final class KeymapTests: XCTestCase {
         XCTAssertEqual(settings.rule(for: "com.apple.calculator")?.float, true)
         XCTAssertNil(settings.rule(for: "com.example.none"))
         XCTAssertNil(settings.rule(for: nil))
+        XCTAssertEqual(settings.tiles(for: "com.apple.Terminal"), 4)
+        XCTAssertEqual(settings.tiles(for: "com.apple.Safari"), 2)
     }
 
     func testSlideModeKeys() {
@@ -106,5 +114,9 @@ final class KeymapTests: XCTestCase {
         XCTAssertEqual(decoded.layout.gap, 2)
         XCTAssertEqual(decoded.layout.edgeGap, LayoutConfig().edgeGap)
         XCTAssertTrue(decoded.keymap.bindings.isEmpty)
+        XCTAssertEqual(decoded.tiles(for: "com.apple.Terminal"), 4, "old settings gain the terminal rules")
+
+        let custom = #"{"appRules": [{"bundleID": "x", "name": "X", "float": true}], "rulesVersion": 2}"#
+        XCTAssertEqual(try JSONDecoder().decode(AppSettings.self, from: Data(custom.utf8)).appRules.count, 1)
     }
 }

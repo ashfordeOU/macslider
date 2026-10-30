@@ -163,23 +163,27 @@ public struct Keymap: Equatable, Codable, Sendable {
             .toggleFullWidth: [s(KeyCode.f, co)],
             .center: [s(KeyCode.c, co)],
             .consumeIntoLeft: [s(KeyCode.leftBracket, co)],
-            .expel: [s(KeyCode.rightBracket, co)],
+            .consumeIntoRight: [s(KeyCode.rightBracket, co)],
+            .expelLeft: [s(KeyCode.leftBracket, cos)],
+            .expel: [s(KeyCode.rightBracket, cos)],
             .toggleFloat: [s(KeyCode.t, co)],
             .pinLeft: [s(KeyCode.p, co)],
             .pinRight: [s(KeyCode.p, cos)],
-            .toggleTabbed: [s(KeyCode.w, co)],
+            .toggleTabbed: [s(KeyCode.w, co), s(KeyCode.t, cos)],
+            .toggleGrid: [s(KeyCode.g, co)],
+            .regroup: [s(KeyCode.a, co)],
+            .overview: [s(KeyCode.o, co), s(KeyCode.tab, co)],
             .toggleNativeFullScreen: [s(KeyCode.f, cos)],
             .windowSwitcher: [s(KeyCode.space, co)],
-            .sendToNextDisplay: [s(KeyCode.d, co)],
+            .sendToNextDisplay: [s(KeyCode.d, co), s(KeyCode.n, co)],
             .retile: [s(KeyCode.escape, co)],
             .togglePause: [s(KeyCode.q, co)],
         ]
-        let columns: [Action] = [
-            .focusColumn1, .focusColumn2, .focusColumn3, .focusColumn4, .focusColumn5,
-            .focusColumn6, .focusColumn7, .focusColumn8, .focusColumn9,
-        ]
-        for (index, action) in columns.enumerated() {
-            b[action] = [s(KeyCode.digits[index], co)]
+        // Digits switch workspaces (add Shift to take the window along).
+        // Jumping to a column by number is in slide mode, or can be bound in Settings.
+        for action in Action.allCases {
+            if let n = action.workspaceNumber { b[action] = [s(KeyCode.digits[n - 1], co)] }
+            if let n = action.moveToWorkspaceNumber { b[action] = [s(KeyCode.digits[n - 1], cos)] }
         }
         return Keymap(bindings: b)
     }()

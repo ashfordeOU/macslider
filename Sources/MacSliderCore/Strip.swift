@@ -10,7 +10,8 @@ public enum PinSide: String, Codable, Sendable {
     case left, right
 }
 
-/// One column of the strip: a single window, or several stacked vertically.
+/// One column of the strip: a single window, several stacked vertically,
+/// tabs, or a grid of tiles (a "slide").
 public struct Column: Equatable, Codable, Sendable {
     public var windows: [WindowID]
     /// Index into `windows` of the window that has focus within the column.
@@ -21,6 +22,8 @@ public struct Column: Equatable, Codable, Sendable {
     public var isFullWidth: Bool
     /// Tabbed columns show one window at a time, full height, under a tab bar.
     public var isTabbed: Bool
+    /// Grid columns tile their windows two across: 2 side by side, 3 or 4 as a 2×2 grid.
+    public var isGrid: Bool
     /// Pinned columns stay at a screen edge while the rest of the strip scrolls.
     public var pin: PinSide?
 
@@ -30,6 +33,7 @@ public struct Column: Equatable, Codable, Sendable {
         width: Double,
         isFullWidth: Bool = false,
         isTabbed: Bool = false,
+        isGrid: Bool = false,
         pin: PinSide? = nil
     ) {
         self.windows = windows
@@ -37,11 +41,38 @@ public struct Column: Equatable, Codable, Sendable {
         self.width = LayoutConfig.clampWidth(width)
         self.isFullWidth = isFullWidth
         self.isTabbed = isTabbed
+        self.isGrid = isGrid
         self.pin = pin
     }
 
     public var effectiveWidth: Double { isFullWidth ? 1 : width }
     public var activeWindow: WindowID { windows[active] }
+
+    /// Number of tile columns when laid out as a grid.
+    public var gridColumns: Int { isGrid && windows.count > 1 ? 2 : 1 }
+
+    /// Row and column of tile `index` in grid layout.
+    public func gridCell(_ index: Int) -> (row: Int, column: Int) {
+        (index / gridColumns, index % gridColumns)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case windows, active, width, isFullWidth, isTabbed, isGrid, pin
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            windows: try c.decode([WindowID].self, forKey: .windows),
+            active: try c.decodeIfPresent(Int.self, forKey: .active) ?? 0,
+            width: try c.decodeIfPresent(Double.self, forKey: .width) ?? 0.5,
+            isFullWidth: try c.decodeIfPresent(Bool.self, forKey: .isFullWidth) ?? false,
+            isTabbed: try c.decodeIfPresent(Bool.self, forKey: .isTabbed) ?? false,
+            isGrid: try c.decodeIfPresent(Bool.self, forKey: .isGrid) ?? false,
+            pin: try c.decodeIfPresent(PinSide.self, forKey: .pin)
+        )
+        active = min(max(active, 0), max(windows.count - 1, 0))
+    }
 }
 
 /// Where a window should go, as computed by `Strip.layout`.
@@ -177,21 +208,59 @@ public struct Strip: Equatable, Codable, Sendable {
     @discardableResult
     public mutating func moveFocus(_ direction: Direction) -> Bool {
         guard !columns.isEmpty else { return false }
+        let column = columns[focusedColumn]
+        // Inside a grid, move between tiles first.
+        if column.isGrid, let target = gridNeighbour(of: column.active, in: column, direction) {
+            columns[focusedColumn].active = target
+            return true
+        }
         switch direction {
         case .left:
             guard focusedColumn > 0 else { return false }
             focusedColumn -= 1
+            enterGrid(fromRight: true)
         case .right:
             guard focusedColumn < columns.count - 1 else { return false }
             focusedColumn += 1
+            enterGrid(fromRight: false)
         case .up:
-            guard columns[focusedColumn].active > 0 else { return false }
+            guard !column.isGrid, column.active > 0 else { return false }
             columns[focusedColumn].active -= 1
         case .down:
-            guard columns[focusedColumn].active < columns[focusedColumn].windows.count - 1 else { return false }
+            guard !column.isGrid, column.active < column.windows.count - 1 else { return false }
             columns[focusedColumn].active += 1
         }
         return true
+    }
+
+    /// The tile next to `index` in a grid column, if there is one.
+    private func gridNeighbour(of index: Int, in column: Column, _ direction: Direction) -> Int? {
+        let width = column.gridColumns
+        let (row, col) = column.gridCell(index)
+        let target: Int
+        switch direction {
+        case .left:
+            guard col > 0 else { return nil }
+            target = index - 1
+        case .right:
+            guard col < width - 1 else { return nil }
+            target = index + 1
+        case .up:
+            guard row > 0 else { return nil }
+            target = index - width
+        case .down:
+            target = index + width
+        }
+        return column.windows.indices.contains(target) ? target : nil
+    }
+
+    /// Entering a grid sideways lands on the near tile of the row last used.
+    private mutating func enterGrid(fromRight: Bool) {
+        let column = columns[focusedColumn]
+        guard column.isGrid else { return }
+        let row = column.gridCell(column.active).row
+        let index = row * column.gridColumns + (fromRight ? column.gridColumns - 1 : 0)
+        columns[focusedColumn].active = min(index, column.windows.count - 1)
     }
 
     /// Focuses the column at `index`, clamped to the strip.
@@ -217,7 +286,8 @@ public struct Strip: Equatable, Codable, Sendable {
             focusedColumn += 1
         case .up, .down:
             var column = columns[focusedColumn]
-            let target = column.active + (direction == .up ? -1 : 1)
+            let step = column.isGrid ? column.gridColumns : 1
+            let target = column.active + (direction == .up ? -step : step)
             guard column.windows.indices.contains(target) else { return false }
             column.windows.swapAt(column.active, target)
             column.active = target
@@ -258,6 +328,35 @@ public struct Strip: Equatable, Codable, Sendable {
         return true
     }
 
+    /// Moves the focused window into the bottom of the column on its right.
+    @discardableResult
+    public mutating func consumeIntoRight() -> Bool {
+        guard focusedColumn < columns.count - 1, let window = focusedWindow else { return false }
+        var source = columns[focusedColumn]
+        source.windows.remove(at: source.active)
+        var target = focusedColumn + 1
+        if source.windows.isEmpty {
+            columns.remove(at: focusedColumn)
+            target -= 1
+        } else {
+            source.active = min(source.active, source.windows.count - 1)
+            columns[focusedColumn] = source
+        }
+        columns[target].windows.append(window)
+        columns[target].active = columns[target].windows.count - 1
+        focusedColumn = target
+        return true
+    }
+
+    /// Takes the focused window out of its stack into its own column on the left.
+    @discardableResult
+    public mutating func expelLeft() -> Bool {
+        guard expel() else { return false }
+        columns.swapAt(focusedColumn, focusedColumn - 1)
+        focusedColumn -= 1
+        return true
+    }
+
     /// Takes the focused window out of its stack into its own column on the right.
     @discardableResult
     public mutating func expel() -> Bool {
@@ -271,6 +370,85 @@ public struct Strip: Equatable, Codable, Sendable {
         columns.insert(Column(windows: [window], width: source.width), at: focusedColumn + 1)
         focusedColumn += 1
         return true
+    }
+
+    // MARK: - Slides and moving windows between columns
+
+    /// Inserts a new column holding `windows` as grid tiles.
+    public mutating func insertSlide(
+        _ windows: [WindowID], width: Double, position: InsertPosition = .afterFocused, focus: Bool = true
+    ) {
+        let fresh = windows.filter { !contains($0) }
+        guard !fresh.isEmpty else { return }
+        let column = Column(windows: fresh, active: fresh.count - 1, width: width, isGrid: true)
+        let index: Int
+        switch position {
+        case .afterFocused: index = columns.isEmpty ? 0 : focusedColumn + 1
+        case .start: index = 0
+        case .end: index = columns.count
+        }
+        columns.insert(column, at: index)
+        if focus || columns.count == 1 {
+            focusedColumn = index
+        } else if index <= focusedColumn {
+            focusedColumn += 1
+        }
+    }
+
+    /// Adds a window that is not on the strip to the column at `index`.
+    public mutating func add(_ window: WindowID, toColumn index: Int, focus: Bool = true) {
+        guard columns.indices.contains(index), !contains(window) else { return }
+        columns[index].windows.append(window)
+        if focus {
+            focusedColumn = index
+            columns[index].active = columns[index].windows.count - 1
+        }
+    }
+
+    /// Moves `window` into the column that currently holds `target`'s windows.
+    /// Returns false if nothing changed.
+    @discardableResult
+    public mutating func moveWindow(_ window: WindowID, intoColumn target: Int) -> Bool {
+        guard columns.indices.contains(target), let (source, _) = locate(window), source != target else {
+            return false
+        }
+        let anchor = columns[target].activeWindow
+        remove(window)
+        guard let (newTarget, _) = locate(anchor) else { return false }
+        columns[newTarget].windows.append(window)
+        focus(window)
+        return true
+    }
+
+    /// Moves `window` out into a new column of its own at `index` (0...columns.count).
+    public mutating func moveWindow(_ window: WindowID, toNewColumnAt index: Int, width: Double) {
+        guard let (source, _) = locate(window) else { return }
+        // Work out where `index` lands once the window has been taken out.
+        let sourceVanishes = columns[source].windows.count == 1
+        var target = min(max(index, 0), columns.count)
+        if sourceVanishes && source < target { target -= 1 }
+        let keepWidth = sourceVanishes ? columns[source].width : width
+        remove(window)
+        target = min(target, columns.count)
+        columns.insert(Column(windows: [window], width: keepWidth), at: target)
+        focusedColumn = target
+    }
+
+    /// Replaces the strip's columns with full-width grid slides, one per group,
+    /// keeping pinned columns and the focused window.
+    public mutating func regroup(_ groups: [[WindowID]], width: Double) {
+        let focused = focusedWindow
+        let pinned = columns.filter { $0.pin != nil }
+        let pinnedWindows = Set(pinned.flatMap(\.windows))
+        var fresh = pinned
+        for group in groups {
+            let members = group.filter { !pinnedWindows.contains($0) }
+            guard !members.isEmpty else { continue }
+            fresh.append(Column(windows: members, width: width, isGrid: true))
+        }
+        columns = fresh
+        focusedColumn = 0
+        if let focused { focus(focused) }
     }
 
     // MARK: - Widths
@@ -321,6 +499,13 @@ public struct Strip: Equatable, Codable, Sendable {
     public mutating func toggleTabbed() {
         guard columns.indices.contains(focusedColumn) else { return }
         columns[focusedColumn].isTabbed.toggle()
+        if columns[focusedColumn].isTabbed { columns[focusedColumn].isGrid = false }
+    }
+
+    public mutating func toggleGrid() {
+        guard columns.indices.contains(focusedColumn) else { return }
+        columns[focusedColumn].isGrid.toggle()
+        if columns[focusedColumn].isGrid { columns[focusedColumn].isTabbed = false }
     }
 
     // MARK: - Geometry
@@ -523,6 +708,25 @@ public struct Strip: Equatable, Codable, Sendable {
                 for (row, window) in column.windows.enumerated() {
                     placements.append(
                         Placement(window: window, frame: frame, isParked: parked, isHiddenTab: row != column.active))
+                }
+                continue
+            }
+            if column.isGrid {
+                let across = column.gridColumns
+                let rows = (column.windows.count + across - 1) / across
+                let w = (columnFrame.width - config.gap * Double(across - 1)) / Double(across)
+                let h = max((columnFrame.height - config.gap * Double(rows - 1)) / Double(rows), 1)
+                for (index, window) in column.windows.enumerated() {
+                    let (row, col) = column.gridCell(index)
+                    // A lone tile in the last row spans the full width.
+                    let spans = index == column.windows.count - 1 && col == 0 && across > 1
+                    let frame = Rect(
+                        x: columnFrame.x + Double(col) * (w + config.gap),
+                        y: columnFrame.y + Double(row) * (h + config.gap),
+                        width: spans ? columnFrame.width : w,
+                        height: h
+                    ).rounded()
+                    placements.append(Placement(window: window, frame: frame, isParked: parked))
                 }
                 continue
             }

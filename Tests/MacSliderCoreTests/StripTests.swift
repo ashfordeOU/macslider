@@ -305,6 +305,85 @@ final class StripTests: XCTestCase {
         XCTAssertEqual(bars[0].active, 1)
     }
 
+    // MARK: Grids and slides
+
+    func testGridLayoutTilesTwoAcross() {
+        var s = Strip()
+        s.insertSlide([1, 2, 3, 4], width: 1)
+        let frames = s.layout(config: flat, viewport: viewport).map(\.frame)
+        XCTAssertEqual(frames[0], Rect(x: 0, y: 0, width: 500, height: 400))
+        XCTAssertEqual(frames[1], Rect(x: 500, y: 0, width: 500, height: 400))
+        XCTAssertEqual(frames[2], Rect(x: 0, y: 400, width: 500, height: 400))
+        XCTAssertEqual(frames[3], Rect(x: 500, y: 400, width: 500, height: 400))
+    }
+
+    func testGridLoneLastTileSpansWidth() {
+        var s = Strip()
+        s.insertSlide([1, 2, 3], width: 1)
+        let frames = s.layout(config: flat, viewport: viewport).map(\.frame)
+        XCTAssertEqual(frames[2], Rect(x: 0, y: 400, width: 1000, height: 400))
+        var pair = Strip()
+        pair.insertSlide([1, 2], width: 1)
+        XCTAssertEqual(pair.layout(config: flat, viewport: viewport).map(\.frame.height), [800, 800])
+    }
+
+    func testGridFocusMovesBetweenTilesThenSlides() {
+        var s = Strip()
+        s.insertSlide([1, 2, 3, 4], width: 1)
+        s.insertSlide([5, 6], width: 1)
+        s.focus(1)
+        XCTAssertTrue(s.moveFocus(.right))
+        XCTAssertEqual(s.focusedWindow, 2)
+        XCTAssertTrue(s.moveFocus(.down))
+        XCTAssertEqual(s.focusedWindow, 4)
+        XCTAssertTrue(s.moveFocus(.right))
+        XCTAssertEqual(s.focusedWindow, 5, "leaves the grid into the next slide's near tile")
+        XCTAssertTrue(s.moveFocus(.left))
+        XCTAssertEqual(s.focusedWindow, 4, "re-enters on the near tile of the row last used")
+    }
+
+    func testMoveWindowBetweenColumns() {
+        var s = strip([1, 2, 3])
+        XCTAssertTrue(s.moveWindow(3, intoColumn: 0))
+        XCTAssertEqual(s.columns.map(\.windows), [[1, 3], [2]])
+        XCTAssertEqual(s.focusedWindow, 3)
+        s.moveWindow(1, toNewColumnAt: 2, width: 0.5)
+        XCTAssertEqual(s.columns.map(\.windows), [[3], [2], [1]])
+        s.moveWindow(3, toNewColumnAt: 3, width: 0.5)
+        XCTAssertEqual(s.columns.map(\.windows), [[2], [1], [3]])
+    }
+
+    func testRegroupKeepsPinnedAndFocus() {
+        var s = strip([1, 2, 3, 4])
+        s.focusColumn(at: 0)
+        s.togglePin(.left)
+        s.focus(3)
+        s.regroup([[2, 3], [1, 4]], width: 1)
+        XCTAssertEqual(s.columns.map(\.windows), [[1], [2, 3], [4]])
+        XCTAssertEqual(s.focusedWindow, 3)
+        XCTAssertTrue(s.columns[1].isGrid)
+    }
+
+    func testOldColumnJSONStillDecodes() throws {
+        let json = #"{"windows":[7],"active":0,"width":0.5,"isFullWidth":false}"#
+        let column = try JSONDecoder().decode(Column.self, from: Data(json.utf8))
+        XCTAssertEqual(column.windows, [7])
+        XCTAssertFalse(column.isGrid)
+    }
+
+    func testStackIntoRightAndPopLeft() {
+        var s = strip([1, 2, 3])
+        s.focus(1)
+        XCTAssertTrue(s.consumeIntoRight())
+        XCTAssertEqual(s.columns.map(\.windows), [[2, 1], [3]])
+        XCTAssertEqual(s.focusedWindow, 1)
+        XCTAssertTrue(s.expelLeft())
+        XCTAssertEqual(s.columns.map(\.windows), [[1], [2], [3]])
+        XCTAssertEqual(s.focusedWindow, 1)
+        s.focus(3)
+        XCTAssertFalse(s.consumeIntoRight())
+    }
+
     func testStripIsCodable() throws {
         var s = strip([1, 2, 3])
         s.consumeIntoLeft()
