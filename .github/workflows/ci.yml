@@ -23,6 +23,9 @@ jobs:
   macos:
     name: Build & test (macOS)
     runs-on: macos-15
+    env:
+      MACSLIDER_SIGNING_CERT: ${{ secrets.MACSLIDER_SIGNING_CERT }}
+      MACSLIDER_SIGNING_PASSWORD: ${{ secrets.MACSLIDER_SIGNING_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -31,8 +34,21 @@ jobs:
         run: swift --version
       - name: Test
         run: swift test
+      - name: Throwaway signing certificate
+        # Pull requests and forks have no secrets: still exercise the signing path.
+        if: env.MACSLIDER_SIGNING_CERT == ''
+        run: |
+          scripts/make-signing-cert.sh --out "$RUNNER_TEMP/throwaway"
+          echo "MACSLIDER_SIGNING_CERT=$(cat "$RUNNER_TEMP/throwaway/cert.p12.b64")" >> "$GITHUB_ENV"
+          echo "MACSLIDER_SIGNING_PASSWORD=$(cat "$RUNNER_TEMP/throwaway/password")" >> "$GITHUB_ENV"
+      - name: Import signing certificate
+        run: scripts/ci-import-signing-cert.sh
       - name: Build app
         run: scripts/build-app.sh
+      - name: Check signature
+        run: |
+          codesign --display --requirements - dist/MacSlider.app 2>&1 | tee requirement.txt
+          grep -q 'certificate leaf' requirement.txt
       - name: Package
         run: scripts/package.sh
       - uses: actions/upload-artifact@v5

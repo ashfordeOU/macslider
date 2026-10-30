@@ -1,8 +1,9 @@
 #!/bin/bash
 # Builds dist/MacSlider.app as a universal (Apple silicon + Intel) binary.
 #
-# Signing: set SIGN_IDENTITY to a "Developer ID Application: …" identity to
-# sign for distribution; otherwise the app is signed ad hoc.
+# Signing: set SIGN_IDENTITY to a codesigning identity (name or SHA-1) to
+# sign with it, e.g. the "MacSlider Self-Signed" certificate CI imports or a
+# "Developer ID Application: …" identity. Otherwise the app is signed ad hoc.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -36,11 +37,17 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 echo "==> Signing"
 if [ -n "${SIGN_IDENTITY:-}" ]; then
-    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"
+    # Apple's timestamp server only serves Apple-issued certificates.
+    TIMESTAMP="--timestamp=none"
+    case "$SIGN_IDENTITY" in "Developer ID"*) TIMESTAMP="--timestamp" ;; esac
+    codesign --force --options runtime $TIMESTAMP --sign "$SIGN_IDENTITY" "$APP"
 else
     codesign --force --sign - "$APP"
 fi
 codesign --verify --strict "$APP"
+# The designated requirement is what macOS ties permissions to; a stable
+# certificate keeps it the same across builds.
+codesign --display --requirements - "$APP" 2>&1 | grep designated || true
 
 echo "==> Done: $APP"
 lipo -info "$APP/Contents/MacOS/MacSlider"

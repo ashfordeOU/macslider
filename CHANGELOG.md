@@ -4,6 +4,11 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-10-30
+
+### Changed
+- Releases are signed with MacSlider's own certificate, so macOS keeps the Accessibility permission across updates. Updating from an earlier version needs one last re-grant.
+
 ## [0.2.1] - 2026-10-30
 
 ### Added

@@ -18,6 +18,8 @@ jobs:
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
       GH_TOKEN: ${{ github.token }}
+      MACSLIDER_SIGNING_CERT: ${{ secrets.MACSLIDER_SIGNING_CERT }}
+      MACSLIDER_SIGNING_PASSWORD: ${{ secrets.MACSLIDER_SIGNING_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -31,6 +33,14 @@ jobs:
           fi
       - name: Test
         run: swift test
+      - name: Import signing certificate
+        # Signing with the same certificate every release keeps macOS
+        # permissions across updates. See scripts/make-signing-cert.sh.
+        if: env.MACSLIDER_SIGNING_CERT != ''
+        run: scripts/ci-import-signing-cert.sh
+      - name: Warn about ad-hoc signing
+        if: env.MACSLIDER_SIGNING_CERT == ''
+        run: echo "::warning::MACSLIDER_SIGNING_CERT is not set; this release is signed ad hoc and users must re-grant Accessibility after updating."
       - name: Build app
         run: scripts/build-app.sh
       - name: Package

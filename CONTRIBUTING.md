@@ -28,7 +28,8 @@ make run    # build dist/MacSlider.app and open it
 
 1. Update `VERSION` and add a section to `CHANGELOG.md`.
 2. Commit, then tag: `git tag v$(cat VERSION) && git push --tags`.
-3. The release workflow builds, packages and publishes the GitHub release.
+3. The release workflow builds, signs with the repository's signing certificate
+   (see `scripts/make-signing-cert.sh`), packages and publishes the GitHub release.
 
 ## License
 

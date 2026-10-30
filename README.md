@@ -330,13 +330,27 @@ make package   # also build the .zip, .dmg and SHA256SUMS
 make run       # build and open the app
 ```
 
-To sign for distribution, set `SIGN_IDENTITY` to your Developer ID identity
-before running `scripts/build-app.sh`.
+### Signing
 
-> [!TIP]
-> macOS ties the Accessibility permission to the app's signature. After
-> installing a new ad-hoc-signed build, turn MacSlider off and on again in
-> **Privacy & Security → Accessibility** if shortcuts stop responding.
+macOS ties the Accessibility permission to the app's code signature. Release
+builds are signed with MacSlider's own certificate, so the permission carries
+over from one version to the next. (Updating from a release before 0.2.2 needs
+one last re-grant: remove MacSlider from **Privacy & Security → Accessibility**
+with **–**, then open it again.)
+
+The certificate is self-signed and lives in two repository secrets,
+`MACSLIDER_SIGNING_CERT` and `MACSLIDER_SIGNING_PASSWORD`. To create or replace
+it, run this on your Mac. It uses the GitHub CLI if it's installed, and
+otherwise walks you through pasting the two secrets:
+
+```bash
+scripts/make-signing-cert.sh
+```
+
+Local builds are signed ad hoc unless you set `SIGN_IDENTITY` to a code-signing
+identity (a name or SHA-1 hash, such as a Developer ID) before running
+`scripts/build-app.sh`. After installing an ad-hoc build, switch MacSlider off
+and on in **Privacy & Security → Accessibility**.
 
 ### Project layout
 
