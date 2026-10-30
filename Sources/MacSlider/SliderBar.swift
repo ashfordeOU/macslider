@@ -15,6 +15,8 @@ final class SliderBarController {
         var focus: (WindowID) -> Void
         var switchWorkspace: (Int) -> Void
         var showOverview: () -> Void
+        var renameWorkspace: (Int) -> Void = { _ in }
+        var commands = WindowCommands()
     }
 
     var mode: SliderBarMode = .whileMoving
@@ -25,6 +27,7 @@ final class SliderBarController {
     private var bars: [String: (panel: NSPanel, model: SliderBarModel)] = [:]
     private var hideTimer: Timer?
     private let preview = SlidePreview()
+    private let tip = NameTip()
     private var subscriptions: [AnyCancellable] = []
     private static let height: CGFloat = 52
     private static let margin: CGFloat = 6
@@ -36,6 +39,7 @@ final class SliderBarController {
             return
         }
         let maps = mapsProvider()
+        preview.sync(with: maps)
         let current = Set(maps.map(\.displayUUID))
         for (uuid, bar) in bars where !current.contains(uuid) {
             bar.panel.orderOut(nil)
@@ -142,9 +146,21 @@ final class SliderBarController {
             .sink { [weak self, weak panel] tile in
                 guard let self, let panel else { return }
                 self.preview.focus = self.actions.focus
+                self.preview.commands = self.actions.commands
                 self.preview.hover(tile, over: panel, edge: self.edge, number: tile.flatMap { tile in
                     model.map?.tiles.firstIndex { $0.id == tile.id }.map { $0 + 1 }
                 })
+            }
+            .store(in: &subscriptions)
+        model.$hoveredWorkspace
+            .removeDuplicates()
+            .sink { [weak self, weak panel] index in
+                guard let self, let panel else { return }
+                guard let index, let names = model.map?.workspaceNames, names.indices.contains(index) else {
+                    self.tip.hide()
+                    return
+                }
+                self.tip.show(names[index], color: WorkspaceColor.color(index), over: panel, edge: self.edge)
             }
             .store(in: &subscriptions)
         panel.contentView = NSHostingView(rootView: view)
@@ -156,6 +172,8 @@ final class SliderBarModel: ObservableObject {
     @Published var map: Engine.MiniMap?
     /// The tile under the pointer, for the live preview.
     @Published var hoveredTile: Engine.MiniTile?
+    /// The workspace dot under the pointer, to show its name.
+    @Published var hoveredWorkspace: Int?
     @Published var isHovering = false
     @Published var isDragging = false
 }
@@ -184,12 +202,26 @@ private struct SliderBarView: View {
             if let map = model.map, map.workspaceCount > 1 {
                 HStack(spacing: 6) {
                     ForEach(0..<map.workspaceCount, id: \.self) { index in
+                        let name = map.workspaceNames.indices.contains(index)
+                            ? map.workspaceNames[index] : "Workspace \(index + 1)"
                         Circle()
-                            .fill(index == map.workspace ? Color.accentColor : Color.primary.opacity(0.25))
-                            .frame(width: 7, height: 7)
+                            .fill(index == map.workspace ? WorkspaceColor.color(index) : Color.primary.opacity(0.25))
+                            .frame(width: 8, height: 8)
+                            .scaleEffect(model.hoveredWorkspace == index ? 1.35 : 1)
+                            .animation(.easeOut(duration: 0.12), value: model.hoveredWorkspace)
                             .contentShape(Rectangle().inset(by: -4))
                             .onTapGesture { actions.switchWorkspace(index) }
-                            .help("Workspace \(index + 1)")
+                            .onHover { hovering in
+                                if hovering {
+                                    model.hoveredWorkspace = index
+                                } else if model.hoveredWorkspace == index {
+                                    model.hoveredWorkspace = nil
+                                }
+                            }
+                            .contextMenu {
+                                Button("Rename “\(name)”…") { actions.renameWorkspace(index) }
+                                Button("Switch to \(name)") { actions.switchWorkspace(index) }
+                            }
                     }
                 }
             }
@@ -354,6 +386,7 @@ private struct TileOutlines: Shape {
 /// live, laid out as they are on screen. Click one to jump to it.
 final class SlidePreview {
     var focus: (WindowID) -> Void = { _ in }
+    var commands = WindowCommands()
     private(set) var isHovered = false
 
     private let model = PreviewModel()
@@ -381,6 +414,18 @@ final class SlidePreview {
             present()
         } else {
             showTimer = Timer.scheduledTimer(withTimeInterval: 0.22, repeats: false) { _ in present() }
+        }
+    }
+
+    /// Keeps an open preview in step after windows close, minimise or move.
+    func sync(with maps: [Engine.MiniMap]) {
+        guard panel?.isVisible == true, let current = model.tile else { return }
+        let ids = Set(current.windows.map(\.id))
+        let updated = maps.lazy.flatMap(\.tiles).first { tile in tile.windows.contains { ids.contains($0.id) } }
+        if let updated, !updated.windows.isEmpty {
+            if updated != current { model.tile = updated }
+        } else {
+            hide()
         }
     }
 
@@ -440,9 +485,14 @@ final class SlidePreview {
         panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle, .fullScreenAuxiliary]
         let view = PreviewView(
             model: model,
-            focus: { [weak self] id in
-                self?.hide()
-                self?.focus(id)
+            commands: { [weak self] in
+                guard let self else { return WindowCommands() }
+                var commands = self.commands
+                let focus = commands.focus, rename = commands.rename, own = commands.ownSlide
+                commands.focus = { [weak self] id in self?.hide(); focus(id) }
+                commands.rename = { [weak self] id in self?.hide(); rename(id) }
+                commands.ownSlide = { [weak self] id in self?.hide(); own(id) }
+                return commands
             },
             hovering: { [weak self] inside in
                 guard let self else { return }
@@ -451,6 +501,60 @@ final class SlidePreview {
             })
         panel.contentView = NSHostingView(rootView: view)
         return panel
+    }
+}
+
+/// A small label above the slider bar naming the workspace dot under the pointer.
+final class NameTip {
+    private var panel: NSPanel?
+    private let model = Model()
+
+    final class Model: ObservableObject {
+        @Published var text = ""
+        @Published var color = Color.accentColor
+    }
+
+    func show(_ text: String, color: Color, over bar: NSPanel, edge: SliderBarEdge) {
+        model.text = text
+        model.color = color
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        let size = panel.contentView?.fittingSize ?? NSSize(width: 140, height: 30)
+        let x = NSEvent.mouseLocation.x - size.width / 2
+        let y = edge == .bottom ? bar.frame.maxY + 6 : bar.frame.minY - size.height - 6
+        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    func hide() { panel?.orderOut(nil) }
+
+    private func makePanel() -> NSPanel {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 140, height: 30),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .popUpMenu
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle, .fullScreenAuxiliary]
+        let host = NSHostingView(rootView: TipView(model: model))
+        panel.contentView = host
+        return panel
+    }
+
+    private struct TipView: View {
+        @ObservedObject var model: Model
+
+        var body: some View {
+            HStack(spacing: 6) {
+                Circle().fill(model.color).frame(width: 8, height: 8)
+                Text(model.text).font(.system(size: 12, weight: .semibold))
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
+            .fixedSize()
+        }
     }
 }
 
@@ -464,7 +568,7 @@ private final class PreviewModel: ObservableObject {
 
 private struct PreviewView: View {
     @ObservedObject var model: PreviewModel
-    let focus: (WindowID) -> Void
+    let commands: () -> WindowCommands
     let hovering: (Bool) -> Void
 
     var body: some View {
@@ -488,8 +592,9 @@ private struct PreviewView: View {
                                 .frame(
                                     width: max(unit.width * geometry.size.width - 6, 10),
                                     height: max(unit.height * geometry.size.height - 6, 10))
+                                .onTapGesture { commands().focus(window.id) }
+                                .windowControls(window.id, commands())
                                 .offset(x: unit.minX * geometry.size.width + 3, y: unit.minY * geometry.size.height + 3)
-                                .onTapGesture { focus(window.id) }
                         }
                     }
                 }

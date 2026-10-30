@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Renders the MacSlider app icon to assets/icon.png (1024x1024).
 
-The committed PNG is what the build uses, so this only needs to run when
-the design changes:  python3 scripts/render-icon.py  (needs Pillow)
+The design is an "M" built from three windows on a warm coral tile: the
+outer two stand tall, the middle one has slid down out of place, leaving a
+faint trace of where it was. The committed PNG is what the build uses, so this
+only needs to run when the design changes:  python3 scripts/render-icon.py
+(needs Pillow).
 """
 import os
 import sys
@@ -17,133 +20,107 @@ def s(value):
     return int(round(value * SCALE))
 
 
-def vertical_gradient(size, top, bottom):
-    width, height = size
-    gradient = Image.new("RGBA", (1, height))
-    for y in range(height):
-        t = y / max(height - 1, 1)
-        gradient.putpixel((0, y), tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(4)))
-    return gradient.resize((width, height))
+def gradient(size, stops, angle_xy=(0.55, 1.0)):
+    """Linear gradient across `size`; stops are (t, rgba); angle_xy is the direction."""
+    small = Image.new("RGBA", (96, 96))
+    dx, dy = angle_xy
+    norm = abs(dx) + abs(dy)
+    for y in range(96):
+        for x in range(96):
+            t = ((x / 95) * dx + (y / 95) * dy) / norm
+            for i in range(len(stops) - 1):
+                (t0, c0), (t1, c1) = stops[i], stops[i + 1]
+                if t0 <= t <= t1:
+                    u = (t - t0) / max(t1 - t0, 1e-6)
+                    small.putpixel((x, y), tuple(int(c0[k] + (c1[k] - c0[k]) * u) for k in range(4)))
+                    break
+    return small.resize(size, Image.BICUBIC)
 
 
-def diagonal_gradient(size, start, end):
-    width, height = size
-    small = Image.new("RGBA", (64, 64))
-    for y in range(64):
-        for x in range(64):
-            t = (x + y) / 126
-            small.putpixel((x, y), tuple(int(start[i] + (end[i] - start[i]) * t) for i in range(4)))
-    return small.resize((width, height), Image.BICUBIC)
-
-
-def rounded_mask(size, box, radius):
-    mask = Image.new("L", size, 0)
+def rounded_mask(box, radius):
+    mask = Image.new("L", (SIZE, SIZE), 0)
     ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius, fill=255)
     return mask
 
 
-def paste_shadow(canvas, mask, offset, blur, opacity):
-    shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+def composite(canvas, mask, layer, clip=None):
+    layer = layer.copy() if isinstance(layer, Image.Image) else Image.new("RGBA", (SIZE, SIZE), layer)
+    alpha = ImageChops.multiply(layer.getchannel("A"), mask if clip is None else ImageChops.multiply(mask, clip))
+    layer.putalpha(alpha)
+    canvas.alpha_composite(layer)
+
+
+def soft(canvas, mask, color, blur, offset=(0, 0), opacity=1.0, clip=None):
+    """A blurred copy of `mask` in `color`: shadows and glows."""
+    layer = Image.new("RGBA", (SIZE, SIZE), color)
     alpha = mask.point(lambda v: int(v * opacity))
-    shadow.putalpha(alpha)
-    shadow = shadow.filter(ImageFilter.GaussianBlur(blur))
-    canvas.alpha_composite(shadow, offset)
-
-
-def window_card(canvas, clip, box, radius, fill_top, fill_bottom, bar_color, dots, opacity=1.0, glow=False):
-    """Draws a window: body gradient, title bar, traffic lights, content lines."""
-    x0, y0, x1, y1 = box
-    mask = rounded_mask(canvas.size, box, radius)
-    mask = ImageChops.multiply(mask, clip)
-    if glow:
-        halo = Image.new("RGBA", canvas.size, (255, 255, 255, 0))
-        halo.putalpha(mask.point(lambda v: int(v * 0.55)))
-        canvas.alpha_composite(halo.filter(ImageFilter.GaussianBlur(s(38))))
-    paste_shadow(canvas, mask, (0, s(18)), s(28), 0.45 * opacity)
-
-    body = vertical_gradient(canvas.size, fill_top, fill_bottom)
-    body.putalpha(mask.point(lambda v: int(v * opacity)))
-    canvas.alpha_composite(body)
-
-    draw = ImageDraw.Draw(canvas)
-    bar_height = (y1 - y0) * 0.16
-    bar = Image.new("RGBA", canvas.size, bar_color)
-    bar_mask = rounded_mask(canvas.size, (x0, y0, x1, y0 + bar_height + radius), radius)
-    bar_mask = ImageChops.multiply(bar_mask, rounded_mask(canvas.size, (x0, y0, x1, y0 + bar_height), 0))
-    bar_mask = ImageChops.multiply(bar_mask, clip)
-    bar.putalpha(bar_mask.point(lambda v: int(v * opacity)))
-    canvas.alpha_composite(bar)
-
-    if dots:
-        r = bar_height * 0.17
-        cy = y0 + bar_height / 2
-        for i, color in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):
-            cx = x0 + bar_height * 0.55 + i * r * 3.1
-            draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=color + (int(255 * opacity),))
-
-    # Content: a few soft lines.
-    line_color = (90, 80, 170, int(70 * opacity))
-    top = y0 + bar_height + (y1 - y0) * 0.1
-    widths = [0.62, 0.78, 0.48, 0.7]
-    for i, w in enumerate(widths):
-        ly = top + i * (y1 - y0) * 0.12
-        if ly + s(18) > y1 - s(20):
-            break
-        lx = x0 + (x1 - x0) * 0.1
-        line = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-        ImageDraw.Draw(line).rounded_rectangle(
-            (lx, ly, lx + (x1 - x0) * w * 0.85, ly + s(18)), radius=s(9), fill=line_color)
-        line.putalpha(ImageChops.multiply(line.getchannel("A"), clip))
-        canvas.alpha_composite(line)
+    layer.putalpha(alpha)
+    layer = layer.filter(ImageFilter.GaussianBlur(blur))
+    if clip is not None:
+        layer.putalpha(ImageChops.multiply(layer.getchannel("A"), clip))
+    canvas.alpha_composite(layer, offset)
 
 
 def render(path):
     canvas = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
 
-    # The tile: Apple's icon grid puts an 824pt rounded square in 1024.
+    # Tile: Apple's grid puts an 824pt rounded square in 1024.
     tile_box = (s(100), s(100), s(924), s(924))
-    tile_radius = s(186)
-    tile_mask = rounded_mask(canvas.size, tile_box, tile_radius)
-    paste_shadow(canvas, tile_mask, (0, s(14)), s(24), 0.35)
+    tile = rounded_mask(tile_box, s(186))
+    soft(canvas, tile, (60, 10, 30, 255), s(26), (0, s(16)), 0.45)
+    composite(canvas, tile, gradient((SIZE, SIZE), [
+        (0.0, (255, 158, 98, 255)),
+        (0.5, (246, 98, 112, 255)),
+        (1.0, (214, 58, 128, 255)),
+    ]))
+    # Light from the top-left, shade toward the bottom.
+    light = Image.new("L", (SIZE, SIZE), 0)
+    ImageDraw.Draw(light).ellipse((s(-60), s(-140), s(700), s(520)), fill=255)
+    soft(canvas, light, (255, 236, 210, 255), s(130), opacity=0.32, clip=tile)
+    shade = Image.new("L", (SIZE, SIZE), 0)
+    ImageDraw.Draw(shade).ellipse((s(380), s(560), s(1180), s(1240)), fill=255)
+    soft(canvas, shade, (120, 20, 90, 255), s(150), opacity=0.35, clip=tile)
 
-    background = diagonal_gradient(canvas.size, (24, 22, 74, 255), (112, 52, 214, 255))
-    # A soft light from the top-left.
-    light = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    ImageDraw.Draw(light).ellipse((s(40), s(-80), s(760), s(560)), fill=(130, 160, 255, 90))
-    background.alpha_composite(light.filter(ImageFilter.GaussianBlur(s(120))))
-    background.putalpha(tile_mask)
-    canvas.alpha_composite(background)
+    radius = s(40)
+    top, bottom = 268, 756
+    left = (s(226), s(top), s(386), s(bottom))
+    right = (s(638), s(top), s(798), s(bottom))
+    middle_home = (s(432), s(top), s(592), s(548))
+    middle = (s(432), s(388), s(592), s(668))
 
-    # Windows on the strip: neighbours cut off by the tile edge, the focused one in the middle.
-    card_top, card_bottom = s(270), s(700)
-    window_card(canvas, tile_mask, (s(-30), s(310), s(250), s(660)), s(34),
-                (226, 222, 255, 255), (186, 176, 246, 255), (246, 244, 255, 255), dots=False, opacity=0.42)
-    window_card(canvas, tile_mask, (s(774), s(310), s(1054), s(660)), s(34),
-                (226, 222, 255, 255), (186, 176, 246, 255), (246, 244, 255, 255), dots=False, opacity=0.42)
-    window_card(canvas, tile_mask, (s(290), card_top, s(734), card_bottom), s(40),
-                (255, 255, 255, 255), (232, 228, 255, 255), (244, 242, 255, 255), dots=True, glow=True)
-
-    # Slider: a track with a glowing knob under the focused window.
+    # Where the middle window slid from: a faint inset trace and motion lines.
+    trace = rounded_mask(middle_home, radius)
+    composite(canvas, trace, (255, 255, 255, 46), tile)
+    inner = rounded_mask((middle_home[0] + s(6), middle_home[1] + s(6), middle_home[2] - s(6), middle_home[3] - s(6)), s(34))
+    composite(canvas, inner, (214, 58, 128, 40), tile)
     draw = ImageDraw.Draw(canvas)
-    track_y = s(790)
-    track = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    ImageDraw.Draw(track).rounded_rectangle((s(240), track_y - s(11), s(784), track_y + s(11)),
-                                            radius=s(11), fill=(255, 255, 255, 70))
-    canvas.alpha_composite(track)
-    knob_box = (s(410), track_y - s(30), s(614), track_y + s(30))
-    knob_mask = rounded_mask(canvas.size, knob_box, s(30))
-    glow = Image.new("RGBA", canvas.size, (255, 110, 90, 0))
-    glow.putalpha(knob_mask)
-    canvas.alpha_composite(glow.filter(ImageFilter.GaussianBlur(s(26))))
-    knob = diagonal_gradient(canvas.size, (255, 158, 64, 255), (255, 72, 120, 255))
-    knob.putalpha(knob_mask)
-    canvas.alpha_composite(knob)
-    draw.rounded_rectangle((s(440), track_y - s(20), s(584), track_y - s(8)), radius=s(6), fill=(255, 255, 255, 90))
+    for i, width in enumerate((70, 104, 70)):
+        x = s(512) + (i - 1) * s(40)
+        draw.rounded_rectangle((x - s(5), s(300), x + s(5), s(300 + width * 0.6)), radius=s(5), fill=(255, 255, 255, 70))
 
-    # Subtle inner edge highlight on the tile.
-    edge = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    ImageDraw.Draw(edge).rounded_rectangle(tile_box, radius=tile_radius, outline=(255, 255, 255, 40), width=s(3))
-    canvas.alpha_composite(edge)
+    # The two outer windows of the M: white glass with a title bar.
+    for box in (left, right):
+        m = rounded_mask(box, radius)
+        soft(canvas, m, (90, 10, 40, 255), s(22), (0, s(16)), 0.42)
+        composite(canvas, m, gradient((SIZE, SIZE), [(0, (255, 255, 255, 255)), (1, (255, 236, 240, 255))], (0, 1)))
+        bar = (box[0] + s(24), box[1] + s(26), box[2] - s(24), box[1] + s(42))
+        draw.rounded_rectangle(bar, radius=s(8), fill=(246, 98, 112, 70))
+
+    # The middle window, slid down: deep plum, the window you're on.
+    m = rounded_mask(middle, radius)
+    soft(canvas, m, (40, 0, 30, 255), s(26), (0, s(20)), 0.55)
+    composite(canvas, m, gradient((SIZE, SIZE), [(0, (64, 30, 72, 255)), (1, (34, 16, 44, 255))], (0, 1)))
+    rim = Image.new("L", (SIZE, SIZE), 0)
+    ImageDraw.Draw(rim).rounded_rectangle(middle, radius=radius, outline=255, width=s(4))
+    composite(canvas, rim, (255, 170, 150, 120))
+    # A warm accent line on the focused window.
+    draw.rounded_rectangle((middle[0] + s(30), middle[3] - s(52), middle[2] - s(30), middle[3] - s(36)),
+                           radius=s(8), fill=(255, 158, 98, 255))
+
+    # Fine highlight around the tile edge.
+    edge = Image.new("L", (SIZE, SIZE), 0)
+    ImageDraw.Draw(edge).rounded_rectangle(tile_box, radius=s(186), outline=255, width=s(3))
+    composite(canvas, edge, (255, 255, 255, 60))
 
     canvas = canvas.resize((1024, 1024), Image.LANCZOS)
     os.makedirs(os.path.dirname(path), exist_ok=True)

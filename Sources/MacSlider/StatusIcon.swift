@@ -1,34 +1,29 @@
 #if os(macOS)
 import AppKit
 
-/// The menu bar glyph, matching the app icon: three windows on a strip, the
-/// focused one filled, above a slider. Drawn as a template image so macOS
+/// The menu bar glyph, matching the app icon: an M of three windows with the
+/// middle one slid down (hollow while paused). Drawn as a template image so macOS
 /// tints it for light and dark menu bars.
 enum StatusIcon {
     static func image(paused: Bool) -> NSImage {
-        let image = NSImage(size: NSSize(width: 20, height: 16), flipped: false) { _ in
+        let image = NSImage(size: NSSize(width: 18, height: 16), flipped: false) { _ in
             NSColor.black.set()
-            // Neighbouring windows, cut off at the edges.
-            let side = NSBezierPath(roundedRect: NSRect(x: 0.5, y: 5.5, width: 4, height: 8), xRadius: 1.2, yRadius: 1.2)
-            side.append(NSBezierPath(roundedRect: NSRect(x: 15.5, y: 5.5, width: 4, height: 8), xRadius: 1.2, yRadius: 1.2))
-            side.lineWidth = 1
-            side.stroke()
-
-            // The focused window.
-            let main = NSRect(x: 6, y: 4.5, width: 8, height: 10)
+            // The M: two outlined windows standing tall…
+            let sides = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 1.5, width: 4.5, height: 13), xRadius: 1.6, yRadius: 1.6)
+            sides.append(NSBezierPath(roundedRect: NSRect(x: 12, y: 1.5, width: 4.5, height: 13), xRadius: 1.6, yRadius: 1.6))
+            sides.lineWidth = 1.2
+            sides.stroke()
+            // …and the middle one, slid down.
+            let middle = NSRect(x: 7, y: 2, width: 4, height: 8.5)
             if paused {
-                let outline = NSBezierPath(roundedRect: main.insetBy(dx: 0.5, dy: 0.5), xRadius: 1.6, yRadius: 1.6)
-                outline.lineWidth = 1
+                let outline = NSBezierPath(roundedRect: middle.insetBy(dx: 0.6, dy: 0.6), xRadius: 1.4, yRadius: 1.4)
+                outline.lineWidth = 1.2
                 outline.stroke()
-                NSBezierPath(rect: NSRect(x: 8.3, y: 7, width: 1.3, height: 5)).fill()
-                NSBezierPath(rect: NSRect(x: 10.4, y: 7, width: 1.3, height: 5)).fill()
             } else {
-                NSBezierPath(roundedRect: main, xRadius: 1.6, yRadius: 1.6).fill()
+                NSBezierPath(roundedRect: middle, xRadius: 1.4, yRadius: 1.4).fill()
             }
-
-            // The slider: a track with a knob under the focused window.
-            NSBezierPath(roundedRect: NSRect(x: 2, y: 1, width: 16, height: 1), xRadius: 0.5, yRadius: 0.5).fill()
-            NSBezierPath(roundedRect: NSRect(x: 7.5, y: 0, width: 5, height: 3), xRadius: 1.5, yRadius: 1.5).fill()
+            // Where it slid from.
+            NSBezierPath(roundedRect: NSRect(x: 8.4, y: 12, width: 1.2, height: 2.5), xRadius: 0.6, yRadius: 0.6).fill()
             return true
         }
         image.isTemplate = true

@@ -80,6 +80,13 @@ final class KeymapTests: XCTestCase {
         XCTAssertNil(settings.rule(for: nil))
         XCTAssertEqual(settings.tiles(for: "com.apple.Terminal"), 4)
         XCTAssertEqual(settings.tiles(for: "com.apple.Safari"), 2)
+        var named = settings
+        XCTAssertEqual(named.workspaceName(2), "Workspace 3")
+        named.setWorkspaceName("  Design ", at: 2)
+        XCTAssertEqual(named.workspaceName(2), "Design")
+        XCTAssertEqual(named.workspaceName(0), "Workspace 1")
+        named.setWorkspaceName("", at: 2)
+        XCTAssertEqual(named.workspaceName(2), "Workspace 3")
     }
 
     func testSlideModeKeys() {

@@ -4,6 +4,15 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.4] - 2026-10-30
+
+### Added
+- Window controls in previews and the overview: close, minimise and full-screen buttons on every window tile.
+- Right-click a window tile to rename it (MacSlider shows your name everywhere), give it its own slide, or move it to another workspace.
+- Workspace names: set them in Settings, or right-click a dot on the slider bar or a workspace in the overview. Hovering a dot shows its name.
+- A colourful overview: gradient backdrop with soft glows and a dot pattern, and a coloured card per workspace.
+- New app icon (the "offset M") and a matching menu bar icon.
+
 ## [0.2.3] - 2026-10-30
 
 ### Fixed

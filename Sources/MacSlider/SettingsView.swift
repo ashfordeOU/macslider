@@ -92,6 +92,18 @@ private struct GeneralPane: View {
                 Stepper(value: $store.settings.workspaceCount, in: 1...9) {
                     Text("Workspaces per display: \(store.settings.workspaceCount)")
                 }
+                ForEach(0..<store.settings.workspaceCount, id: \.self) { index in
+                    LabeledContent {
+                        TextField("Workspace \(index + 1)", text: workspaceName(index))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 220)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle().fill(WorkspaceColor.color(index)).frame(width: 9, height: 9)
+                            Text("Name of workspace \(index + 1)")
+                        }
+                    }
+                }
                 Toggle("Check for updates automatically", isOn: $store.settings.checkForUpdates)
                 Toggle("Install updates automatically", isOn: $store.settings.installUpdatesAutomatically)
                     .disabled(!store.settings.checkForUpdates)
@@ -131,6 +143,15 @@ private struct GeneralPane: View {
     }
 
     private func refresh() { checks = SetupCheck.run(settings: store.settings) }
+
+    private func workspaceName(_ index: Int) -> Binding<String> {
+        Binding(
+            get: {
+                store.settings.workspaceNames.indices.contains(index) ? store.settings.workspaceNames[index] : ""
+            },
+            set: { store.settings.setWorkspaceName($0, at: index) }
+        )
+    }
 }
 
 // MARK: - Layout

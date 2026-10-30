@@ -109,6 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             switchWorkspace: { [weak self] index in self?.engine.switchWorkspace(to: index) },
             showOverview: { [weak self] in self?.overview.show() }
         )
+        let commands = windowCommands()
+        sliderBar.actions.commands = commands
+        sliderBar.actions.renameWorkspace = { [weak self] index in self?.renameWorkspace(index) }
+        overview.commands = commands
+        overview.renameWorkspace = { [weak self] index in self?.renameWorkspace(index) }
         popover.actions = sliderBar.actions
         popover.updater = updater
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
@@ -261,6 +266,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Window commands shared by the slider-bar previews, popover and overview.
+    private func windowCommands() -> WindowCommands {
+        var commands = WindowCommands()
+        commands.focus = { [weak self] id in self?.engine.focusAndReveal(id) }
+        commands.close = { [weak self] id in self?.engine.closeWindow(id) }
+        commands.minimize = { [weak self] id in self?.engine.minimizeWindow(id) }
+        commands.fullScreen = { [weak self] id in self?.engine.toggleFullScreen(id) }
+        commands.ownSlide = { [weak self] id in self?.engine.giveOwnSlide(id) }
+        commands.rename = { [weak self] id in self?.renameWindow(id) }
+        commands.moveToWorkspace = { [weak self] id, index in self?.engine.moveWindow(id, toWorkspace: index) }
+        commands.workspaceNames = { [weak self] in
+            guard let settings = self?.store.settings else { return [] }
+            return (0..<settings.workspaceCount).map(settings.workspaceName)
+        }
+        commands.currentWorkspace = { [weak self] id in self?.engine.workspaceIndex(of: id) }
+        return commands
+    }
+
+    private func renameWindow(_ id: WindowID) {
+        let current = engine.allWindowSummaries().first { $0.id == id }
+        guard let name = TextPrompt.ask(
+            title: "Rename window",
+            message: "Shown in MacSlider’s previews, overview and menus. Leave empty to use the window’s own title.",
+            initial: engine.customName(of: id) ?? "",
+            placeholder: current?.title ?? "")
+        else { return }
+        engine.rename(id, to: name)
+    }
+
+    private func renameWorkspace(_ index: Int) {
+        guard let name = TextPrompt.ask(
+            title: "Rename workspace",
+            message: "Leave empty for “Workspace \(index + 1)”.",
+            initial: store.settings.workspaceNames.indices.contains(index) ? store.settings.workspaceNames[index] : "",
+            placeholder: "Workspace \(index + 1)")
+        else { return }
+        store.settings.setWorkspaceName(name, at: index)
+    }
+
     @objc private func stepLeft() { engine.step(forward: false, honourReverse: false, visual: true) }
     @objc private func stepRight() { engine.step(forward: true, honourReverse: false, visual: true) }
 
@@ -332,7 +376,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let current = engine.status()?.workspace
             for n in 1...store.settings.workspaceCount {
                 let action = Action.allCases.first { $0.workspaceNumber == n }!
-                let entry = item("Workspace \(n)", #selector(switchWorkspaceFromMenu(_:)), action: action)
+                let entry = item(store.settings.workspaceName(n - 1), #selector(switchWorkspaceFromMenu(_:)), action: action)
                 entry.tag = n
                 entry.state = current == n ? .on : .off
                 workspaces.addItem(entry)
@@ -397,7 +441,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !trusted { return "MacSlider needs Accessibility access" }
         if engine.isPaused { return "MacSlider is paused" }
         if let status = engine.status() {
-            let workspace = store.settings.workspaceCount > 1 ? "Workspace \(status.workspace) · " : ""
+            let workspace = store.settings.workspaceCount > 1
+                ? "\(store.settings.workspaceName(status.workspace - 1)) · " : ""
             if status.columnCount == 0 { return "\(workspace)No windows yet" }
             return "\(workspace)Slide \(status.focusedColumn) of \(status.columnCount)"
         }

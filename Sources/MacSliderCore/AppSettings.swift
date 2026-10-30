@@ -124,6 +124,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var slideArrangement: Arrangement = .grid
     /// Workspaces per display (1...9). Each has its own strip.
     public var workspaceCount = 4
+    /// Names for workspaces, by index; empty or missing means "Workspace N".
+    public var workspaceNames: [String] = []
     /// Look for new versions on GitHub once a day.
     public var checkForUpdates = true
     /// Install new versions without asking (MacSlider relaunches itself).
@@ -160,6 +162,20 @@ public struct AppSettings: Equatable, Codable, Sendable {
         min(max(rule(for: bundleID)?.tiles ?? tilesPerSlide, 1), Column.maximumWindows)
     }
 
+    /// The name shown for workspace `index` (0-based).
+    public func workspaceName(_ index: Int) -> String {
+        let name = workspaceNames.indices.contains(index)
+            ? workspaceNames[index].trimmingCharacters(in: .whitespaces) : ""
+        return name.isEmpty ? "Workspace \(index + 1)" : name
+    }
+
+    public mutating func setWorkspaceName(_ name: String, at index: Int) {
+        guard index >= 0 else { return }
+        while workspaceNames.count <= index { workspaceNames.append("") }
+        // Stored as typed (so a text field can hold a trailing space); trimmed when shown.
+        workspaceNames[index] = name
+    }
+
     /// Layout for a new slide of an app.
     public func arrangement(for bundleID: String?) -> Arrangement {
         rule(for: bundleID)?.arrangement ?? slideArrangement
@@ -171,7 +187,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically, resizeAssist
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically, resizeAssist, workspaceNames
     }
 
     public init(from decoder: Decoder) throws {
@@ -215,6 +231,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         pairLoneWindowsOnOpen = value(.pairLoneWindowsOnOpen, d.pairLoneWindowsOnOpen)
         keepWindowsInPlace = value(.keepWindowsInPlace, d.keepWindowsInPlace)
         resizeAssist = value(.resizeAssist, d.resizeAssist)
+        workspaceNames = value(.workspaceNames, d.workspaceNames)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

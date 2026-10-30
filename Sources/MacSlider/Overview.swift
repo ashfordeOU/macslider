@@ -59,6 +59,54 @@ struct OverviewActions {
     var moveColumn: (_ from: Int, _ to: Int, StripKey) -> Void
     var resetPairs: () -> Void
     var close: () -> Void
+    var renameWorkspace: (Int) -> Void = { _ in }
+    var commands = WindowCommands()
+}
+
+/// The overview's backdrop: a deep, colourful gradient with soft glows and a
+/// fine dot pattern, over a blur of the desktop.
+private struct OverviewBackground: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.13, green: 0.09, blue: 0.36),
+                    Color(red: 0.36, green: 0.13, blue: 0.5),
+                    Color(red: 0.05, green: 0.3, blue: 0.46),
+                ],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            .opacity(0.9)
+            GeometryReader { geometry in
+                let size = geometry.size
+                ZStack {
+                    Circle().fill(Color(red: 1, green: 0.38, blue: 0.62).opacity(0.35))
+                        .frame(width: size.width * 0.45).blur(radius: 140)
+                        .position(x: size.width * 0.12, y: size.height * 0.1)
+                    Circle().fill(Color(red: 0.2, green: 0.8, blue: 0.86).opacity(0.3))
+                        .frame(width: size.width * 0.5).blur(radius: 160)
+                        .position(x: size.width * 0.9, y: size.height * 0.92)
+                    Circle().fill(Color(red: 1, green: 0.58, blue: 0.27).opacity(0.18))
+                        .frame(width: size.width * 0.3).blur(radius: 120)
+                        .position(x: size.width * 0.75, y: size.height * 0.15)
+                }
+            }
+            Canvas { context, size in
+                let spacing: CGFloat = 26
+                var y: CGFloat = spacing / 2
+                while y < size.height {
+                    var x: CGFloat = spacing / 2
+                    while x < size.width {
+                        context.fill(Path(ellipseIn: CGRect(x: x - 1.1, y: y - 1.1, width: 2.2, height: 2.2)),
+                                     with: .color(.white.opacity(0.07)))
+                        x += spacing
+                    }
+                    y += spacing
+                }
+            }
+        }
+        .ignoresSafeArea()
+    }
 }
 
 struct OverviewView: View {
@@ -67,10 +115,7 @@ struct OverviewView: View {
 
     var body: some View {
         ZStack {
-            // Sits on a behind-window blur (see OverviewController), so this
-            // tint only needs to darken it enough for text to read cleanly.
-            Color.black.opacity(0.62)
-                .ignoresSafeArea()
+            OverviewBackground()
                 .contentShape(Rectangle())
                 .onTapGesture { actions.close() }
             VStack(alignment: .leading, spacing: 18) {
@@ -90,7 +135,7 @@ struct OverviewView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("Overview").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
+            Text("Overview").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
             Text("Click to jump · drag a window onto a slide to pair it (your pairings stay until you reset) · drag between slides to give it its own · drag ≡ to reorder · esc to close")
                 .font(.callout).foregroundStyle(.white.opacity(0.7))
             Spacer()
@@ -114,20 +159,41 @@ private struct StripRow: View {
     let actions: OverviewActions
     private let height: CGFloat = 190
 
+    private var color: Color { WorkspaceColor.color(strip.workspace) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                actions.show(strip.key)
-            } label: {
-                HStack(spacing: 6) {
-                    Circle().fill(strip.isActive ? Color.accentColor : Color.white.opacity(0.3)).frame(width: 8, height: 8)
-                    Text(strip.title).font(.headline)
-                    Text("\(strip.columns.count) \(strip.columns.count == 1 ? "slide" : "slides")")
-                        .font(.subheadline).foregroundStyle(.white.opacity(0.6))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Button {
+                    actions.show(strip.key)
+                } label: {
+                    HStack(spacing: 8) {
+                        Circle().fill(color).frame(width: 10, height: 10)
+                            .shadow(color: color.opacity(0.8), radius: strip.isActive ? 6 : 0)
+                        Text(strip.title).font(.system(size: 15, weight: .semibold, design: .rounded))
+                        Text("\(strip.columns.count) \(strip.columns.count == 1 ? "slide" : "slides")")
+                            .font(.subheadline).foregroundStyle(.white.opacity(0.6))
+                        if strip.isActive {
+                            Text("Current").font(.caption.weight(.semibold))
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Capsule().fill(color.opacity(0.35)))
+                        }
+                    }
+                    .foregroundStyle(.white)
                 }
-                .foregroundStyle(.white)
+                .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Rename “\(strip.title)”…") { actions.renameWorkspace(strip.workspace) }
+                }
+                Button {
+                    actions.renameWorkspace(strip.workspace)
+                } label: {
+                    Image(systemName: "pencil").font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.5))
+                .help("Rename this workspace")
             }
-            .buttonStyle(.plain)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
@@ -148,6 +214,16 @@ private struct StripRow: View {
                 .environment(\.layoutDirection, strip.isRightToLeft ? .rightToLeft : .leftToRight)
             }
         }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(LinearGradient(
+                    colors: [color.opacity(strip.isActive ? 0.22 : 0.12), Color.white.opacity(0.04)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .strokeBorder(color.opacity(strip.isActive ? 0.85 : 0.3), lineWidth: strip.isActive ? 2 : 1))
+        .shadow(color: strip.isActive ? color.opacity(0.35) : .clear, radius: 18)
     }
 }
 
@@ -220,7 +296,7 @@ private struct ColumnCard: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
                         .strokeBorder(
-                            targeted ? Color.accentColor : (column.isFocused ? Color.white.opacity(0.8) : Color.clear),
+                            targeted ? Color.white : (column.isFocused ? WorkspaceColor.color(strip.workspace) : Color.clear),
                             lineWidth: targeted ? 3 : 2))
         }
         .onDrop(of: [UTType.text], isTargeted: $targeted) { providers in
@@ -269,6 +345,7 @@ private struct ColumnCard: View {
     private func tile(_ window: Engine.WindowSummary) -> some View {
         WindowTile(window: window, thumbnail: model.thumbnails[window.id])
             .onTapGesture { actions.focus(window.id) }
+            .windowControls(window.id, actions.commands)
             .onDrag { DragItem.window(window.id).provider }
     }
 }
@@ -368,6 +445,45 @@ final class OverviewController {
         panel.orderOut(nil)
     }
 
+    var commands = WindowCommands()
+    var renameWorkspace: (Int) -> Void = { _ in }
+
+    /// Window commands for overview tiles: they act, then refresh the overview.
+    private func overviewCommands() -> WindowCommands {
+        var commands = WindowCommands()
+        commands.focus = { [weak self] id in
+            self?.close()
+            self?.engine?.focusAndReveal(id)
+        }
+        commands.close = { [weak self] id in
+            self?.commands.close(id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self?.refresh() }
+        }
+        commands.minimize = { [weak self] id in
+            self?.commands.minimize(id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self?.refresh() }
+        }
+        commands.fullScreen = { [weak self] id in
+            self?.close()
+            self?.commands.fullScreen(id)
+        }
+        commands.ownSlide = { [weak self] id in
+            self?.commands.ownSlide(id)
+            self?.refresh()
+        }
+        commands.rename = { [weak self] id in
+            self?.close()
+            self?.commands.rename(id)
+        }
+        commands.moveToWorkspace = { [weak self] id, index in
+            self?.commands.moveToWorkspace(id, index)
+            self?.refresh()
+        }
+        commands.workspaceNames = { [weak self] in self?.commands.workspaceNames() ?? [] }
+        commands.currentWorkspace = { [weak self] id in self?.commands.currentWorkspace(id) }
+        return commands
+    }
+
     private func refresh() {
         guard let engine else { return }
         model.strips = engine.overview()
@@ -410,7 +526,12 @@ final class OverviewController {
                 self?.engine?.perform(.regroup)
                 self?.refresh()
             },
-            close: { [weak self] in self?.close() }
+            close: { [weak self] in self?.close() },
+            renameWorkspace: { [weak self] index in
+                self?.close()
+                self?.renameWorkspace(index)
+            },
+            commands: overviewCommands()
         )
         // Frosted glass: blur whatever is behind the overview, then draw on top.
         let blur = NSVisualEffectView()

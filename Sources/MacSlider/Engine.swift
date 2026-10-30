@@ -487,6 +487,58 @@ final class Engine {
         onStateChange()
     }
 
+    // MARK: - Window commands (previews, overview)
+
+    /// Names the user gave windows in MacSlider; shown instead of the title.
+    private var names: [WindowID: String] = [:]
+
+    func displayTitle(_ window: ManagedWindow) -> String {
+        names[window.id] ?? window.title
+    }
+
+    func customName(of id: WindowID) -> String? { names[id] }
+
+    /// Renames a window in MacSlider (the app's own title is untouched).
+    /// An empty name goes back to the window's title.
+    func rename(_ id: WindowID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        names[id] = trimmed.isEmpty ? nil : trimmed
+        scheduleSave()
+        updateOverlays()
+        onStateChange()
+    }
+
+    func closeWindow(_ id: WindowID) {
+        guard let close = windows[id]?.element.element(kAXCloseButtonAttribute) else { return }
+        AXUIElementPerformAction(close, kAXPressAction as CFString)
+    }
+
+    func minimizeWindow(_ id: WindowID) {
+        windows[id]?.element.set(kAXMinimizedAttribute, kCFBooleanTrue)
+    }
+
+    func toggleFullScreen(_ id: WindowID) {
+        guard let element = windows[id]?.element else { return }
+        element.set("AXFullScreen", (element.isFullScreen ? kCFBooleanFalse : kCFBooleanTrue)!)
+    }
+
+    func workspaceIndex(of id: WindowID) -> Int? { windows[id]?.key?.workspace }
+
+    /// Moves any window (not just the focused one) to a workspace on its display.
+    func moveWindow(_ id: WindowID, toWorkspace index: Int) {
+        guard index >= 0, index < settings.workspaceCount, let window = windows[id], let key = window.key,
+            key.workspace != index, let display = display(for: key)
+        else { return }
+        recordHistory()
+        let width = strips[key].flatMap { strip in strip.locate(id).map { strip.columns[$0.column].width } }
+        removeFromStrip(window)
+        var target = key
+        target.workspace = index
+        place(window, in: target, display: display, focus: false, width: width, restoring: false)
+        layout(animated: true)
+        onStateChange()
+    }
+
     // MARK: - Overview
 
     struct OverviewColumn: Identifiable {
@@ -506,6 +558,8 @@ final class Engine {
         var title: String
         var isActive: Bool
         var columns: [OverviewColumn]
+        /// Index of the workspace, for its colour.
+        var workspace: Int
         var aspectRatio: Double
         var isRightToLeft: Bool
     }
@@ -533,11 +587,11 @@ final class Engine {
                         pin: column.pin
                     )
                 }
-                var title = settings.workspaceCount > 1 ? "Workspace \(workspace + 1)" : "Windows"
+                var title = settings.workspaceCount > 1 ? settings.workspaceName(workspace) : "Windows"
                 if displays.count > 1 { title = "\(display.name) · \(title)" }
                 result.append(
                     OverviewStrip(
-                        key: key, title: title, isActive: key == current, columns: columns,
+                        key: key, title: title, isActive: key == current, columns: columns, workspace: workspace,
                         aspectRatio: display.visibleFrame.width / max(display.visibleFrame.height, 1),
                         isRightToLeft: settings.layout.direction == .rightToLeft))
             }
@@ -615,6 +669,7 @@ final class Engine {
         var screenFrame: CGRect
         var workspace: Int
         var workspaceCount: Int
+        var workspaceNames: [String]
         var tiles: [MiniTile]
         var totalWidth: Double
         /// The part of the strip on screen, in strip points.
@@ -640,7 +695,7 @@ final class Engine {
                     width: strip.width(ofColumn: index, config: settings.layout, viewportWidth: width),
                     windows: column.windows.compactMap { id in
                         windows[id].map {
-                            MiniWindow(id: id, pid: $0.pid, appName: $0.appName, title: $0.title)
+                            MiniWindow(id: id, pid: $0.pid, appName: $0.appName, title: displayTitle($0))
                         }
                     },
                     arrangement: column.arrangement,
@@ -655,6 +710,7 @@ final class Engine {
                     x: visible.minX, y: primaryHeight - visible.maxY, width: visible.width, height: visible.height),
                 workspace: key.workspace,
                 workspaceCount: settings.workspaceCount,
+                workspaceNames: (0..<settings.workspaceCount).map(settings.workspaceName),
                 tiles: tiles,
                 totalWidth: strip.totalWidth(config: settings.layout, viewportWidth: width),
                 viewportX: strip.scroll,
@@ -849,7 +905,7 @@ final class Engine {
         WindowSummary(
             id: window.id,
             appName: window.appName,
-            title: window.title,
+            title: displayTitle(window),
             isTiled: window.key != nil,
             isFocused: focused,
             icon: NSRunningApplication(processIdentifier: window.pid)?.icon
@@ -963,7 +1019,10 @@ final class Engine {
             }
             for bar in strip.tabBars(config: settings.layout, viewport: viewport(of: display)) {
                 let tabs = bar.windows.map { id in
-                    Overlays.Tab(id: id, title: windows[id].map { $0.title.isEmpty ? $0.appName : $0.title } ?? "")
+                    Overlays.Tab(id: id, title: windows[id].map { window in
+                        let title = displayTitle(window)
+                        return title.isEmpty ? window.appName : title
+                    } ?? "")
                 }
                 bars.append(Overlays.TabBarModel(frame: CGRect(bar.frame), tabs: tabs, active: bar.active))
             }
@@ -1651,6 +1710,7 @@ final class Engine {
     private struct SavedState: Codable {
         var strips: [StripKey: Strip]
         var activeWorkspace: [ScreenKey: Int]?
+        var names: [WindowID: String]?
     }
 
     private static var stateURL: URL { SettingsStore.directory.appendingPathComponent("layout.json") }
@@ -1663,7 +1723,9 @@ final class Engine {
     /// Window IDs survive a restart of MacSlider (not of the apps), so saving
     /// the strips lets an update or relaunch pick up exactly where it left off.
     private func saveState() {
-        let state = SavedState(strips: strips.filter { !$0.value.isEmpty }, activeWorkspace: activeWorkspace)
+        let state = SavedState(
+            strips: strips.filter { !$0.value.isEmpty }, activeWorkspace: activeWorkspace,
+            names: names.filter { windows[$0.key] != nil })
         do {
             try FileManager.default.createDirectory(at: SettingsStore.directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(state).write(to: Self.stateURL, options: .atomic)
@@ -1678,6 +1740,7 @@ final class Engine {
         else { return }
         strips = state.strips
         activeWorkspace = state.activeWorkspace ?? [:]
+        names = state.names ?? [:]
     }
 }
 

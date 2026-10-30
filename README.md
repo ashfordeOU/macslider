@@ -188,12 +188,17 @@ highlighted frame for the part that's on screen.
 - **Hover** a tile for a live preview of that slide's windows, laid out as they are on screen; click one to jump straight to it.
 - **Drag** the frame, or anywhere on the bar, or just **scroll** over it, and all your windows slide along.
 - **Click** a tile to jump to that slide.
-- **Dots** on the left switch workspaces; the grid button on the right opens the overview.
+- **Dots** on the left switch workspaces; hover one to see its name, right-click to rename it. The grid button on the right opens the overview.
+- In previews and the overview, every window has **close, minimise and full-screen** buttons, and a right-click menu to **rename** it, give it its own slide, or move it to another workspace.
 
 In **Settings → Appearance** you can keep it on screen all the time (windows
 then leave room for it), move it to the top, or turn it off.
 
 ### Workspaces
+
+Name your workspaces ("Work", "Personal", "Design") in **Settings → General**,
+from the overview, or by right-clicking a dot on the slider bar. Each workspace
+has its own colour in the overview and the slider bar.
 
 Each display has four workspaces by default (up to nine in **Settings → General**).
 <kbd>⌃⌥1</kbd>–<kbd>⌃⌥9</kbd> switches workspace, and <kbd>⌃⌥⇧1</kbd>–<kbd>⌃⌥⇧9</kbd>
