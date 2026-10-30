@@ -4,6 +4,11 @@ All notable changes to Monorail by Ashforde® are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-10-31
+
+### Changed
+- Branded as Monorail by Ashforde® in the app, menus, Settings, welcome tour, overview, installer and README.
+
 ## [0.6.0] - 2026-10-31
 
 ### Added
