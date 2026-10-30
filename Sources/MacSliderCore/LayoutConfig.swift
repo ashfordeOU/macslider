@@ -24,6 +24,8 @@ public struct LayoutConfig: Equatable, Codable, Sendable {
     public var centerMode: CenterMode
     /// Height reserved above tabbed columns for their tab bar.
     public var tabBarHeight: Double
+    /// Which way the strip runs.
+    public var direction: StripDirection
 
     public init(
         gap: Double = 8,
@@ -32,7 +34,8 @@ public struct LayoutConfig: Equatable, Codable, Sendable {
         widthPresets: [Double] = [0.25, 1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75],
         defaultWidth: Double = 0.5,
         centerMode: CenterMode = .never,
-        tabBarHeight: Double = 28
+        tabBarHeight: Double = 28,
+        direction: StripDirection = .leftToRight
     ) {
         self.gap = gap
         self.edgeGap = edgeGap
@@ -41,6 +44,7 @@ public struct LayoutConfig: Equatable, Codable, Sendable {
         self.defaultWidth = defaultWidth
         self.centerMode = centerMode
         self.tabBarHeight = tabBarHeight
+        self.direction = direction
     }
 
     public static let minimumWidth = 0.1
@@ -82,7 +86,7 @@ public struct LayoutConfig: Equatable, Codable, Sendable {
 
 extension LayoutConfig {
     enum CodingKeys: String, CodingKey {
-        case gap, edgeGap, parkSliver, widthPresets, defaultWidth, centerMode, tabBarHeight
+        case gap, edgeGap, parkSliver, widthPresets, defaultWidth, centerMode, tabBarHeight, direction
     }
 
     public init(from decoder: Decoder) throws {
@@ -95,7 +99,8 @@ extension LayoutConfig {
             widthPresets: (try? c.decodeIfPresent([Double].self, forKey: .widthPresets)) ?? d.widthPresets,
             defaultWidth: (try? c.decodeIfPresent(Double.self, forKey: .defaultWidth)) ?? d.defaultWidth,
             centerMode: (try? c.decodeIfPresent(CenterMode.self, forKey: .centerMode)) ?? d.centerMode,
-            tabBarHeight: (try? c.decodeIfPresent(Double.self, forKey: .tabBarHeight)) ?? d.tabBarHeight
+            tabBarHeight: (try? c.decodeIfPresent(Double.self, forKey: .tabBarHeight)) ?? d.tabBarHeight,
+            direction: (try? c.decodeIfPresent(StripDirection.self, forKey: .direction)) ?? d.direction
         )
     }
 }

@@ -195,6 +195,12 @@ private struct SliderBarView: View {
 
     /// Strip-space range the track shows: the whole strip plus the viewport,
     /// even when the viewport hangs past either end.
+    /// Track position of a strip x coordinate, mirrored for right-to-left strips.
+    private func trackX(_ x: Double, width: Double, lower: Double, span: Double, scale: Double, map: Engine.MiniMap) -> Double {
+        let left = (x - lower) * scale
+        return map.isRightToLeft ? span * scale - left - width * scale : left
+    }
+
     private func bounds(_ map: Engine.MiniMap) -> (min: Double, span: Double) {
         let lower = min(0, map.viewportX)
         let upper = max(map.totalWidth, map.viewportX + map.viewportWidth)
@@ -212,7 +218,7 @@ private struct SliderBarView: View {
                 ForEach(map.tiles) { tile in
                     TileView(tile: tile, height: size.height - 8)
                         .frame(width: max(tile.width * scale - 3, 6), height: size.height - 8)
-                        .offset(x: (tile.x - lower) * scale + 1.5, y: 4)
+                        .offset(x: trackX(tile.x, width: tile.width, lower: lower, span: span, scale: scale, map: map) + 1.5, y: 4)
                         .onTapGesture {
                             if let window = tile.windows.first { actions.focus(window.id) }
                         }
@@ -223,7 +229,7 @@ private struct SliderBarView: View {
                     .fill(Color.accentColor.opacity(0.14))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 2))
                     .frame(width: max(map.viewportWidth * scale, 10), height: size.height)
-                    .offset(x: (map.viewportX - lower) * scale)
+                    .offset(x: trackX(map.viewportX, width: map.viewportWidth, lower: lower, span: span, scale: scale, map: map))
                     .allowsHitTesting(false)
                 if map.tiles.isEmpty {
                     Text("No windows in this workspace")
@@ -242,8 +248,10 @@ private struct SliderBarView: View {
                             dragOrigin = lower
                             model.isDragging = true
                         }
-                        let stripX = Double(value.location.x) / (dragScale ?? scale) + dragOrigin
-                            - map.viewportWidth / 2
+                        let scaleNow = dragScale ?? scale
+                        var trackPosition = Double(value.location.x)
+                        if map.isRightToLeft { trackPosition = span * scaleNow - trackPosition }
+                        let stripX = trackPosition / scaleNow + dragOrigin - map.viewportWidth / 2
                         actions.slide(stripX, map.displayUUID)
                     }
                     .onEnded { _ in
@@ -272,9 +280,10 @@ private struct TileView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 6)
                 .fill(tile.isFocused ? Color.accentColor.opacity(0.35) : Color.primary.opacity(0.10))
-            if tile.isGrid && tile.windows.count > 1 {
-                // Hint at the tiles: thin dividers like the real grid.
-                GridLines(count: tile.windows.count).stroke(Color.primary.opacity(0.15), lineWidth: 1)
+            if tile.windows.count > 1 {
+                // Hint at the slide's layout with thin tile outlines.
+                TileOutlines(frames: tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split))
+                    .stroke(Color.primary.opacity(0.18), lineWidth: 1)
                     .padding(3)
             }
             HStack(spacing: 2) {
@@ -295,19 +304,18 @@ private struct TileView: View {
     }
 }
 
-/// Divider lines of a two-across grid with `count` tiles.
-private struct GridLines: Shape {
-    let count: Int
+/// Outlines of a slide's tiles, from unit rectangles.
+private struct TileOutlines: Shape {
+    let frames: [Rect]
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let rows = (count + 1) / 2
-        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.midX, y: count % 2 == 1 ? rect.minY + rect.height * CGFloat(rows - 1) / CGFloat(rows) : rect.maxY))
-        for row in 1..<max(rows, 1) {
-            let y = rect.minY + rect.height * CGFloat(row) / CGFloat(rows)
-            path.move(to: CGPoint(x: rect.minX, y: y))
-            path.addLine(to: CGPoint(x: rect.maxX, y: y))
+        for unit in frames {
+            path.addRoundedRect(
+                in: CGRect(
+                    x: rect.minX + unit.minX * rect.width + 1, y: rect.minY + unit.minY * rect.height + 1,
+                    width: max(unit.width * rect.width - 2, 1), height: max(unit.height * rect.height - 2, 1)),
+                cornerSize: CGSize(width: 2, height: 2))
         }
         return path
     }

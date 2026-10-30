@@ -176,7 +176,8 @@ final class Engine {
 
     // MARK: - Actions
 
-    func perform(_ action: Action) {
+    func perform(_ requested: Action) {
+        let action = visual(requested)
         switch action {
         case .togglePause:
             togglePause()
@@ -249,7 +250,10 @@ final class Engine {
         case .consumeIntoRight: strip.consumeIntoRight()
         case .expelLeft: strip.expelLeft()
         case .expel: strip.expel()
-        case .toggleGrid: strip.toggleGrid()
+        case .cycleLayout: strip.cycleArrangement()
+        case .mainLarger: strip.adjustSplit(by: 0.05)
+        case .mainSmaller: strip.adjustSplit(by: -0.05)
+        case .makeMain: strip.promoteToMain()
         case .regroup:
             let groups = Grouping.plan(
                 strip.columns.filter { $0.pin == nil }.flatMap(\.windows),
@@ -257,7 +261,10 @@ final class Engine {
                 capacity: { [weak self] app in self?.settings.tiles(for: app) ?? 2 },
                 pairSize: settings.tilesPerSlide
             )
-            strip.regroup(groups, width: 1)
+            strip.regroup(groups, width: 1) { [weak self] group in
+                guard let self, let first = group.first else { return .grid }
+                return self.settings.arrangement(for: self.windows[first]?.bundleID)
+            }
         case .pinLeft: strip.togglePin(.left)
         case .pinRight: strip.togglePin(.right)
         case .toggleTabbed: strip.toggleTabbed()
@@ -271,6 +278,20 @@ final class Engine {
             focus(target, warpMouse: true)
         }
         scheduleSave()
+    }
+
+    /// Keys name what you see: with a right-to-left strip, "left" is the
+    /// strip's next column, so left and right actions swap.
+    private func visual(_ action: Action) -> Action {
+        guard settings.layout.direction == .rightToLeft else { return action }
+        let swaps: [Action: Action] = [
+            .focusLeft: .focusRight, .focusRight: .focusLeft,
+            .moveLeft: .moveRight, .moveRight: .moveLeft,
+            .consumeIntoLeft: .consumeIntoRight, .consumeIntoRight: .consumeIntoLeft,
+            .expelLeft: .expel, .expel: .expelLeft,
+            .pinLeft: .pinRight, .pinRight: .pinLeft,
+        ]
+        return swaps[action] ?? action
     }
 
     /// Focuses any managed window, scrolling its strip to show it.
@@ -343,9 +364,13 @@ final class Engine {
                 strip.add(window.id, toColumn: column, focus: focus)
             case .pairWith(let other):
                 strip.remove(other)
-                strip.insertSlide([other, window.id], width: 1, position: .afterFocused, focus: focus)
+                strip.insertSlide(
+                    [other, window.id], width: 1, arrangement: settings.arrangement(for: window.bundleID),
+                    position: .afterFocused, focus: focus)
             case .newSlide:
-                strip.insertSlide([window.id], width: 1, position: position, focus: focus)
+                strip.insertSlide(
+                    [window.id], width: 1, arrangement: settings.arrangement(for: window.bundleID),
+                    position: position, focus: focus)
             }
         } else {
             strip.insert(
@@ -409,7 +434,8 @@ final class Engine {
         var id: Int
         var windows: [WindowSummary]
         var width: Double
-        var isGrid: Bool
+        var arrangement: Arrangement
+        var split: Double
         var isTabbed: Bool
         var isFocused: Bool
         var pin: PinSide?
@@ -422,6 +448,7 @@ final class Engine {
         var isActive: Bool
         var columns: [OverviewColumn]
         var aspectRatio: Double
+        var isRightToLeft: Bool
     }
 
     /// Every workspace on the displays' current Spaces, for the overview.
@@ -440,7 +467,8 @@ final class Engine {
                             windows[id].map { summary($0, focused: id == focused) }
                         },
                         width: column.effectiveWidth,
-                        isGrid: column.isGrid,
+                        arrangement: column.arrangement,
+                        split: column.split,
                         isTabbed: column.isTabbed,
                         isFocused: index == strip.focusedColumn && key == current,
                         pin: column.pin
@@ -451,7 +479,8 @@ final class Engine {
                 result.append(
                     OverviewStrip(
                         key: key, title: title, isActive: key == current, columns: columns,
-                        aspectRatio: display.visibleFrame.width / max(display.visibleFrame.height, 1)))
+                        aspectRatio: display.visibleFrame.width / max(display.visibleFrame.height, 1),
+                        isRightToLeft: settings.layout.direction == .rightToLeft))
             }
         }
         return result
@@ -513,7 +542,8 @@ final class Engine {
         var x: Double
         var width: Double
         var windows: [MiniWindow]
-        var isGrid: Bool
+        var arrangement: Arrangement
+        var split: Double
         var isFocused: Bool
     }
 
@@ -529,6 +559,7 @@ final class Engine {
         /// The part of the strip on screen, in strip points.
         var viewportX: Double
         var viewportWidth: Double
+        var isRightToLeft: Bool
     }
 
     func miniMaps() -> [MiniMap] {
@@ -551,7 +582,8 @@ final class Engine {
                             MiniWindow(id: id, pid: $0.pid, appName: $0.appName, title: $0.title)
                         }
                     },
-                    isGrid: column.isGrid,
+                    arrangement: column.arrangement,
+                    split: column.split,
                     isFocused: index == strip.focusedColumn && column.windows.contains { $0 == focused }
                 )
             }
@@ -565,7 +597,8 @@ final class Engine {
                 tiles: tiles,
                 totalWidth: strip.totalWidth(config: settings.layout, viewportWidth: width),
                 viewportX: strip.scroll,
-                viewportWidth: strip.scrollArea(config: settings.layout, viewportWidth: width).width
+                viewportWidth: strip.scrollArea(config: settings.layout, viewportWidth: width).width,
+                isRightToLeft: settings.layout.direction == .rightToLeft
             )
         }
     }
@@ -620,7 +653,8 @@ final class Engine {
         swipeDisplay = display
         let key = currentKey(display)
         guard var strip = strips[key], !strip.isEmpty else { return }
-        let factor = settings.swipeSensitivity * (settings.invertSwipe ? -1 : 1)
+        let mirrored = settings.layout.direction == .rightToLeft
+        let factor = settings.swipeSensitivity * (settings.invertSwipe != mirrored ? -1 : 1)
         animator.cancel()
         overlays.hideTransient()
         strip.scroll(by: delta * factor, config: settings.layout, viewportWidth: viewport(of: display).width)
@@ -645,9 +679,12 @@ final class Engine {
 
     /// Moves one column left or right on the display under the mouse pointer
     /// (a mouse-wheel notch or a click on the menu bar arrows).
-    func step(forward: Bool, honourReverse: Bool = true) {
+    /// `visual` steps (the ‹ › buttons) go to the window on that side of the
+    /// screen; others (the mouse wheel) go to the strip's next window.
+    func step(forward: Bool, honourReverse: Bool = true, visual: Bool = false) {
         guard isRunning, !isPaused else { return }
-        let next = honourReverse && settings.invertSwipe ? !forward : forward
+        var next = honourReverse && settings.invertSwipe ? !forward : forward
+        if visual && settings.layout.direction == .rightToLeft { next.toggle() }
         guard let display = displayUnderMouse() ?? displays.first else { return }
         let key = currentKey(display)
         guard var strip = strips[key], !strip.isEmpty else { return }
@@ -1235,6 +1272,13 @@ final class Engine {
         let actual = Rect(frame)
         if resized {
             guard abs(actual.width - applied.width) > 4, let display = display(for: key) else { return }
+            // A tile in a slide doesn't own the column's width; snap it back after the resize.
+            if let strip = strips[key], let (c, _) = strip.locate(window.id), strip.columns[c].windows.count > 1,
+                strip.columns[c].isTiled || strip.columns[c].isTabbed
+            {
+                whenMouseIsUp { [weak self] in self?.finishUserMove(window, resized: true) }
+                return
+            }
             let fraction = settings.layout.fraction(forColumnWidth: actual.width, viewportWidth: viewport(of: display).width)
             strips[key]?.setWidth(fraction, of: window.id)
         } else {

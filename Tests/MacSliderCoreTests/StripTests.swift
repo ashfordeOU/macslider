@@ -361,14 +361,17 @@ final class StripTests: XCTestCase {
         s.regroup([[2, 3], [1, 4]], width: 1)
         XCTAssertEqual(s.columns.map(\.windows), [[1], [2, 3], [4]])
         XCTAssertEqual(s.focusedWindow, 3)
-        XCTAssertTrue(s.columns[1].isGrid)
+        XCTAssertEqual(s.columns[1].arrangement, .grid)
     }
 
     func testOldColumnJSONStillDecodes() throws {
         let json = #"{"windows":[7],"active":0,"width":0.5,"isFullWidth":false}"#
         let column = try JSONDecoder().decode(Column.self, from: Data(json.utf8))
         XCTAssertEqual(column.windows, [7])
-        XCTAssertFalse(column.isGrid)
+        XCTAssertEqual(column.arrangement, .stack)
+        let grid = try JSONDecoder().decode(
+            Column.self, from: Data(#"{"windows":[7,8],"isGrid":true}"#.utf8))
+        XCTAssertEqual(grid.arrangement, .grid)
     }
 
     func testStackIntoRightAndPopLeft() {

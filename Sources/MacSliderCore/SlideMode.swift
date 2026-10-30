@@ -74,7 +74,10 @@ public enum SlideMode {
         case KeyCode.equal: return .action(.wider)
         case KeyCode.leftBracket: return .action(shift ? .expelLeft : .consumeIntoLeft)
         case KeyCode.rightBracket: return .action(shift ? .expel : .consumeIntoRight)
-        case KeyCode.g: return .action(.toggleGrid)
+        case KeyCode.g: return .action(.cycleLayout)
+        case KeyCode.period: return .action(.mainLarger)
+        case KeyCode.comma: return .action(.mainSmaller)
+        case KeyCode.m: return .action(.makeMain)
         case KeyCode.a: return .action(.regroup)
         case KeyCode.o, KeyCode.tab: return .action(.overview)
         case KeyCode.t: return .action(.toggleFloat)
@@ -98,7 +101,7 @@ public enum SlideMode {
         ("R", "width"),
         ("F", "fill"),
         ("C", "centre"),
-        ("G", "grid"),
+        ("G", "layout"),
         ("O", "overview"),
         ("1–9", "jump"),
         ("esc", "done"),

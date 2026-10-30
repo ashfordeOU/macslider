@@ -76,7 +76,7 @@ public enum Grouping {
             // A lone window: share a slide with other lone windows if one has room.
             let candidates = scrolling.filter { index in
                 let column = strip.columns[index]
-                return column.isGrid && column.windows.count < pairSize
+                return column.isTiled && column.windows.count < pairSize
                     && apps(of: index).allSatisfy { name in name.map { counts[$0] == 1 } ?? false }
             }
             if let best = nearest(candidates, to: strip.focusedColumn) { return .join(column: best) }
@@ -87,7 +87,7 @@ public enum Grouping {
         let capacityForApp = max(capacity(newApp), 1)
         let sameApp = scrolling.filter { index in
             let column = strip.columns[index]
-            return column.isGrid && column.windows.count < capacityForApp
+            return column.isTiled && column.windows.count < capacityForApp
                 && apps(of: index).allSatisfy { $0 == newApp }
         }
         if let best = nearest(sameApp, to: strip.focusedColumn) { return .join(column: best) }

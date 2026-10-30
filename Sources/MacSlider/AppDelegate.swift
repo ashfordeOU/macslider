@@ -215,8 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func stepLeft() { engine.step(forward: false, honourReverse: false) }
-    @objc private func stepRight() { engine.step(forward: true, honourReverse: false) }
+    @objc private func stepLeft() { engine.step(forward: false, honourReverse: false, visual: true) }
+    @objc private func stepRight() { engine.step(forward: true, honourReverse: false, visual: true) }
 
     private func setUpStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

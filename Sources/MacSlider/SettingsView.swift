@@ -142,15 +142,23 @@ private struct LayoutPane: View {
     var body: some View {
         Form {
             Section {
+                Picker("Strip direction", selection: $store.settings.layout.direction) {
+                    ForEach(StripDirection.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
                 Toggle("Group windows into slides by app", isOn: $store.settings.groupByApp)
-                Stepper(value: $store.settings.tilesPerSlide, in: 1...4) {
+                Stepper(value: $store.settings.tilesPerSlide, in: 1...9) {
                     Text("Windows per slide: \(store.settings.tilesPerSlide)")
                 }
                 .disabled(!store.settings.groupByApp)
+                Picker("Slide layout", selection: $store.settings.slideArrangement) {
+                    ForEach(Arrangement.allCases, id: \.self) { arrangement in
+                        Label(arrangement.title, systemImage: arrangement.symbol).tag(arrangement)
+                    }
+                }
             } header: {
                 Text("Slides")
             } footer: {
-                Text("Windows of the same app share a full-screen slide; apps with one window pair up with another. Terminals get four tiles per slide — change this per app under Apps. Press ⌃⌥A to regroup everything, ⌃⌥G to turn any column into a grid.")
+                Text("Windows of the same app share a full-screen slide; apps with one window pair up with another. Terminals get four tiles per slide — change tiles and layout per app under Apps. ⌃⌥A regroups everything; ⌃⌥G cycles a slide through Grid, Columns, Main + side, Main + bottom and Rows; ⌃⌥. and ⌃⌥, resize the main window; ⌃⌥M makes a window the main one. Right to left mirrors the whole strip.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Section("Spacing") {
@@ -372,12 +380,6 @@ private struct AppsPane: View {
                             }
                             .frame(width: 150)
                             .disabled(rule.float)
-                            Picker("Per slide", selection: $rule.tiles) {
-                                Text("Default").tag(Int?.none)
-                                ForEach(1...4, id: \.self) { Text("\($0)").tag(Int?.some($0)) }
-                            }
-                            .frame(width: 130)
-                            .disabled(rule.float)
                             Picker("Opens", selection: $rule.position) {
                                 Text("Default").tag(Strip.InsertPosition?.none)
                                 Text("Next").tag(Strip.InsertPosition?.some(.afterFocused))
@@ -385,6 +387,20 @@ private struct AppsPane: View {
                                 Text("End").tag(Strip.InsertPosition?.some(.end))
                             }
                             .frame(width: 150)
+                            .disabled(rule.float)
+                        }
+                        HStack(spacing: 16) {
+                            Picker("Per slide", selection: $rule.tiles) {
+                                Text("Default").tag(Int?.none)
+                                ForEach(1...9, id: \.self) { Text("\($0)").tag(Int?.some($0)) }
+                            }
+                            .frame(width: 130)
+                            .disabled(rule.float)
+                            Picker("Layout", selection: $rule.arrangement) {
+                                Text("Default").tag(Arrangement?.none)
+                                ForEach(Arrangement.allCases, id: \.self) { Text($0.title).tag(Arrangement?.some($0)) }
+                            }
+                            .frame(width: 200)
                             .disabled(rule.float)
                         }
                     }
@@ -418,7 +434,7 @@ private struct ShortcutsPane: View {
         ("Focus", [.focusLeft, .focusRight, .focusUp, .focusDown, .focusFirst, .focusLast, .overview, .windowSwitcher]),
         ("Move", [.moveLeft, .moveRight, .moveUp, .moveDown, .sendToNextDisplay]),
         ("Size", [.cycleWidth, .cycleWidthBackward, .narrower, .wider, .toggleFullWidth, .center, .toggleNativeFullScreen]),
-        ("Slides & columns", [.regroup, .toggleGrid, .consumeIntoLeft, .consumeIntoRight, .expelLeft, .expel,
+        ("Slides & columns", [.regroup, .cycleLayout, .mainLarger, .mainSmaller, .makeMain, .consumeIntoLeft, .consumeIntoRight, .expelLeft, .expel,
                               .toggleTabbed, .pinLeft, .pinRight, .toggleFloat]),
         ("Workspaces", Action.allCases.filter { $0.workspaceNumber != nil || $0.moveToWorkspaceNumber != nil }),
         ("Jump", [.focusColumn1, .focusColumn2, .focusColumn3, .focusColumn4, .focusColumn5,

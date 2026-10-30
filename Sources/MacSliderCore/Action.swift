@@ -34,7 +34,10 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case pinLeft = "pin-left"
     case pinRight = "pin-right"
     case toggleTabbed = "toggle-tabbed"
-    case toggleGrid = "toggle-grid"
+    case cycleLayout = "cycle-layout"
+    case mainLarger = "main-larger"
+    case mainSmaller = "main-smaller"
+    case makeMain = "make-main"
     case regroup
     case overview
     case toggleNativeFullScreen = "toggle-fullscreen"
@@ -87,7 +90,10 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .pinLeft: return "Pin column to left edge"
         case .pinRight: return "Pin column to right edge"
         case .toggleTabbed: return "Tabbed column on / off"
-        case .toggleGrid: return "Grid of tiles on / off"
+        case .cycleLayout: return "Next slide layout"
+        case .mainLarger: return "Main window larger"
+        case .mainSmaller: return "Main window smaller"
+        case .makeMain: return "Make main window"
         case .regroup: return "Group windows by app"
         case .overview: return "Overview of all windows"
         case .toggleNativeFullScreen: return "macOS full screen"

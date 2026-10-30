@@ -11,6 +11,8 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     public var position: Strip.InsertPosition?
     /// How many of this app's windows share one slide when grouping by app.
     public var tiles: Int?
+    /// Layout of this app's slides, overriding the default.
+    public var arrangement: Arrangement?
 
     public var id: String { bundleID }
 
@@ -20,7 +22,8 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         float: Bool = false,
         width: Double? = nil,
         position: Strip.InsertPosition? = nil,
-        tiles: Int? = nil
+        tiles: Int? = nil,
+        arrangement: Arrangement? = nil
     ) {
         self.bundleID = bundleID
         self.name = name
@@ -28,6 +31,7 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         self.width = width
         self.position = position
         self.tiles = tiles
+        self.arrangement = arrangement
     }
 }
 
@@ -107,6 +111,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var groupByApp = true
     /// Windows per slide when grouping, unless an app rule says otherwise.
     public var tilesPerSlide = 2
+    /// Layout of new slides, unless an app rule says otherwise.
+    public var slideArrangement: Arrangement = .grid
     /// Workspaces per display (1...9). Each has its own strip.
     public var workspaceCount = 4
     /// Look for new versions on GitHub once a day.
@@ -143,13 +149,18 @@ public struct AppSettings: Equatable, Codable, Sendable {
         min(max(rule(for: bundleID)?.tiles ?? tilesPerSlide, 1), 9)
     }
 
+    /// Layout for a new slide of an app.
+    public func arrangement(for bundleID: String?) -> Arrangement {
+        rule(for: bundleID)?.arrangement ?? slideArrangement
+    }
+
     private enum CodingKeys: String, CodingKey {
         case layout, animate, animationDuration, modifierSwipe, scrollModifier, scrollOverMenuBar
         case showNavigationArrows, slideTrigger, swipeFingers, swipeSensitivity, invertSwipe
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement
     }
 
     public init(from decoder: Decoder) throws {
@@ -183,10 +194,11 @@ public struct AppSettings: Equatable, Codable, Sendable {
         keymap = value(.keymap, d.keymap)
         hasCompletedOnboarding = value(.hasCompletedOnboarding, d.hasCompletedOnboarding)
         groupByApp = value(.groupByApp, d.groupByApp)
-        tilesPerSlide = value(.tilesPerSlide, d.tilesPerSlide)
+        tilesPerSlide = min(max(value(.tilesPerSlide, d.tilesPerSlide), 1), 9)
         workspaceCount = min(max(value(.workspaceCount, d.workspaceCount), 1), 9)
         checkForUpdates = value(.checkForUpdates, d.checkForUpdates)
         sliderBar = value(.sliderBar, d.sliderBar)
+        slideArrangement = value(.slideArrangement, d.slideArrangement)
         sliderBarEdge = value(.sliderBarEdge, d.sliderBarEdge)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

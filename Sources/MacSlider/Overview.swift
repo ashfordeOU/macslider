@@ -171,6 +171,8 @@ private struct StripRow: View {
                             .background(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [5])))
                     }
                 }
+                // A right-to-left strip reads right to left here too.
+                .environment(\.layoutDirection, strip.isRightToLeft ? .rightToLeft : .leftToRight)
             }
         }
     }
@@ -225,8 +227,11 @@ private struct ColumnCard: View {
             HStack(spacing: 4) {
                 Image(systemName: "line.3.horizontal")
                 if column.pin != nil { Image(systemName: "pin.fill") }
-                if column.isGrid { Image(systemName: "square.grid.2x2") }
-                if column.isTabbed { Image(systemName: "menubar.rectangle") }
+                if column.isTabbed {
+                    Image(systemName: "menubar.rectangle")
+                } else if column.windows.count > 1 {
+                    Image(systemName: column.arrangement.symbol)
+                }
                 Spacer()
             }
             .font(.system(size: 11))
@@ -252,19 +257,11 @@ private struct ColumnCard: View {
         }
     }
 
+    /// The column's windows drawn where they really sit: the same unit
+    /// rectangles the layout uses, mirrored for a right-to-left strip.
     @ViewBuilder private var tiles: some View {
         let windows = column.windows
-        if column.isGrid && windows.count > 1 {
-            let rows = stride(from: 0, to: windows.count, by: 2).map { Array(windows[$0..<min($0 + 2, windows.count)]) }
-            VStack(spacing: 4) {
-                ForEach(rows.indices, id: \.self) { index in
-                    HStack(spacing: 4) {
-                        ForEach(rows[index]) { tile($0) }
-                    }
-                }
-            }
-            .padding(4)
-        } else if column.isTabbed {
+        if column.isTabbed {
             VStack(spacing: 4) {
                 HStack(spacing: 3) {
                     ForEach(windows) { window in
@@ -278,10 +275,21 @@ private struct ColumnCard: View {
             }
             .padding(4)
         } else {
-            VStack(spacing: 4) {
-                ForEach(windows) { tile($0) }
+            GeometryReader { geometry in
+                let frames = column.arrangement.unitFrames(count: windows.count, split: column.split)
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(windows.enumerated()), id: \.element.id) { index, window in
+                        let unit = frames[index]
+                        let x = strip.isRightToLeft ? 1 - unit.maxX : unit.minX
+                        tile(window)
+                            .frame(
+                                width: max(unit.width * geometry.size.width - 4, 4),
+                                height: max(unit.height * geometry.size.height - 4, 4))
+                            .offset(x: x * geometry.size.width + 2, y: unit.minY * geometry.size.height + 2)
+                    }
+                }
             }
-            .padding(4)
+            .padding(2)
         }
     }
 

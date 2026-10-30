@@ -41,7 +41,7 @@ public enum KeyCode {
     public static let y: UInt16 = 16, t: UInt16 = 17, o: UInt16 = 31, u: UInt16 = 32, i: UInt16 = 34
     public static let p: UInt16 = 35, l: UInt16 = 37, j: UInt16 = 38, k: UInt16 = 40, n: UInt16 = 45
     public static let m: UInt16 = 46
-    public static let equal: UInt16 = 24, minus: UInt16 = 27
+    public static let equal: UInt16 = 24, minus: UInt16 = 27, comma: UInt16 = 43, period: UInt16 = 47
     public static let rightBracket: UInt16 = 30, leftBracket: UInt16 = 33
     public static let returnKey: UInt16 = 36, tab: UInt16 = 48, space: UInt16 = 49
     public static let delete: UInt16 = 51, escape: UInt16 = 53
@@ -170,7 +170,10 @@ public struct Keymap: Equatable, Codable, Sendable {
             .pinLeft: [s(KeyCode.p, co)],
             .pinRight: [s(KeyCode.p, cos)],
             .toggleTabbed: [s(KeyCode.w, co), s(KeyCode.t, cos)],
-            .toggleGrid: [s(KeyCode.g, co)],
+            .cycleLayout: [s(KeyCode.g, co)],
+            .mainLarger: [s(KeyCode.period, co)],
+            .mainSmaller: [s(KeyCode.comma, co)],
+            .makeMain: [s(KeyCode.m, co)],
             .regroup: [s(KeyCode.a, co)],
             .overview: [s(KeyCode.o, co), s(KeyCode.tab, co)],
             .toggleNativeFullScreen: [s(KeyCode.f, cos)],
