@@ -553,6 +553,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked(_:))
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        statusItem.button?.toolTip = Brand.full
         updateStatusItem()
     }
 
@@ -678,7 +679,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(shortcutsMenu())
         menu.addItem(item("Welcome Tour…", #selector(showWelcomeFromMenu)))
         menu.addItem(item("Check for Updates…", #selector(checkForUpdates)))
-        menu.addItem(item("About Monorail", #selector(showAbout)))
+        menu.addItem(item("About \(Brand.full)", #selector(showAbout)))
         menu.addItem(.separator())
         menu.addItem(item("Quit Monorail", #selector(quit), key: "q"))
     }
@@ -959,7 +960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 setPaused: { [weak self] in self?.engine.setPaused($0) }
             )
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-            window.title = "Monorail Settings"
+            window.title = "\(Brand.full) — Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
             window.center()
@@ -976,7 +977,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.welcomeWindow?.close()
             }
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-            window.title = "Welcome to Monorail"
+            window.title = "Welcome to \(Brand.full)"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()

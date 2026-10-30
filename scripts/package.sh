@@ -31,13 +31,13 @@ if command -v dmgbuild > /dev/null; then
     dmgbuild -s scripts/dmg-settings.py \
         -D app="$APP" -D background="$BACKGROUND" \
         -D volume_icon="$APP/Contents/Resources/AppIcon.icns" \
-        "Monorail ${VERSION}" "$DMG"
+        "Monorail by Ashforde® ${VERSION}" "$DMG"
 else
     echo "    (dmgbuild not found: making a plain disk image; pip install dmgbuild for the styled one)"
     STAGING="$(mktemp -d)"
     cp -R "$APP" "$STAGING/"
     ln -s /Applications "$STAGING/Applications"
-    hdiutil create -volname "Monorail ${VERSION}" -srcfolder "$STAGING" -ov -format UDZO "$DMG" > /dev/null
+    hdiutil create -volname "Monorail by Ashforde® ${VERSION}" -srcfolder "$STAGING" -ov -format UDZO "$DMG" > /dev/null
     rm -rf "$STAGING"
 fi
 

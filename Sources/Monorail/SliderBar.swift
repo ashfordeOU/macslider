@@ -968,7 +968,10 @@ private struct SliderPopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Text("Monorail").font(.headline)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(Brand.name).font(.headline)
+                    Text(Brand.maker).font(.caption).foregroundStyle(.secondary)
+                }
                 if let map = model.map {
                     Text(map.workspaceCount > 1 ? "Workspace \(map.workspace + 1) · \(map.tiles.count) slides"
                                                 : "\(map.tiles.count) slides")

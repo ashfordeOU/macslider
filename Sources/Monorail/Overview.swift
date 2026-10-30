@@ -145,7 +145,11 @@ struct OverviewView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Overview").font(.system(size: 32, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("Overview").font(.system(size: 32, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    Text(Brand.full).font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
                 Text("Click or use the arrow keys and return to jump · drag a window onto a slide to pair it, between slides for its own, or onto the bin to close it · drag ≡ to reorder · esc closes")
                     .font(.callout).foregroundStyle(.white.opacity(0.65))
                     .lineLimit(2)

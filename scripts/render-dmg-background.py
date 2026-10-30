@@ -34,10 +34,15 @@ def render(scale):
 
     d = ImageDraw.Draw(img)
     # Title.
-    title = "Monorail"
+    title, maker = "Monorail", " by Ashforde®"
     f = font(s(26), bold=True)
+    fm = font(s(17))
     tw = d.textlength(title, font=f)
-    d.text(((s(W) - tw) / 2, s(34)), title, fill=(70, 30, 70, 255), font=f)
+    mw = d.textlength(maker, font=fm)
+    x = (s(W) - tw - mw) / 2
+    d.text((x, s(34)), title, fill=(70, 30, 70, 255), font=f)
+    # The maker sits on the title's baseline.
+    d.text((x + tw, s(34) + f.getmetrics()[0] - fm.getmetrics()[0]), maker, fill=(150, 90, 120, 255), font=fm)
     sub = "Every window rides one rail."
     f2 = font(s(13))
     sw = d.textlength(sub, font=f2)
@@ -84,7 +89,7 @@ def installer_preview():
     for i, color in enumerate([(255, 95, 87), (254, 188, 46), (40, 200, 64)]):
         cx, cy, r = (20 + i * 20) * s, 14 * s, 6 * s
         d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=color + (255,))
-    label = "Monorail"
+    label = "Monorail by Ashforde®"
     f = font(13 * s, bold=True)
     d.text(((W * s - d.textlength(label, font=f)) / 2, 6 * s), label, fill=(60, 50, 60, 255), font=f)
     icon = Image.open(os.path.join(ROOT, "assets", "icon.png")).convert("RGBA").resize((128 * s, 128 * s), Image.LANCZOS)

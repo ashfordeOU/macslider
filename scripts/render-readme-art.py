@@ -86,7 +86,7 @@ def banner():
                   f'calcMode="spline" keyTimes="0;0.2;0.45;0.7;1" '
                   f'keySplines="0.45 0 0.2 1;0.45 0 0.2 1;0.45 0 0.2 1;0.45 0 0.2 1" '
                   f'values="0 0;{travel * 0.35 * scale:.1f} 0;{travel * scale:.1f} 0;{travel * 0.6 * scale:.1f} 0;0 0"/>')
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" aria-label="Monorail: every window rides one rail">
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" aria-label="Monorail by Ashforde®: every window rides one rail">
 <defs>
   <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0" stop-color="{CORAL}"/><stop offset="0.5" stop-color="{PINK}"/><stop offset="1" stop-color="{PLUM}"/>
@@ -114,7 +114,7 @@ def banner():
   {''.join(tiles)}
   <g>{frame_anim}<rect x="{bx + 8}" y="{by + 5}" width="{frame_w:.1f}" height="30" rx="8" fill="#fff" fill-opacity="0.15" stroke="#fff" stroke-width="2.5"/></g>
   {m_icon(70, 96, 92)}
-  <text x="70" y="262" font-family="{FONT}" font-size="76" font-weight="800" fill="#fff" letter-spacing="-1.5">Monorail</text>
+  <text x="70" y="262" font-family="{FONT}" font-size="76" font-weight="800" fill="#fff" letter-spacing="-1.5">Monorail<tspan dx="16" font-size="30" font-weight="600" letter-spacing="0" opacity="0.85">by Ashforde®</tspan></text>
   <text x="72" y="306" font-family="{FONT}" font-size="27" font-weight="600" fill="#fff" opacity="0.95">Every window rides one rail.</text>
   <text x="72" y="344" font-family="{FONT}" font-size="19" fill="#fff" opacity="0.8">A scrolling window manager for macOS.</text>
   <text x="72" y="372" font-family="{FONT}" font-size="19" fill="#fff" opacity="0.8">Free and open source.</text>

@@ -10,6 +10,8 @@
 	<string>Monorail</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<key>CFBundleGetInfoString</key>
+	<string>Monorail by Ashforde®</string>
 	<key>CFBundleIdentifier</key>
 	<string>org.ashforde.macslider</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -47,7 +49,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Monorail reads the name of your Wi-Fi network to switch profile or layout when you join it. Your location is never stored or sent anywhere.</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>© Ashforde OÜ. Licensed under the GNU AGPL v3.0.</string>
+	<string>Monorail by Ashforde®. © Ashforde OÜ. Licensed under the GNU AGPL v3.0.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 	<key>NSSupportsSuddenTermination</key>

@@ -67,7 +67,10 @@ struct WelcomeView: View {
             HStack(spacing: 14) {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 64, height: 64)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Welcome to Monorail").font(.title).fontWeight(.semibold)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("Welcome to \(Brand.name)").font(.title).fontWeight(.semibold)
+                        Text(Brand.maker).font(.title3).foregroundStyle(.secondary)
+                    }
                     Text("Your windows sit side by side on one endless strip. Nothing shrinks, nothing overlaps.")
                         .foregroundStyle(.secondary)
                 }

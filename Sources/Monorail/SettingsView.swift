@@ -1185,7 +1185,10 @@ private struct AboutPane: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 96, height: 96)
-            Text("Monorail").font(.largeTitle).fontWeight(.semibold)
+            VStack(spacing: 2) {
+                Text(Brand.name).font(.largeTitle).fontWeight(.semibold)
+                Text(Brand.maker).font(.title3).foregroundStyle(.secondary)
+            }
             Text("Version \(version)").foregroundStyle(.secondary)
             Text("A scrolling window manager for macOS. Every window keeps its size on one endless strip.")
                 .multilineTextAlignment(.center)
@@ -1194,7 +1197,7 @@ private struct AboutPane: View {
                 Link("Website & source", destination: URL(string: "https://github.com/ashfordeOU/monorail")!)
                 Link("Report an issue", destination: URL(string: "https://github.com/ashfordeOU/monorail/issues")!)
             }
-            Text("© Ashforde OÜ · Licensed under the GNU AGPL v3.0")
+            Text("\(Brand.full) · © Ashforde OÜ · Licensed under the GNU AGPL v3.0")
                 .font(.footnote).foregroundStyle(.secondary)
             Button("Reveal settings file") {
                 NSWorkspace.shared.activateFileViewerSelecting([SettingsStore.fileURL])

@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="assets/readme/banner.svg" alt="Monorail — every window rides one rail" width="100%">
+<img src="assets/readme/banner.svg" alt="Monorail by Ashforde® — every window rides one rail" width="100%">
 
 <br>
 
-[![Download Monorail](https://img.shields.io/badge/Download-Monorail%20for%20Mac-F66270?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/ashfordeOU/monorail/releases/latest)
+[![Download Monorail by Ashforde®](https://img.shields.io/badge/Download-Monorail%20by%20Ashforde%C2%AE-F66270?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/ashfordeOU/monorail/releases/latest)
 
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-2A1430?logo=apple)
 ![Universal](https://img.shields.io/badge/Apple%20silicon%20%2B%20Intel-universal-D63A80)
@@ -16,6 +16,8 @@
 </div>
 
 ---
+
+**Monorail by Ashforde®** is a scrolling window manager for your Mac.
 
 Grid tilers squeeze every new window into the space that's already there.
 **Monorail does the opposite.** Each window is a column on a horizontal strip
@@ -677,7 +679,8 @@ Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md
 
 ## License
 
-Copyright © 2026 Ashforde OÜ.
+Monorail by Ashforde®. Copyright © 2026 Ashforde OÜ. Ashforde® is a
+registered trademark of Ashforde OÜ.
 
 Monorail is free software: you can redistribute it and/or modify it under the
 terms of the [GNU Affero General Public License v3.0](LICENSE) as published by
