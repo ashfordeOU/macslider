@@ -605,8 +605,8 @@ private struct AboutPane: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
             HStack(spacing: 16) {
-                Link("Website & source", destination: URL(string: "https://github.com/ashfordeOU/macslider")!)
-                Link("Report an issue", destination: URL(string: "https://github.com/ashfordeOU/macslider/issues")!)
+                Link("Website & source", destination: URL(string: "https://github.com/ashfordeOU/monorail")!)
+                Link("Report an issue", destination: URL(string: "https://github.com/ashfordeOU/monorail/issues")!)
             }
             Text("© Ashforde OÜ · Licensed under the GNU AGPL v3.0")
                 .font(.footnote).foregroundStyle(.secondary)

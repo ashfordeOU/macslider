@@ -9,7 +9,7 @@
 **A scrolling window manager for macOS.**
 Every window sits side by side on one endless strip. Nothing shrinks, nothing overlaps.
 
-[Download](https://github.com/ashfordeOU/macslider/releases/latest) ·
+[Download](https://github.com/ashfordeOU/monorail/releases/latest) ·
 [Shortcuts](#keyboard-shortcuts) ·
 [Build from source](#build-from-source) ·
 [License](#license)
@@ -17,7 +17,7 @@ Every window sits side by side on one endless strip. Nothing shrinks, nothing ov
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 ![Universal](https://img.shields.io/badge/Apple%20silicon%20%2B%20Intel-universal-blue)
 ![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-green)
-[![CI](https://github.com/ashfordeOU/macslider/actions/workflows/ci.yml/badge.svg)](https://github.com/ashfordeOU/macslider/actions/workflows/ci.yml)
+[![CI](https://github.com/ashfordeOU/monorail/actions/workflows/ci.yml/badge.svg)](https://github.com/ashfordeOU/monorail/actions/workflows/ci.yml)
 
 </div>
 
@@ -52,7 +52,7 @@ glides just far enough to bring the window into view.
 
 ### Download
 
-1. Download **Monorail.dmg** from the [latest release](https://github.com/ashfordeOU/macslider/releases/latest).
+1. Download **Monorail.dmg** from the [latest release](https://github.com/ashfordeOU/monorail/releases/latest).
 2. Open it and drag **Monorail** to **Applications**.
 3. Open Monorail and allow **Accessibility** access when asked.
 
@@ -64,7 +64,7 @@ glides just far enough to bring the window into view.
 ### Terminal
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ashfordeOU/macslider/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ashfordeOU/monorail/main/scripts/install.sh | bash
 ```
 
 This downloads the latest release, installs it in `/Applications` and opens it.
@@ -350,8 +350,8 @@ when you accept one, its download. Both can be turned off in **Settings → Gene
 You need Xcode 15 or later (or the matching Swift toolchain) on macOS 13 or later.
 
 ```bash
-git clone https://github.com/ashfordeOU/macslider.git
-cd macslider   # the repository keeps its original name
+git clone https://github.com/ashfordeOU/monorail.git
+cd monorail
 make test      # run the unit tests
 make app       # build dist/Monorail.app (universal, ad-hoc signed)
 make package   # also build the .zip, .dmg and SHA256SUMS

@@ -11,7 +11,7 @@
 set -euo pipefail
 
 NAME="MacSlider Self-Signed"  # the certificate's name; kept so existing secrets and permissions stay valid
-REPO="ashfordeOU/macslider"
+REPO="ashfordeOU/monorail"
 OPENSSL=/usr/bin/openssl   # macOS LibreSSL writes .p12 files the keychain can import
 [ -x "$OPENSSL" ] || OPENSSL=openssl
 

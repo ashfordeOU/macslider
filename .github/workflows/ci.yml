@@ -54,6 +54,11 @@ jobs:
         run: |
           codesign --display --requirements - dist/Monorail.app 2>&1 | tee requirement.txt
           grep -q 'certificate leaf' requirement.txt
+      - name: Install dmgbuild
+        run: |
+          python3 -m venv "$RUNNER_TEMP/dmg"
+          "$RUNNER_TEMP/dmg/bin/pip" install --quiet dmgbuild
+          echo "$RUNNER_TEMP/dmg/bin" >> "$GITHUB_PATH"
       - name: Package
         run: scripts/package.sh
       - uses: actions/upload-artifact@v5

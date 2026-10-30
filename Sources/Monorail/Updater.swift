@@ -9,8 +9,8 @@ import SwiftUI
 /// and relaunches. Checking GitHub is Monorail's only network request, and
 /// it can be turned off in Settings.
 final class Updater: ObservableObject {
-    static let releasesURL = URL(string: "https://github.com/ashfordeOU/macslider/releases/latest")!
-    private static let apiURL = URL(string: "https://api.github.com/repos/ashfordeOU/macslider/releases/latest")!
+    static let releasesURL = URL(string: "https://github.com/ashfordeOU/monorail/releases/latest")!
+    private static let apiURL = URL(string: "https://api.github.com/repos/ashfordeOU/monorail/releases/latest")!
     private static let lastCheckKey = "lastUpdateCheck"
     private static let skippedKey = "skippedVersion"
 

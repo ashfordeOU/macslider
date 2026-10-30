@@ -1,9 +1,9 @@
 #!/bin/bash
 # Installs the latest Monorail release into /Applications.
-#   curl -fsSL https://raw.githubusercontent.com/ashfordeOU/macslider/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/ashfordeOU/monorail/main/scripts/install.sh | bash
 set -euo pipefail
 
-REPO="ashfordeOU/macslider"
+REPO="ashfordeOU/monorail"
 DEST="/Applications"
 
 [ "$(uname -s)" = "Darwin" ] || { echo "Monorail runs on macOS only." >&2; exit 1; }

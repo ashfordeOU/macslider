@@ -4,7 +4,7 @@ Thanks for helping make Monorail better.
 
 ## Reporting bugs
 
-Open an [issue](https://github.com/ashfordeOU/macslider/issues) and include:
+Open an [issue](https://github.com/ashfordeOU/monorail/issues) and include:
 
 - your macOS version and Mac model (Apple silicon or Intel),
 - the Monorail version (Settings → About),
