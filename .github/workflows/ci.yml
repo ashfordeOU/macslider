@@ -17,14 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:6.1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: swift test
 
   macos:
     name: Build & test (macOS)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Toolchain
@@ -35,7 +35,7 @@ jobs:
         run: scripts/build-app.sh
       - name: Package
         run: scripts/package.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: MacSlider-${{ github.sha }}
           path: |
