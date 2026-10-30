@@ -69,32 +69,28 @@ struct OverviewActions {
     var park: (Int) -> Void = { _ in }
     var unpark: (Int) -> Void = { _ in }
     var setWorkspaceName: (Int, String) -> Void = { _, _ in }
+    var moveColumnAcross: (_ sourceRow: Int, _ column: Int, _ target: StripKey, _ index: Int) -> Void = { _, _, _, _ in }
 }
 
 /// The overview's backdrop: a deep, colourful gradient with soft glows and a
 /// fine dot pattern, over a blur of the desktop.
 private struct OverviewBackground: View {
+    private let backdrop = WorkspaceColor.backdrop(WorkspaceColor.theme)
+
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.13, green: 0.09, blue: 0.36),
-                    Color(red: 0.36, green: 0.13, blue: 0.5),
-                    Color(red: 0.05, green: 0.3, blue: 0.46),
-                ],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
+            LinearGradient(colors: backdrop.gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
             .opacity(0.9)
             GeometryReader { geometry in
                 let size = geometry.size
                 ZStack {
-                    Circle().fill(Color(red: 1, green: 0.38, blue: 0.62).opacity(0.35))
+                    Circle().fill(backdrop.glows[0].opacity(0.35))
                         .frame(width: size.width * 0.45).blur(radius: 140)
                         .position(x: size.width * 0.12, y: size.height * 0.1)
-                    Circle().fill(Color(red: 0.2, green: 0.8, blue: 0.86).opacity(0.3))
+                    Circle().fill(backdrop.glows[1].opacity(0.3))
                         .frame(width: size.width * 0.5).blur(radius: 160)
                         .position(x: size.width * 0.9, y: size.height * 0.92)
-                    Circle().fill(Color(red: 1, green: 0.58, blue: 0.27).opacity(0.18))
+                    Circle().fill(backdrop.glows[2].opacity(0.18))
                         .frame(width: size.width * 0.3).blur(radius: 120)
                         .position(x: size.width * 0.75, y: size.height * 0.15)
                 }
@@ -328,6 +324,9 @@ private struct DropSlot: View {
                         actions.moveWindow(id, strip.key, nil, index)
                     case .column(let sourceRow, let column) where sourceRow == row:
                         actions.moveColumn(column, index, strip.key)
+                    case .column(let sourceRow, let column):
+                        // A slide from another display or workspace.
+                        actions.moveColumnAcross(sourceRow, column, strip.key, index)
                     default:
                         break
                     }
@@ -656,6 +655,12 @@ final class OverviewController {
             self?.close()
             self?.commands.saveAppPair(id)
         }
+        commands.isSticky = { [weak self] id in self?.commands.isSticky(id) ?? false }
+        commands.toggleSticky = { [weak self] id in self?.commands.toggleSticky(id) }
+        commands.pictureInPicture = { [weak self] id in
+            self?.close()
+            self?.commands.pictureInPicture(id)
+        }
         return commands
     }
 
@@ -765,6 +770,12 @@ final class OverviewController {
             setWorkspaceName: { [weak self] index, name in
                 self?.setWorkspaceName(index, name)
                 DispatchQueue.main.async { self?.refresh() }
+            },
+            moveColumnAcross: { [weak self] sourceRow, column, target, index in
+                guard let self, self.model.strips.indices.contains(sourceRow) else { return }
+                self.engine?.overviewMoveColumn(
+                    from: column, of: self.model.strips[sourceRow].key, to: target, at: index)
+                self.refresh()
             }
         )
         // Frosted glass: blur whatever is behind the overview, then draw on top.

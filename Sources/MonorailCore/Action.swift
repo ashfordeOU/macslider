@@ -85,6 +85,11 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case toggleFocusMode = "focus-mode"
     case commandPalette = "command-palette"
     case takeSnapshot = "snapshot"
+    case toggleSticky = "sticky"
+    case zoomTile = "zoom"
+    case lastWindow = "last-window"
+    case quickLaunch = "launch"
+    case pictureInPicture = "picture-in-picture"
     case retile
     case undo
     case togglePause = "toggle-pause"
@@ -148,6 +153,11 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .toggleFocusMode: return "Focus mode on / off"
         case .commandPalette: return "Command palette"
         case .takeSnapshot: return "Take a session snapshot"
+        case .toggleSticky: return "Show window on every workspace"
+        case .zoomTile: return "Zoom tile to fill the slide"
+        case .lastWindow: return "Back to the last window"
+        case .quickLaunch: return "Quick launch (then a letter)"
+        case .pictureInPicture: return "Picture in picture"
         case .retile: return "Retile everything"
         case .undo: return "Undo last layout change"
         case .togglePause: return "Pause / resume"

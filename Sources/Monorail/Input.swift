@@ -307,6 +307,15 @@ final class TrackpadSwipe {
     /// Horizontal movement as a fraction of the trackpad width.
     var onScroll: (Double) -> Void = { _ in }
     var onEnd: () -> Void = {}
+    /// Watch for a quick three-finger tap (opens the overview).
+    var detectsTap = false
+    var onThreeFingerTap: () -> Void = {}
+
+    // Tap state, touched only on the callback thread.
+    private var tapStart: Double?
+    private var tapMostFingers = 0
+    private var tapOrigin: (x: Float, y: Float) = (0, 0)
+    private var tapMoved = false
 
     private typealias CreateListFn = @convention(c) () -> Unmanaged<CFArray>?
     private typealias RegisterFn = @convention(c) (UnsafeMutableRawPointer, MTContactCallback) -> Void
@@ -354,7 +363,39 @@ final class TrackpadSwipe {
         deviceList = nil
     }
 
-    fileprivate func frame(_ touches: UnsafeMutableRawPointer?, count: Int32) {
+    /// A tap: three fingers down and up within a quarter second, barely moving.
+    private func trackTap(_ touches: UnsafeMutableRawPointer?, count: Int32, time: Double) {
+        guard count > 0, let touches else {
+            if let start = tapStart, tapMostFingers == 3, !tapMoved, time - start < 0.25 {
+                DispatchQueue.main.async { self.onThreeFingerTap() }
+            }
+            tapStart = nil
+            tapMostFingers = 0
+            tapMoved = false
+            return
+        }
+        let contacts = touches.bindMemory(to: MTTouch.self, capacity: Int(count))
+        var x: Float = 0
+        var y: Float = 0
+        for i in 0..<Int(count) {
+            x += contacts[i].normalized.position.x
+            y += contacts[i].normalized.position.y
+        }
+        x /= Float(count)
+        y /= Float(count)
+        if tapStart == nil {
+            tapStart = time
+            tapOrigin = (x, y)
+        }
+        if Int(count) > tapMostFingers {
+            tapMostFingers = Int(count)
+            tapOrigin = (x, y)
+        }
+        if abs(x - tapOrigin.x) > 0.03 || abs(y - tapOrigin.y) > 0.03 || count > 3 { tapMoved = true }
+    }
+
+    fileprivate func frame(_ touches: UnsafeMutableRawPointer?, count: Int32, time: Double) {
+        if detectsTap { trackTap(touches, count: count, time: time) }
         let wanted = fingers
         guard wanted > 0 else { return }
         guard Int(count) == wanted, let touches else {
@@ -397,7 +438,7 @@ private func multitouchCallback(
     _ device: UnsafeMutableRawPointer?, _ touches: UnsafeMutableRawPointer?, _ count: Int32,
     _ timestamp: Double, _ frame: Int32
 ) -> Int32 {
-    TrackpadSwipe.shared.frame(touches, count: count)
+    TrackpadSwipe.shared.frame(touches, count: count, time: timestamp)
     return 0
 }
 #endif

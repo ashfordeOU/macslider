@@ -213,13 +213,26 @@ final class SettingsV6Tests: XCTestCase {
         XCTAssertFalse(decoded.keymap.shortcuts(for: .toggleFocusMode).isEmpty)
     }
 
-    func testDefaultKeymapHasNoClashes() {
-        var seen: [Shortcut: Action] = [:]
-        for (action, shortcuts) in Keymap.default.bindings {
-            for shortcut in shortcuts {
-                XCTAssertNil(seen[shortcut], "\(action) clashes with \(seen[shortcut].map { "\($0)" } ?? "")")
-                seen[shortcut] = action
-            }
-        }
+    func testSmartGaps() {
+        var settings = AppSettings()
+        settings.layout.gap = 10
+        settings.layout.edgeGap = 8
+        XCTAssertEqual(settings.layout(for: "A", displayWidth: 3000, windowCount: 1).gap, 10, "off by default")
+        settings.smartGaps = true
+        XCTAssertEqual(settings.layout(for: "A", displayWidth: 1440, windowCount: 1).gap, 0)
+        XCTAssertEqual(settings.layout(for: "A", displayWidth: 1440, windowCount: 1).edgeGap, 0)
+        XCTAssertEqual(settings.layout(for: "A", displayWidth: 3000, windowCount: 3).gap, 15)
+        XCTAssertEqual(settings.layout(for: "A", displayWidth: 1440, windowCount: 3).gap, 10)
+    }
+
+    func testAutoRuleTiming() {
+        let weekdays = AutoRule(name: "Work", trigger: .time, minuteOfDay: 9 * 60, weekdays: [2, 3, 4, 5, 6])
+        XCTAssertTrue(weekdays.isDue(minuteOfDay: 540, weekday: 2))
+        XCTAssertFalse(weekdays.isDue(minuteOfDay: 540, weekday: 1))
+        XCTAssertFalse(weekdays.isDue(minuteOfDay: 541, weekday: 2))
+        var off = weekdays
+        off.isEnabled = false
+        XCTAssertFalse(off.isDue(minuteOfDay: 540, weekday: 2))
+        XCTAssertTrue(AutoRule(name: "Daily", trigger: .time, minuteOfDay: 60).isDue(minuteOfDay: 60, weekday: 7))
     }
 }

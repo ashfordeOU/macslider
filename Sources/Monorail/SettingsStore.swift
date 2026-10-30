@@ -59,6 +59,106 @@ final class SettingsStore: ObservableObject {
         } catch {
             log.error("Saving settings failed: \(error.localizedDescription)")
         }
+        if settings.syncThroughICloud { scheduleCloudPush() }
+    }
+
+    // MARK: - Export, import and iCloud Drive
+
+    /// Everything worth moving to another Mac: settings (with app pairs,
+    /// custom layouts, rules and shortcuts) and saved layouts.
+    struct SettingsBundle: Codable {
+        var settings: AppSettings
+        var layouts: [SavedLayout]?
+        var savedAt: Date
+        var machine: String
+    }
+
+    static var layoutsURL: URL { directory.appendingPathComponent("saved-layouts.json") }
+    /// Called after import or sync replaced the saved layouts on disk.
+    var onLayoutsChanged: () -> Void = {}
+
+    private static var machine: String { Host.current().localizedName ?? "Mac" }
+
+    func makeBundle() -> SettingsBundle {
+        let layouts = (try? Data(contentsOf: Self.layoutsURL)).flatMap { try? JSONDecoder().decode([SavedLayout].self, from: $0) }
+        return SettingsBundle(settings: settings, layouts: layouts, savedAt: Date(), machine: Self.machine)
+    }
+
+    func export(to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(makeBundle()).write(to: url, options: .atomic)
+    }
+
+    func importBundle(from url: URL) throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        apply(try decoder.decode(SettingsBundle.self, from: Data(contentsOf: url)), keepSync: true)
+    }
+
+    /// Takes settings from another Mac, keeping this Mac's own choices about
+    /// syncing and its displays.
+    private func apply(_ bundle: SettingsBundle, keepSync: Bool) {
+        var incoming = bundle.settings
+        if keepSync { incoming.syncThroughICloud = settings.syncThroughICloud }
+        incoming.displayOverrides.merge(settings.displayOverrides) { _, mine in mine }
+        incoming.hasCompletedOnboarding = settings.hasCompletedOnboarding
+        if let layouts = bundle.layouts, let data = try? JSONEncoder().encode(layouts) {
+            try? data.write(to: Self.layoutsURL, options: .atomic)
+            onLayoutsChanged()
+        }
+        settings = incoming
+    }
+
+    /// iCloud Drive's Monorail folder, if iCloud Drive is on.
+    static var cloudURL: URL? {
+        let drive = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: drive.path) else { return nil }
+        return drive.appendingPathComponent("Monorail/monorail-settings.json")
+    }
+
+    private var cloudPushTimer: Timer?
+    private var cloudPullTimer: Timer?
+    private var lastCloudSync = Date.distantPast
+
+    private func scheduleCloudPush() {
+        cloudPushTimer?.invalidate()
+        cloudPushTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in self?.pushToCloud() }
+    }
+
+    func pushToCloud() {
+        guard settings.syncThroughICloud, let url = Self.cloudURL else { return }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let bundle = makeBundle()
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let data = try? encoder.encode(bundle), (try? data.write(to: url, options: .atomic)) != nil {
+            lastCloudSync = bundle.savedAt
+        }
+    }
+
+    /// Picks up changes another Mac saved to iCloud Drive.
+    func pullFromCloud() {
+        guard settings.syncThroughICloud, let url = Self.cloudURL, let data = try? Data(contentsOf: url) else { return }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let bundle = try? decoder.decode(SettingsBundle.self, from: data), bundle.machine != Self.machine,
+            bundle.savedAt > lastCloudSync
+        else { return }
+        lastCloudSync = bundle.savedAt
+        apply(bundle, keepSync: true)
+    }
+
+    /// Checks iCloud Drive now and every minute while syncing is on.
+    func startCloudSync() {
+        cloudPullTimer?.invalidate()
+        cloudPullTimer = nil
+        guard settings.syncThroughICloud else { return }
+        pullFromCloud()
+        pushToCloud()
+        cloudPullTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.pullFromCloud() }
     }
 }
 

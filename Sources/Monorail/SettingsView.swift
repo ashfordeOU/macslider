@@ -2,9 +2,10 @@
 import AppKit
 import MonorailCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, layout, input, appearance, apps, shortcuts, about
+    case general, layout, input, appearance, apps, automation, insights, shortcuts, about
     var id: String { rawValue }
 
     var title: String {
@@ -14,6 +15,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .input: return "Motion & Input"
         case .appearance: return "Appearance"
         case .apps: return "Apps"
+        case .automation: return "Automation"
+        case .insights: return "Insights"
         case .shortcuts: return "Shortcuts"
         case .about: return "About"
         }
@@ -26,6 +29,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .input: return "hand.draw"
         case .appearance: return "paintbrush"
         case .apps: return "square.grid.2x2"
+        case .automation: return "clock.arrow.2.circlepath"
+        case .insights: return "chart.bar"
         case .shortcuts: return "keyboard"
         case .about: return "info.circle"
         }
@@ -39,6 +44,7 @@ final class SettingsNavigation: ObservableObject {
 struct SettingsView: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject var navigation: SettingsNavigation
+    @ObservedObject var stats: UsageStats
     let isPaused: () -> Bool
     let setPaused: (Bool) -> Void
 
@@ -59,6 +65,12 @@ struct SettingsView: View {
             AppsPane(store: store)
                 .tabItem { Label(SettingsTab.apps.title, systemImage: SettingsTab.apps.symbol) }
                 .tag(SettingsTab.apps)
+            AutomationPane(store: store)
+                .tabItem { Label(SettingsTab.automation.title, systemImage: SettingsTab.automation.symbol) }
+                .tag(SettingsTab.automation)
+            InsightsPane(store: store, stats: stats)
+                .tabItem { Label(SettingsTab.insights.title, systemImage: SettingsTab.insights.symbol) }
+                .tag(SettingsTab.insights)
             ShortcutsPane(store: store)
                 .tabItem { Label(SettingsTab.shortcuts.title, systemImage: SettingsTab.shortcuts.symbol) }
                 .tag(SettingsTab.shortcuts)
@@ -66,7 +78,7 @@ struct SettingsView: View {
                 .tabItem { Label(SettingsTab.about.title, systemImage: SettingsTab.about.symbol) }
                 .tag(SettingsTab.about)
         }
-        .frame(width: 720, height: 620)
+        .frame(width: 780, height: 640)
     }
 }
 
@@ -88,6 +100,8 @@ private struct GeneralPane: View {
                 Toggle("Pause tiling", isOn: $paused)
                     .onChange(of: paused) { setPaused($0) }
                 Toggle("Show column position in the menu bar", isOn: $store.settings.showColumnIndicator)
+                Toggle("Show the focused app’s name in the menu bar too", isOn: $store.settings.menuBarShowsApp)
+                    .disabled(!store.settings.showColumnIndicator)
                 Toggle("Clicking the menu bar icon shows the slider (right-click for the menu)", isOn: $store.settings.iconOpensSlider)
                 Stepper(value: $store.settings.workspaceCount, in: 1...9) {
                     Text("Workspaces per display: \(store.settings.workspaceCount)")
@@ -116,6 +130,7 @@ private struct GeneralPane: View {
                 }
             }
             ProfilesSection(store: store)
+            SyncSection(store: store)
             Section {
                 ForEach(checks) { check in
                     HStack(alignment: .top, spacing: 10) {
@@ -197,7 +212,9 @@ private struct LayoutPane: View {
             Section("Spacing") {
                 LabeledSlider(title: "Gap between windows", value: $store.settings.layout.gap, range: 0...40)
                 LabeledSlider(title: "Gap at screen edges", value: $store.settings.layout.edgeGap, range: 0...40)
+                Toggle("Smart gaps: none around a lone window, wider on big displays", isOn: $store.settings.smartGaps)
             }
+            DisplaysSection(store: store)
             Section("Widths") {
                 Picker("New window width", selection: $store.settings.layout.defaultWidth) {
                     ForEach(widthChoices, id: \.1) { Text($0.0).tag($0.1) }
@@ -317,6 +334,9 @@ private struct InputPane: View {
             Section {
                 Toggle("Hot edges: rest the pointer on the left or right screen edge to slide", isOn: $store.settings.hotEdges)
                 Toggle("Hold ⌥ and pinch on the trackpad for the overview", isOn: $store.settings.pinchForOverview)
+                Toggle("Tap with three fingers for the overview", isOn: $store.settings.threeFingerTapOverview)
+                    .help("If macOS uses a three-finger tap for Look Up, change that in System Settings → Trackpad")
+                Toggle("Hold ⌥ over a slide in the slider to peek at it", isOn: $store.settings.peekWithOption)
                 Toggle("Haptic tap as the strip lands on a slide (Force Touch trackpads)", isOn: $store.settings.hapticFeedback)
             } header: {
                 Text("Gestures & screen edges")
@@ -361,6 +381,34 @@ private struct AppearancePane: View {
                 Text("A mini-map of every slide in the workspace: drag it to slide your windows along, click a slide to jump to it. Turn it off to use just the menu bar icon; windows then fill the screen right down to the Dock.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            Section("Theme") {
+                Picker("Colours", selection: $store.settings.theme) {
+                    ForEach(Theme.allCases, id: \.self) { theme in
+                        HStack(spacing: 3) {
+                            ForEach(0..<5, id: \.self) { i in
+                                Circle().fill(WorkspaceColor.palette(theme)[i]).frame(width: 9, height: 9)
+                            }
+                            Text(theme.title).padding(.leading, 4)
+                        }
+                        .tag(theme)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+            }
+            Section {
+                Picker("Lasts", selection: $store.settings.focusMinutes) {
+                    Text("Until I turn it off").tag(0)
+                    ForEach([15, 25, 45, 60, 90], id: \.self) { Text("\($0) minutes").tag($0) }
+                }
+                LabeledContent("Dim everything else") {
+                    Slider(value: $store.settings.focusDim, in: 0.2...0.9).frame(width: 240)
+                }
+            } header: {
+                Text("Focus mode")
+            } footer: {
+                Text("⌃⌥B dims every window except the slide you’re in, so the rest of the strip fades away. It ends by itself after the time you choose.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             Section("Focus border") {
                 Toggle("Outline the focused window", isOn: $store.settings.focusBorder)
                 ColorPicker("Colour", selection: borderColor, supportsOpacity: false)
@@ -396,6 +444,16 @@ private struct AppearancePane: View {
 private struct AppsPane: View {
     @ObservedObject var store: SettingsStore
 
+    private var allRunningApps: [NSRunningApplication] {
+        NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && $0.bundleIdentifier != nil }
+            .sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
+    }
+
+    private func titleBinding(_ rule: Binding<AppRule>) -> Binding<String> {
+        Binding(get: { rule.wrappedValue.titleContains ?? "" }, set: { rule.wrappedValue.titleContains = $0 })
+    }
+
     private var runningApps: [NSRunningApplication] {
         let known = Set(store.settings.appRules.map(\.bundleID))
         return NSWorkspace.shared.runningApplications
@@ -410,10 +468,15 @@ private struct AppsPane: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text(rule.name).fontWeight(.medium)
-                            Text(rule.bundleID).font(.caption).foregroundStyle(.secondary)
+                            if rule.ruleID != nil || rule.isTitleRule {
+                                TextField("Only windows whose title contains…", text: titleBinding($rule))
+                                    .textFieldStyle(.roundedBorder).frame(width: 220)
+                            } else {
+                                Text(rule.bundleID).font(.caption).foregroundStyle(.secondary)
+                            }
                             Spacer()
                             Button(role: .destructive) {
-                                store.settings.appRules.removeAll { $0.bundleID == rule.bundleID }
+                                store.settings.appRules.removeAll { $0.id == rule.id }
                             } label: {
                                 Image(systemName: "minus.circle")
                             }
@@ -421,6 +484,9 @@ private struct AppsPane: View {
                         }
                         HStack(spacing: 16) {
                             Toggle("Float", isOn: $rule.float)
+                            Toggle("Own slide", isOn: Binding(
+                                get: { rule.ownSlide ?? false }, set: { rule.ownSlide = $0 ? true : nil }))
+                                .disabled(rule.float)
                             Picker("Width", selection: $rule.width) {
                                 Text("Default").tag(Double?.none)
                                 ForEach(widthChoices, id: \.1) { Text($0.0).tag(Double?.some($0.1)) }
@@ -461,20 +527,32 @@ private struct AppsPane: View {
                     }
                     .padding(.vertical, 2)
                 }
-                Menu("Add a running app…") {
-                    ForEach(runningApps, id: \.processIdentifier) { app in
-                        Button(app.localizedName ?? app.bundleIdentifier ?? "App") {
-                            store.settings.appRules.append(
-                                AppRule(bundleID: app.bundleIdentifier!, name: app.localizedName ?? app.bundleIdentifier!))
+                HStack {
+                    Menu("Add a running app…") {
+                        ForEach(runningApps, id: \.processIdentifier) { app in
+                            Button(app.localizedName ?? app.bundleIdentifier ?? "App") {
+                                store.settings.appRules.append(
+                                    AppRule(bundleID: app.bundleIdentifier!, name: app.localizedName ?? app.bundleIdentifier!))
+                            }
+                        }
+                    }
+                    Menu("Add a rule by window title…") {
+                        ForEach(allRunningApps, id: \.processIdentifier) { app in
+                            Button(app.localizedName ?? app.bundleIdentifier ?? "App") {
+                                store.settings.appRules.append(AppRule(
+                                    bundleID: app.bundleIdentifier!, name: app.localizedName ?? app.bundleIdentifier!,
+                                    titleContains: "", ruleID: UUID().uuidString))
+                            }
                         }
                     }
                 }
             } header: {
                 Text("Per-app rules")
             } footer: {
-                Text("Floating apps stay where you put them. Dialogs, panels and fixed-size windows always float. Rules apply to windows opened after the change; press ⌃⌥T to float or tile a window right now.")
+                Text("Floating apps stay where you put them. Dialogs, panels and fixed-size windows always float. A title rule only applies to windows whose title contains its words (a browser window titled “Meet”), and takes over when the title changes. Rules apply to windows opened after the change; press ⌃⌥T to float or tile a window right now.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            QuickLaunchSection(store: store, apps: allRunningApps)
             Section {
                 if store.settings.appPairs.isEmpty {
                     Text("No app pairs yet.").foregroundStyle(.secondary)
@@ -510,6 +588,316 @@ extension AppsPane {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
             .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
             ?? bundleID
+    }
+}
+
+// MARK: - Sync, export and import
+
+private struct SyncSection: View {
+    @ObservedObject var store: SettingsStore
+    @State private var message = ""
+
+    var body: some View {
+        Section {
+            Toggle("Sync settings, layouts and app pairs through iCloud Drive", isOn: $store.settings.syncThroughICloud)
+                .disabled(SettingsStore.cloudURL == nil)
+            HStack {
+                Button("Export Settings…") { export() }
+                Button("Import Settings…") { importFile() }
+                if !message.isEmpty { Text(message).font(.callout).foregroundStyle(.secondary) }
+            }
+        } header: {
+            Text("Your Macs")
+        } footer: {
+            Text(SettingsStore.cloudURL == nil
+                 ? "Turn on iCloud Drive in System Settings to sync. Export makes one file with your settings, shortcuts, rules, app pairs and saved layouts, to share or keep."
+                 : "Syncing keeps a file in iCloud Drive ▸ Monorail and checks it every minute. Each Mac keeps its own display settings. Export makes one file with everything, to share or keep.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    private func export() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "Monorail Settings.json"
+        panel.allowedContentTypes = [.json]
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try store.export(to: url)
+            message = "Exported."
+        } catch {
+            message = "Couldn’t export: \(error.localizedDescription)"
+        }
+    }
+
+    private func importFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try store.importBundle(from: url)
+            message = "Imported."
+        } catch {
+            message = "That file isn’t a Monorail settings file."
+        }
+    }
+}
+
+// MARK: - Per display
+
+/// Gaps, new-window width and the slider bar for each connected display.
+private struct DisplaysSection: View {
+    @ObservedObject var store: SettingsStore
+    private let displays = Display.all()
+
+    var body: some View {
+        Section {
+            ForEach(displays, id: \.uuid) { display in
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle(isOn: hasOverride(display)) {
+                        Text(display.name).fontWeight(.medium)
+                        + Text("  \(Int(display.frame.width)) × \(Int(display.frame.height))").foregroundColor(.secondary)
+                    }
+                    if store.settings.displayOverrides[display.uuid] != nil {
+                        LabeledSlider(title: "Gap between windows", value: value(display, \.gap, store.settings.layout.gap), range: 0...40)
+                        LabeledSlider(title: "Gap at screen edges", value: value(display, \.edgeGap, store.settings.layout.edgeGap), range: 0...40)
+                        Picker("New window width", selection: value(display, \.defaultWidth, store.settings.layout.defaultWidth)) {
+                            ForEach(widthChoices, id: \.1) { Text($0.0).tag($0.1) }
+                        }
+                        Picker("Slider bar", selection: barBinding(display)) {
+                            Text("Same as everywhere").tag(SliderBarMode?.none)
+                            Text("Always").tag(SliderBarMode?.some(.always))
+                            Text("Only while sliding").tag(SliderBarMode?.some(.whileMoving))
+                            Text("Off").tag(SliderBarMode?.some(.off))
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        } header: {
+            Text("Displays")
+        } footer: {
+            Text("Give a display its own settings, say wider gaps and no slider bar on a big monitor.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    private func hasOverride(_ display: Display) -> Binding<Bool> {
+        Binding(
+            get: { store.settings.displayOverrides[display.uuid] != nil },
+            set: { on in
+                store.settings.displayOverrides[display.uuid] = on ? DisplayOverride(name: display.name) : nil
+            })
+    }
+
+    private func value(_ display: Display, _ path: WritableKeyPath<DisplayOverride, Double?>, _ fallback: Double) -> Binding<Double> {
+        Binding(
+            get: { store.settings.displayOverrides[display.uuid]?[keyPath: path] ?? fallback },
+            set: { store.settings.displayOverrides[display.uuid]?[keyPath: path] = $0 })
+    }
+
+    private func barBinding(_ display: Display) -> Binding<SliderBarMode?> {
+        Binding(
+            get: { store.settings.displayOverrides[display.uuid]?.sliderBar },
+            set: { store.settings.displayOverrides[display.uuid]?.sliderBar = $0 })
+    }
+}
+
+// MARK: - Quick launch
+
+/// ⌃⌥U then a letter opens an app, or goes to its window.
+private struct QuickLaunchSection: View {
+    @ObservedObject var store: SettingsStore
+    let apps: [NSRunningApplication]
+    @State private var letter = "t"
+
+    private static let letters = "abcdefghijklmnopqrstuvwxyz0123456789".map(String.init)
+
+    var body: some View {
+        Section {
+            ForEach(store.settings.launchSlots.keys.sorted(), id: \.self) { key in
+                HStack {
+                    Text(key.uppercased())
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(width: 22, height: 22)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.08)))
+                    Text(UsageStats.appName(store.settings.launchSlots[key] ?? ""))
+                    Spacer()
+                    Button {
+                        store.settings.launchSlots[key] = nil
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            HStack {
+                Picker("Letter", selection: $letter) {
+                    ForEach(Self.letters, id: \.self) { Text($0.uppercased()).tag($0) }
+                }
+                .frame(width: 120)
+                Menu("Assign a running app…") {
+                    ForEach(apps, id: \.processIdentifier) { app in
+                        Button(app.localizedName ?? app.bundleIdentifier ?? "App") {
+                            store.settings.launchSlots[letter] = app.bundleIdentifier
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Quick launch")
+        } footer: {
+            Text("Press ⌃⌥U, then the letter: Monorail goes to that app’s window, or opens the app if it isn’t running.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Automation
+
+private struct AutomationPane: View {
+    @ObservedObject var store: SettingsStore
+
+    private static let weekdayNames = ["S", "M", "T", "W", "T", "F", "S"]
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach($store.settings.autoRules) { $rule in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Toggle("", isOn: $rule.isEnabled).labelsHidden()
+                            TextField("Name", text: $rule.name).textFieldStyle(.roundedBorder).frame(width: 180)
+                            Picker("", selection: $rule.trigger) {
+                                Text("At a time").tag(AutoRule.Trigger.time)
+                                Text("On Wi-Fi").tag(AutoRule.Trigger.wifi)
+                            }
+                            .labelsHidden()
+                            .frame(width: 120)
+                            Spacer()
+                            Button {
+                                store.settings.autoRules.removeAll { $0.id == rule.id }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        HStack(spacing: 12) {
+                            if rule.trigger == .time {
+                                DatePicker("", selection: timeBinding($rule), displayedComponents: .hourAndMinute)
+                                    .labelsHidden()
+                                HStack(spacing: 3) {
+                                    ForEach(1...7, id: \.self) { day in
+                                        let on = rule.weekdays.contains(day)
+                                        Button(Self.weekdayNames[day - 1]) {
+                                            if on { rule.weekdays.removeAll { $0 == day } } else { rule.weekdays.append(day) }
+                                        }
+                                        .buttonStyle(.plain)
+                                        .frame(width: 22, height: 22)
+                                        .background(Circle().fill(on ? Color.accentColor : Color.primary.opacity(0.08)))
+                                        .foregroundStyle(on ? Color.white : Color.primary)
+                                    }
+                                }
+                                .help("Days it runs; none means every day")
+                            } else {
+                                TextField("Network name", text: $rule.network).textFieldStyle(.roundedBorder).frame(width: 180)
+                                if let current = AutoRules.currentNetwork() {
+                                    Button("Use “\(current)”") { rule.network = current }
+                                }
+                            }
+                        }
+                        HStack(spacing: 12) {
+                            Picker("Profile", selection: $rule.profile) {
+                                Text("Keep").tag(Int?.none)
+                                ForEach(store.settings.profiles.indices, id: \.self) { Text(store.settings.profiles[$0]).tag(Int?.some($0)) }
+                            }
+                            .frame(width: 200)
+                            Picker("Layout", selection: layoutBinding($rule)) {
+                                Text("Keep").tag("")
+                                ForEach(layoutNames, id: \.self) { Text($0).tag($0) }
+                            }
+                            .frame(width: 220)
+                        }
+                    }
+                    .padding(.vertical, 3)
+                }
+                HStack {
+                    Button("Add Time Rule") {
+                        store.settings.autoRules.append(AutoRule(name: "Mornings", trigger: .time, weekdays: [2, 3, 4, 5, 6]))
+                    }
+                    Button("Add Wi-Fi Rule") {
+                        store.settings.autoRules.append(AutoRule(
+                            name: "Office", trigger: .wifi, network: AutoRules.currentNetwork() ?? ""))
+                    }
+                }
+            } header: {
+                Text("Auto rules")
+            } footer: {
+                Text("Switch profile or apply a saved layout at a time of day, or when you join a Wi-Fi network. macOS asks for Location access the first time, because it only tells apps the network’s name with that permission.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section {
+                ForEach(Self.urls.indices, id: \.self) { index in
+                    let (url, what) = Self.urls[index]
+                    HStack {
+                        Text(url).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                        Spacer()
+                        Text(what).font(.callout).foregroundStyle(.secondary)
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(url, forType: .string)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Copy")
+                    }
+                }
+            } header: {
+                Text("Shortcuts app, scripts and Raycast")
+            } footer: {
+                Text("In the Shortcuts app add “Open URLs” with one of these; in a script use open \"monorail://…\". Every action in the Shortcuts list works too, like monorail://focus-left.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private static let urls: [(String, String)] = [
+        ("monorail://layout/Coding", "apply a saved layout"),
+        ("monorail://pair/Safari + Notes", "open an app pair"),
+        ("monorail://snapshot/Friday", "restore a snapshot"),
+        ("monorail://save-snapshot/Friday", "take a snapshot"),
+        ("monorail://profile/Work", "switch profile"),
+        ("monorail://workspace/2", "go to a workspace"),
+        ("monorail://focus-mode/on", "focus mode on or off"),
+        ("monorail://launch/t", "quick launch"),
+        ("monorail://palette", "command palette"),
+    ]
+
+    private var layoutNames: [String] {
+        ((try? Data(contentsOf: SettingsStore.layoutsURL))
+            .flatMap { try? JSONDecoder().decode([SavedLayout].self, from: $0) } ?? [])
+            .filter { $0.isSnapshot != true }.map(\.name)
+    }
+
+    private func layoutBinding(_ rule: Binding<AutoRule>) -> Binding<String> {
+        Binding(get: { rule.wrappedValue.layout ?? "" }, set: { rule.wrappedValue.layout = $0.isEmpty ? nil : $0 })
+    }
+
+    private func timeBinding(_ rule: Binding<AutoRule>) -> Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(
+                    bySettingHour: rule.wrappedValue.minuteOfDay / 60, minute: rule.wrappedValue.minuteOfDay % 60,
+                    second: 0, of: Date()) ?? Date()
+            },
+            set: { date in
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                rule.wrappedValue.minuteOfDay = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+            })
     }
 }
 
@@ -662,7 +1050,9 @@ private struct ShortcutsPane: View {
         ("Jump", [.focusColumn1, .focusColumn2, .focusColumn3, .focusColumn4, .focusColumn5,
                   .focusColumn6, .focusColumn7, .focusColumn8, .focusColumn9]),
         ("Snap floating windows", Action.allCases.filter { $0.snapPosition != nil } + [.snapRestore]),
-        ("Marks, scratchpad & profiles", [.setMark, .jumpToMark, .toggleScratchpad, .makeScratchpad, .nextProfile]),
+        ("Marks, scratchpad & profiles", [.setMark, .jumpToMark, .lastWindow, .toggleScratchpad, .makeScratchpad,
+                                          .toggleSticky, .pictureInPicture, .nextProfile]),
+        ("Focus, launch & more", [.toggleFocusMode, .zoomTile, .commandPalette, .quickLaunch, .takeSnapshot]),
         ("Monorail", [.undo, .togglePause, .retile]),
     ]
 

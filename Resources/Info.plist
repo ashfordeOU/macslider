@@ -42,6 +42,10 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSLocationUsageDescription</key>
+	<string>Monorail reads the name of your Wi-Fi network to switch profile or layout when you join it. Your location is never stored or sent anywhere.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Monorail reads the name of your Wi-Fi network to switch profile or layout when you join it. Your location is never stored or sent anywhere.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© Ashforde OÜ. Licensed under the GNU AGPL v3.0.</string>
 	<key>NSSupportsAutomaticTermination</key>

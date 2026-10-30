@@ -22,8 +22,10 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     public var titleContains: String?
     /// Windows matching this rule get a slide to themselves.
     public var ownSlide: Bool?
+    /// A stable identity for title rules (several can share an app).
+    public var ruleID: String?
 
-    public var id: String { titleContains.map { "\(bundleID)|\($0)" } ?? bundleID }
+    public var id: String { ruleID ?? titleContains.map { "\(bundleID)|\($0)" } ?? bundleID }
 
     /// True for a rule that only applies to some window titles.
     public var isTitleRule: Bool { !(titleContains ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
@@ -43,7 +45,8 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         arrangement: Arrangement? = nil,
         workspace: Int? = nil,
         titleContains: String? = nil,
-        ownSlide: Bool? = nil
+        ownSlide: Bool? = nil,
+        ruleID: String? = nil
     ) {
         self.bundleID = bundleID
         self.name = name
@@ -55,6 +58,7 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         self.workspace = workspace
         self.titleContains = titleContains
         self.ownSlide = ownSlide
+        self.ruleID = ruleID
     }
 }
 
@@ -74,6 +78,45 @@ public struct DisplayOverride: Equatable, Hashable, Codable, Sendable {
         self.edgeGap = edgeGap
         self.defaultWidth = defaultWidth
         self.sliderBar = sliderBar
+    }
+}
+
+/// Switches profile or applies a saved layout by itself: at a time of day, or
+/// when the Mac joins a Wi-Fi network.
+public struct AutoRule: Equatable, Hashable, Codable, Sendable, Identifiable {
+    public enum Trigger: String, Codable, CaseIterable, Sendable {
+        case time, wifi
+    }
+
+    public var id: String
+    public var name: String
+    public var trigger: Trigger
+    /// For `time`: minutes after midnight, and the weekdays (1 = Sunday … 7); empty = every day.
+    public var minuteOfDay: Int
+    public var weekdays: [Int]
+    /// For `wifi`: the network name.
+    public var network: String
+    public var profile: Int?
+    public var layout: String?
+    public var isEnabled: Bool
+
+    public init(id: String = UUID().uuidString, name: String, trigger: Trigger, minuteOfDay: Int = 9 * 60,
+                weekdays: [Int] = [], network: String = "", profile: Int? = nil, layout: String? = nil,
+                isEnabled: Bool = true) {
+        self.id = id
+        self.name = name
+        self.trigger = trigger
+        self.minuteOfDay = minuteOfDay
+        self.weekdays = weekdays
+        self.network = network
+        self.profile = profile
+        self.layout = layout
+        self.isEnabled = isEnabled
+    }
+
+    /// True if a time rule is due at this minute of this weekday.
+    public func isDue(minuteOfDay minute: Int, weekday: Int) -> Bool {
+        trigger == .time && isEnabled && minute == minuteOfDay && (weekdays.isEmpty || weekdays.contains(weekday))
     }
 }
 
@@ -239,6 +282,14 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var peekWithOption = true
     /// Count switches and pairings on this Mac, for Insights and suggestions.
     public var collectStats = true
+    /// Profile and layout changes by time of day or Wi-Fi network.
+    public var autoRules: [AutoRule] = []
+    /// No gaps around a lone window; wider gaps on big displays.
+    public var smartGaps = false
+    /// Quick launch: a letter opens or focuses an app (by bundle ID).
+    public var launchSlots: [String: String] = [:]
+    /// The menu bar shows the focused app's name next to the position.
+    public var menuBarShowsApp = false
     /// Snap windows back when an app moves or resizes one by itself.
     public var keepWindowsInPlace = true
     /// After resizing a window in a slide, offer to rearrange the slide.
@@ -291,13 +342,24 @@ public struct AppSettings: Equatable, Codable, Sendable {
             ?? rule(for: bundleID)
     }
 
-    /// Gaps and widths on one display, with its overrides applied.
-    public func layout(for displayUUID: String) -> LayoutConfig {
-        guard let override = displayOverrides[displayUUID] else { return layout }
+    /// Gaps and widths on one display, with its overrides applied. With smart
+    /// gaps, a lone window gets no gaps and displays 2560 points or wider get
+    /// half as much again.
+    public func layout(for displayUUID: String, displayWidth: Double = 0, windowCount: Int = 2) -> LayoutConfig {
         var config = layout
-        if let gap = override.gap { config.gap = gap }
-        if let edgeGap = override.edgeGap { config.edgeGap = edgeGap }
-        if let width = override.defaultWidth { config.defaultWidth = width }
+        if let override = displayOverrides[displayUUID] {
+            if let gap = override.gap { config.gap = gap }
+            if let edgeGap = override.edgeGap { config.edgeGap = edgeGap }
+            if let width = override.defaultWidth { config.defaultWidth = width }
+        }
+        guard smartGaps else { return config }
+        if windowCount <= 1 {
+            config.gap = 0
+            config.edgeGap = 0
+        } else if displayWidth >= 2560 {
+            config.gap = (config.gap * 1.5).rounded()
+            config.edgeGap = (config.edgeGap * 1.5).rounded()
+        }
         return config
     }
 
@@ -339,7 +401,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically, resizeAssist, workspaceNames, hotEdges, customLayouts, appPairs, profiles, dynamicWorkspaces
         case hapticFeedback, pinchForOverview, attentionMarkers, snapPicker
         case focusMinutes, focusDim, displayOverrides, theme, syncThroughICloud, threeFingerTapOverview
-        case peekWithOption, collectStats
+        case peekWithOption, collectStats, autoRules, smartGaps, launchSlots, menuBarShowsApp
     }
 
     public init(from decoder: Decoder) throws {
@@ -407,6 +469,10 @@ public struct AppSettings: Equatable, Codable, Sendable {
         threeFingerTapOverview = value(.threeFingerTapOverview, d.threeFingerTapOverview)
         peekWithOption = value(.peekWithOption, d.peekWithOption)
         collectStats = value(.collectStats, d.collectStats)
+        autoRules = value(.autoRules, d.autoRules)
+        smartGaps = value(.smartGaps, d.smartGaps)
+        launchSlots = value(.launchSlots, d.launchSlots)
+        menuBarShowsApp = value(.menuBarShowsApp, d.menuBarShowsApp)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

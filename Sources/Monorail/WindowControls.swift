@@ -24,6 +24,11 @@ struct WindowCommands {
     var currentRows: (WindowID) -> [Int]? = { _ in nil }
     /// Saves the slide's apps as an app pair.
     var saveAppPair: (WindowID) -> Void = { _ in }
+    /// Windows that follow you to every workspace.
+    var isSticky: (WindowID) -> Bool = { _ in false }
+    var toggleSticky: (WindowID) -> Void = { _ in }
+    /// A live picture of the window in a screen corner.
+    var pictureInPicture: (WindowID) -> Void = { _ in }
 }
 
 /// "Slide Layout ▸" for the slide holding a window.
@@ -126,6 +131,10 @@ struct WindowContextMenu: View {
                 }
             }
         }
+        Button(commands.isSticky(window) ? "Keep in This Workspace Only" : "Show on Every Workspace") {
+            commands.toggleSticky(window)
+        }
+        Button("Picture in Picture") { commands.pictureInPicture(window) }
         Divider()
         Button("Full Screen") { commands.fullScreen(window) }
         Button("Minimise") { commands.minimize(window) }
@@ -164,20 +173,63 @@ enum TextPrompt {
     }
 }
 
-/// One colour per workspace, used by the overview and the slider bar.
+/// One colour per workspace, used by the overview and the slider bar, from
+/// the chosen theme.
 enum WorkspaceColor {
-    static let all: [Color] = [
-        Color(red: 0.36, green: 0.56, blue: 1.0),
-        Color(red: 0.69, green: 0.42, blue: 1.0),
-        Color(red: 1.0, green: 0.38, blue: 0.62),
-        Color(red: 1.0, green: 0.58, blue: 0.27),
-        Color(red: 0.27, green: 0.82, blue: 0.55),
-        Color(red: 0.2, green: 0.8, blue: 0.86),
-        Color(red: 1.0, green: 0.8, blue: 0.25),
-        Color(red: 1.0, green: 0.36, blue: 0.36),
-        Color(red: 0.45, green: 0.45, blue: 0.95),
-    ]
+    /// Set from Settings → Appearance.
+    static var theme: Theme = .vivid
 
-    static func color(_ index: Int) -> Color { all[((index % all.count) + all.count) % all.count] }
+    static func palette(_ theme: Theme) -> [Color] {
+        func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color { Color(red: r, green: g, blue: b) }
+        switch theme {
+        case .vivid:
+            return [rgb(0.36, 0.56, 1.0), rgb(0.69, 0.42, 1.0), rgb(1.0, 0.38, 0.62), rgb(1.0, 0.58, 0.27),
+                    rgb(0.27, 0.82, 0.55), rgb(0.2, 0.8, 0.86), rgb(1.0, 0.8, 0.25), rgb(1.0, 0.36, 0.36),
+                    rgb(0.45, 0.45, 0.95)]
+        case .ocean:
+            return [rgb(0.2, 0.62, 1.0), rgb(0.16, 0.82, 0.86), rgb(0.35, 0.45, 0.98), rgb(0.3, 0.9, 0.72),
+                    rgb(0.55, 0.75, 1.0), rgb(0.12, 0.55, 0.75), rgb(0.6, 0.9, 0.95), rgb(0.4, 0.35, 0.85),
+                    rgb(0.25, 0.7, 0.6)]
+        case .sunset:
+            return [rgb(1.0, 0.55, 0.3), rgb(1.0, 0.36, 0.5), rgb(0.85, 0.35, 0.85), rgb(1.0, 0.78, 0.3),
+                    rgb(0.95, 0.45, 0.35), rgb(0.6, 0.35, 0.9), rgb(1.0, 0.65, 0.55), rgb(0.9, 0.25, 0.4),
+                    rgb(1.0, 0.85, 0.55)]
+        case .forest:
+            return [rgb(0.3, 0.75, 0.45), rgb(0.6, 0.8, 0.3), rgb(0.85, 0.7, 0.35), rgb(0.25, 0.6, 0.55),
+                    rgb(0.7, 0.55, 0.35), rgb(0.45, 0.85, 0.6), rgb(0.9, 0.8, 0.45), rgb(0.55, 0.65, 0.4),
+                    rgb(0.35, 0.5, 0.35)]
+        case .mono:
+            return [0.92, 0.78, 0.64, 0.86, 0.7, 0.56, 0.96, 0.6, 0.74].map { Color(white: $0) }
+        }
+    }
+
+    /// The overview's backdrop: a gradient and three soft glows.
+    static func backdrop(_ theme: Theme) -> (gradient: [Color], glows: [Color]) {
+        func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color { Color(red: r, green: g, blue: b) }
+        switch theme {
+        case .vivid:
+            return ([rgb(0.13, 0.09, 0.36), rgb(0.36, 0.13, 0.5), rgb(0.05, 0.3, 0.46)],
+                    [rgb(1, 0.38, 0.62), rgb(0.2, 0.8, 0.86), rgb(1, 0.58, 0.27)])
+        case .ocean:
+            return ([rgb(0.03, 0.12, 0.3), rgb(0.04, 0.25, 0.42), rgb(0.02, 0.35, 0.4)],
+                    [rgb(0.2, 0.62, 1), rgb(0.16, 0.82, 0.86), rgb(0.35, 0.45, 0.98)])
+        case .sunset:
+            return ([rgb(0.3, 0.08, 0.2), rgb(0.45, 0.14, 0.24), rgb(0.35, 0.12, 0.4)],
+                    [rgb(1, 0.55, 0.3), rgb(0.85, 0.35, 0.85), rgb(1, 0.78, 0.3)])
+        case .forest:
+            return ([rgb(0.05, 0.18, 0.12), rgb(0.1, 0.25, 0.15), rgb(0.12, 0.2, 0.1)],
+                    [rgb(0.3, 0.75, 0.45), rgb(0.85, 0.7, 0.35), rgb(0.45, 0.85, 0.6)])
+        case .mono:
+            return ([Color(white: 0.1), Color(white: 0.16), Color(white: 0.12)],
+                    [Color(white: 0.5), Color(white: 0.35), Color(white: 0.6)])
+        }
+    }
+
+    static var all: [Color] { palette(theme) }
+
+    static func color(_ index: Int) -> Color {
+        let colors = all
+        return colors[((index % colors.count) + colors.count) % colors.count]
+    }
 }
 #endif

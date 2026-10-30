@@ -192,6 +192,11 @@ public struct Keymap: Equatable, Codable, Sendable {
             .toggleFocusMode: [s(KeyCode.b, co)],
             .commandPalette: [s(KeyCode.slash, co)],
             .takeSnapshot: [s(KeyCode.s, cos)],
+            .toggleSticky: [s(KeyCode.s, co)],
+            .zoomTile: [s(KeyCode.x, co)],
+            .lastWindow: [s(KeyCode.delete, co)],
+            .quickLaunch: [s(KeyCode.u, co)],
+            .pictureInPicture: [s(KeyCode.i, co)],
             // Snapping (floats the window first): Control-Option-Command plus a key.
             .snapLeftHalf: [s(KeyCode.left, coc)],
             .snapRightHalf: [s(KeyCode.right, coc)],

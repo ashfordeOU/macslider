@@ -17,9 +17,14 @@ final class SliderBarController {
         var showOverview: () -> Void
         var renameWorkspace: (Int) -> Void = { _ in }
         var commands = WindowCommands()
+        /// Hold ⌥ over a slide to peek at it; let go to slide back.
+        var peek: (_ column: Int, _ displayUUID: String) -> Void = { _, _ in }
+        var endPeek: () -> Void = {}
+        /// Swipe up on the bar to park the workspace, down to bring it back.
+        var park: (Int) -> Void = { _ in }
+        var unpark: (Int) -> Void = { _ in }
     }
 
-    var mode: SliderBarMode = .whileMoving
     var edge: SliderBarEdge = .bottom
     var mapsProvider: () -> [Engine.MiniMap] = { [] }
     var actions = Actions(slide: { _, _ in }, endSlide: {}, focus: { _ in }, switchWorkspace: { _ in }, showOverview: {})
@@ -29,16 +34,24 @@ final class SliderBarController {
     private let preview = SlidePreview()
     private let tip = NameTip()
     private var subscriptions: [AnyCancellable] = []
+    private lazy var peekWatcher = PeekWatcher(
+        models: { [weak self] in self?.bars.values.map(\.model) ?? [] },
+        peek: { [weak self] column, uuid in self?.actions.peek(column, uuid) },
+        endPeek: { [weak self] in self?.actions.endPeek() })
+    var peekEnabled: Bool {
+        get { peekWatcher.isEnabled }
+        set { peekWatcher.isEnabled = newValue }
+    }
     private static let height: CGFloat = 52
     private static let margin: CGFloat = 6
 
     /// Refreshes the bars. Called whenever the strips change.
     func update() {
-        guard mode != .off else {
+        let maps = mapsProvider()
+        guard maps.contains(where: { $0.barMode != .off }) else {
             hideAll(animated: false)
             return
         }
-        let maps = mapsProvider()
         preview.sync(with: maps)
         let current = Set(maps.map(\.displayUUID))
         for (uuid, bar) in bars where !current.contains(uuid) {
@@ -57,15 +70,20 @@ final class SliderBarController {
             }
             position(bar.panel, for: map)
             let empty = map.tiles.isEmpty
-            if mode == .always {
+            if map.barMode == .off {
+                bar.panel.orderOut(nil)
+            } else if map.barMode == .always {
                 show(bar.panel)
             } else if empty {
                 bar.panel.orderOut(nil)
             }
         }
-        if mode == .whileMoving && changed {
-            for bar in bars.values where !(bar.model.map?.tiles.isEmpty ?? true) { show(bar.panel) }
-            scheduleHide()
+        if changed {
+            let moving = bars.values.filter {
+                $0.model.map?.barMode == .whileMoving && !($0.model.map?.tiles.isEmpty ?? true)
+            }
+            for bar in moving { show(bar.panel) }
+            if !moving.isEmpty { scheduleHide() }
         }
     }
 
@@ -93,12 +111,18 @@ final class SliderBarController {
     private func scheduleHide() {
         hideTimer?.invalidate()
         hideTimer = Timer.scheduledTimer(withTimeInterval: 1.6, repeats: false) { [weak self] _ in
-            guard let self, self.mode == .whileMoving else { return }
+            guard let self else { return }
             // Stay while the pointer is on a bar or its preview, or a drag is in progress.
             if self.preview.isHovered || self.bars.values.contains(where: { $0.model.isHovering || $0.model.isDragging }) {
                 self.scheduleHide()
             } else {
-                self.hideAll(animated: true)
+                for bar in self.bars.values where bar.model.map?.barMode == .whileMoving {
+                    NSAnimationContext.runAnimationGroup({ context in
+                        context.duration = 0.25
+                        bar.panel.animator().alphaValue = 0
+                    }, completionHandler: { bar.panel.orderOut(nil) })
+                }
+                self.preview.hide()
             }
         }
     }
@@ -152,6 +176,7 @@ final class SliderBarController {
                 })
             }
             .store(in: &subscriptions)
+        peekWatcher.watch(model)
         model.$hoveredWorkspace
             .removeDuplicates()
             .sink { [weak self, weak panel] index in
@@ -165,6 +190,59 @@ final class SliderBarController {
             .store(in: &subscriptions)
         panel.contentView = NSHostingView(rootView: view)
         return (panel, model)
+    }
+}
+
+/// Peek: hold ⌥ while the pointer is on a slide in the slider and the strip
+/// slides to show it; let go and it slides back. Click while peeking to stay.
+final class PeekWatcher {
+    var isEnabled = true
+    private let models: () -> [SliderBarModel]
+    private let peek: (Int, String) -> Void
+    private let endPeek: () -> Void
+    private var monitors: [Any] = []
+    private var subscriptions: [AnyCancellable] = []
+    private(set) var isPeeking = false
+
+    init(models: @escaping () -> [SliderBarModel], peek: @escaping (Int, String) -> Void, endPeek: @escaping () -> Void) {
+        self.models = models
+        self.peek = peek
+        self.endPeek = endPeek
+        let handler: (NSEvent) -> Void = { [weak self] event in self?.flagsChanged(event.modifierFlags) }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged, handler: handler) {
+            monitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged, handler: { event in
+            handler(event)
+            return event
+        }) {
+            monitors.append(local)
+        }
+    }
+
+    /// Follows the pointer from slide to slide while ⌥ is held.
+    func watch(_ model: SliderBarModel) {
+        model.$hoveredTile
+            .removeDuplicates { $0?.id == $1?.id }
+            .sink { [weak self, weak model] tile in
+                guard let self, self.isPeeking, let tile, let uuid = model?.map?.displayUUID else { return }
+                self.peek(tile.id, uuid)
+            }
+            .store(in: &subscriptions)
+    }
+
+    private func flagsChanged(_ flags: NSEvent.ModifierFlags) {
+        let optionOnly = flags.intersection([.option, .command, .control, .shift]) == .option
+        if optionOnly, isEnabled, !isPeeking,
+            let model = models().first(where: { $0.hoveredTile != nil }), let tile = model.hoveredTile,
+            let uuid = model.map?.displayUUID
+        {
+            isPeeking = true
+            peek(tile.id, uuid)
+        } else if !optionOnly, isPeeking {
+            isPeeking = false
+            endPeek()
+        }
     }
 }
 
@@ -196,6 +274,8 @@ private struct SliderBarView: View {
 
     @State private var dragScale: Double?
     @State private var dragOrigin: Double = 0
+    /// Set when a drag on the track goes up or down instead of sideways.
+    @State private var verticalSwipe = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -320,7 +400,12 @@ private struct SliderBarView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
+                        guard !verticalSwipe else { return }
                         guard dragScale != nil || hypot(value.translation.width, value.translation.height) > 4 else {
+                            return
+                        }
+                        if dragScale == nil, abs(value.translation.height) > abs(value.translation.width) * 1.3 {
+                            verticalSwipe = true
                             return
                         }
                         // Freeze the mapping for the whole drag so the bar doesn't rescale under the pointer.
@@ -336,6 +421,17 @@ private struct SliderBarView: View {
                         actions.slide(stripX, map.displayUUID)
                     }
                     .onEnded { value in
+                        if verticalSwipe {
+                            // Swipe up parks the workspace in the Dock; swipe down brings it back.
+                            if value.translation.height < -16 {
+                                actions.park(map.workspace)
+                            } else if value.translation.height > 16 {
+                                actions.unpark(map.workspace)
+                            }
+                            verticalSwipe = false
+                            onInteraction()
+                            return
+                        }
                         if dragScale == nil {
                             // A click: jump to the window under the pointer.
                             if let id = window(at: value.location, map: map, lower: lower, span: span, scale: scale,
@@ -718,6 +814,14 @@ final class SliderPopover {
     private var clickMonitor: Any?
     private weak var anchor: NSStatusBarButton?
     private let model = SliderBarModel()
+    private lazy var peekWatcher = PeekWatcher(
+        models: { [weak self] in self.map { [$0.model] } ?? [] },
+        peek: { [weak self] column, uuid in self?.actions.peek(column, uuid) },
+        endPeek: { [weak self] in self?.actions.endPeek() })
+    var peekEnabled: Bool {
+        get { peekWatcher.isEnabled }
+        set { peekWatcher.isEnabled = newValue }
+    }
     private let paused = PausedState()
 
     /// Space between the menu bar and the panel.
@@ -843,6 +947,7 @@ final class SliderPopover {
         ])
         panel.contentView = glass
         self.host = host
+        peekWatcher.watch(model)
         return panel
     }
 }

@@ -21,6 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let coach = CoachTips()
     private let popover = SliderPopover()
     private let snapPicker = SnapPicker()
+    private let palette = CommandPalette()
+    private let stats = UsageStats()
+    private let autoRules = AutoRules()
+    private let pictureInPicture = PictureInPicture()
+    private var statsTimer: Timer?
     private let statusMenu = NSMenu()
     private let navigation = SettingsNavigation()
     private var statusItem: NSStatusItem!
@@ -61,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        stats.save()
         sliderBar.hideAll(animated: false)
         input.stop()
         trackpad.stop()
@@ -69,9 +75,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
+            // monorail://layout/Coding, pair/…, snapshot/…, profile/…, workspace/2, launch/t
+            let argument = url.pathComponents.dropFirst().joined(separator: "/").removingPercentEncoding ?? ""
             switch url.host?.lowercased() {
             case "settings": showSettings()
             case "welcome": showWelcome()
+            case "palette": palette.show()
+            case "layout": engine.applyLayout(named: argument)
+            case "snapshot": engine.restoreSnapshot(named: argument)
+            case "save-snapshot": engine.saveSnapshot(named: argument.isEmpty ? Self.snapshotName() : argument)
+            case "pair":
+                if let pair = store.settings.appPairs.first(where: { $0.name.caseInsensitiveCompare(argument) == .orderedSame }) {
+                    engine.openPair(pair)
+                }
+            case "profile":
+                if let index = store.settings.profiles.firstIndex(where: { $0.caseInsensitiveCompare(argument) == .orderedSame })
+                    ?? Int(argument).map({ $0 - 1 })
+                {
+                    engine.switchProfile(to: index)
+                }
+            case "workspace":
+                if let n = Int(argument) { engine.switchWorkspace(to: n - 1) }
+            case "launch": engine.quickLaunch(argument)
+            case "focus-mode" where argument == "on" || argument == "off":
+                engine.setFocusMode(argument == "on")
             default:
                 if let action = Action(url: url.absoluteString) {
                     engine.perform(action)
@@ -113,13 +140,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sliderBar.actions = SliderBarController.Actions(
             slide: { [weak self] x, uuid in self?.engine.slide(to: x, displayUUID: uuid) },
             endSlide: { [weak self] in self?.engine.endSlide() },
-            focus: { [weak self] id in self?.engine.focusAndReveal(id) },
+            focus: { [weak self] id in
+                self?.engine.endPeek(keep: true)
+                self?.engine.focusAndReveal(id)
+            },
             switchWorkspace: { [weak self] index in self?.engine.switchWorkspace(to: index) },
             showOverview: { [weak self] in self?.overview.show() }
         )
         let commands = windowCommands()
         sliderBar.actions.commands = commands
         sliderBar.actions.renameWorkspace = { [weak self] index in self?.overview.showRenaming(index) }
+        sliderBar.actions.peek = { [weak self] column, uuid in self?.engine.peek(column: column, displayUUID: uuid) }
+        sliderBar.actions.endPeek = { [weak self] in self?.engine.endPeek() }
+        sliderBar.actions.park = { [weak self] index in self?.engine.parkWorkspace(index) }
+        sliderBar.actions.unpark = { [weak self] index in self?.engine.unparkWorkspace(index) }
         overview.commands = commands
         overview.setWorkspaceName = { [weak self] index, name in
             self?.store.settings.setWorkspaceName(name, at: index)
@@ -134,6 +168,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
         engine.onNotice = { [weak self] text in self?.toast.show(text) }
         engine.onAskForLetter = { [weak self] action in self?.readMarkLetter(for: action) }
+        engine.onShowPalette = { [weak self] in self?.palette.toggle() }
+        engine.onAskForSnapshotName = { [weak self] in self?.takeSnapshot() }
+        engine.onUsage = { [weak self] event in self?.stats.record(event) }
+        engine.onLayoutsSaved = { [weak self] in
+            if self?.store.settings.syncThroughICloud == true { self?.store.pushToCloud() }
+        }
+        engine.onPictureInPicture = { [weak self] id in self?.showPictureInPicture(id) }
+        store.onLayoutsChanged = { [weak self] in self?.engine.reloadLayouts() }
+        palette.commands = { [weak self] in self?.paletteCommands() ?? [] }
+        stats.onSuggestion = { [weak self] pair in
+            let names = pair.split(separator: "|").map { UsageStats.appName(String($0)) }.joined(separator: " + ")
+            self?.toast.show("You often use \(names) together · save them as an app pair in Settings → Insights")
+        }
+        autoRules.fire = { [weak self] rule in self?.run(rule) }
+        pictureInPicture.focus = { [weak self] id in self?.engine.focusAndReveal(id) }
+        pictureInPicture.onNeedsPermission = { [weak self] in
+            self?.toast.show("Picture in picture needs Screen Recording · turn on live previews in the overview")
+        }
+        trackpad.onThreeFingerTap = { [weak self] in self?.overview.toggle() }
         engine.onWindowDrag = { [weak self] id in self?.snapPicker.windowDragStarted(id) }
         snapPicker.snap = { [weak self] id, position in self?.engine.snapWindow(id, to: position) }
         engine.onResized = { [weak self] id, frame, name, hasOthers in
@@ -185,6 +238,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.start()
         apply(store.settings)
         updateStatusItem()
+        store.startCloudSync()
+        autoRules.start()
+        // Once a minute, note which apps share slides (for Insights).
+        statsTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            guard let self, self.engine.isRunning, !self.engine.isPaused else { return }
+            self.stats.sample(slides: self.engine.slideApps(), slideCount: self.engine.slideCount)
+        }
     }
 
     /// Polls until the user grants Accessibility, then starts.
@@ -196,7 +256,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func apply(_ settings: AppSettings) {
+        let syncWasOn = engine.settings.syncThroughICloud
         engine.settings = settings
+        WorkspaceColor.theme = settings.theme
+        stats.isEnabled = settings.collectStats
+        autoRules.rules = settings.autoRules
+        if settings.syncThroughICloud != syncWasOn { store.startCloudSync() }
         input.keymap = settings.keymap
         input.modifierSwipe = settings.modifierSwipe
         input.scrollModifier = settings.scrollModifier
@@ -209,12 +274,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updater.installAutomatically = settings.installUpdatesAutomatically
         hotEdges.onSlide = { [weak self] right in self?.engine.step(forward: right, honourReverse: false, visual: true) }
         hotEdges.setEnabled(settings.hotEdges && engine.isRunning)
-        sliderBar.mode = settings.sliderBar
+        sliderBar.peekEnabled = settings.peekWithOption
+        popover.peekEnabled = settings.peekWithOption
         sliderBar.edge = settings.sliderBarEdge
         sliderBar.update()
 
         trackpad.fingers = settings.swipeFingers.rawValue
-        if settings.swipeFingers == .off { trackpad.stop() } else if engine.isRunning { trackpad.start() }
+        trackpad.detectsTap = settings.threeFingerTapOverview
+        if settings.swipeFingers == .off && !settings.threeFingerTapOverview {
+            trackpad.stop()
+        } else if engine.isRunning {
+            trackpad.start()
+        }
 
         if settings.focusFollowsMouse, mouseMonitor == nil {
             mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
@@ -313,17 +384,135 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         commands.setCustomLayout = { [weak self] id, rows in self?.engine.setSlideLayout(of: id, to: .custom, rows: rows) }
         commands.currentRows = { [weak self] id in self?.engine.slideRows(of: id) }
         commands.saveAppPair = { [weak self] id in self?.saveAppPair(from: id) }
+        commands.isSticky = { [weak self] id in self?.engine.isSticky(id) ?? false }
+        commands.toggleSticky = { [weak self] id in self?.engine.toggleSticky(id) }
+        commands.pictureInPicture = { [weak self] id in self?.showPictureInPicture(id) }
         return commands
     }
 
     /// Marks: after the shortcut, the next key typed is the mark's letter.
+    /// Marks and quick launch: after the shortcut, the next key typed is the letter.
     private func readMarkLetter(for action: Action) {
-        let setting = action == .setMark
-        toast.show(setting ? "Mark this window: type a letter" : "Jump to mark: type its letter")
+        switch action {
+        case .setMark: toast.show("Mark this window: type a letter")
+        case .quickLaunch: toast.show("Quick launch: type an app’s letter")
+        default: toast.show("Jump to mark: type its letter")
+        }
         input.captureNextKey = { [weak self] letter in
             guard let self, let letter else { return }
-            if setting { self.engine.setMark(letter) } else { self.engine.jumpToMark(letter) }
+            switch action {
+            case .setMark: self.engine.setMark(letter)
+            case .quickLaunch: self.engine.quickLaunch(letter)
+            default: self.engine.jumpToMark(letter)
+            }
         }
+    }
+
+    private func showPictureInPicture(_ id: WindowID) {
+        let title = engine.allWindowSummaries().first { $0.id == id }.map { $0.title.isEmpty ? $0.appName : $0.title } ?? ""
+        pictureInPicture.toggle(id, title: title)
+    }
+
+    static func snapshotName() -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: Date())
+    }
+
+    private func takeSnapshot() {
+        guard let name = TextPrompt.ask(
+            title: "Take a session snapshot",
+            message: "Saves every workspace of every profile and which apps are open. Restore it from Snapshots in the menu bar, even after a restart: Monorail reopens the apps and puts their windows back.",
+            initial: Self.snapshotName(), placeholder: "Before the weekend", button: "Save")
+        else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        engine.saveSnapshot(named: trimmed.isEmpty ? Self.snapshotName() : trimmed)
+    }
+
+    /// Runs an auto rule: its profile, then its layout.
+    private func run(_ rule: AutoRule) {
+        if let profile = rule.profile { engine.switchProfile(to: profile) }
+        if let layout = rule.layout, !layout.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.engine.applyLayout(named: layout) }
+        }
+        toast.show("Auto rule · \(rule.name)")
+    }
+
+    /// Everything the command palette offers, built fresh each time it opens.
+    private func paletteCommands() -> [PaletteCommand] {
+        var list: [PaletteCommand] = []
+        let settings = store.settings
+        for window in engine.allWindowSummaries() {
+            list.append(PaletteCommand(
+                id: "window-\(window.id)", title: window.title.isEmpty ? window.appName : window.title,
+                subtitle: "Go to window · \(window.appName)", symbol: "macwindow", keywords: "focus go window \(window.appName)"
+            ) { [weak self] in self?.engine.focusAndReveal(window.id) })
+        }
+        for index in 0..<engine.workspaceCount {
+            let name = settings.workspaceName(index)
+            list.append(PaletteCommand(
+                id: "ws-\(index)", title: "Go to \(name)", subtitle: "Workspace \(index + 1)", symbol: "square.stack",
+                keywords: "workspace switch"
+            ) { [weak self] in self?.engine.switchWorkspace(to: index) })
+            list.append(PaletteCommand(
+                id: "move-ws-\(index)", title: "Move window to \(name)", subtitle: "Workspace \(index + 1)",
+                symbol: "arrow.right.square", keywords: "workspace send"
+            ) { [weak self] in
+                if let id = self?.engine.focusedWindowID() { self?.engine.moveWindow(id, toWorkspace: index) }
+            })
+            let parked = engine.isParked(index)
+            list.append(PaletteCommand(
+                id: "park-\(index)", title: "\(parked ? "Bring back" : "Park") \(name)",
+                subtitle: parked ? "Restore its windows from the Dock" : "Minimise its windows to the Dock",
+                symbol: "parkingsign.circle", keywords: "park unpark dock"
+            ) { [weak self] in
+                if parked { self?.engine.unparkWorkspace(index) } else { self?.engine.parkWorkspace(index) }
+            })
+        }
+        for pair in settings.appPairs {
+            list.append(PaletteCommand(
+                id: "pair-\(pair.id)", title: "Open pair \(pair.name)", subtitle: "App pair", symbol: "rectangle.split.2x1",
+                keywords: "pair apps \(pair.bundleIDs.map(UsageStats.appName).joined(separator: " "))"
+            ) { [weak self] in self?.engine.openPair(pair) })
+        }
+        for layout in engine.layouts {
+            list.append(PaletteCommand(
+                id: "layout-\(layout.name)", title: "Apply layout \(layout.name)", subtitle: "Saved layout",
+                symbol: "square.grid.2x2", keywords: "layout"
+            ) { [weak self] in self?.engine.applyLayout(named: layout.name) })
+        }
+        for snapshot in engine.snapshots {
+            list.append(PaletteCommand(
+                id: "snapshot-\(snapshot.name)", title: "Restore snapshot \(snapshot.name)", subtitle: "Session snapshot",
+                symbol: "camera.viewfinder", keywords: "snapshot session restore"
+            ) { [weak self] in self?.engine.restoreSnapshot(named: snapshot.name) })
+        }
+        for (index, profile) in settings.profiles.enumerated() where settings.profiles.count > 1 {
+            list.append(PaletteCommand(
+                id: "profile-\(index)", title: "Switch to profile \(profile)", subtitle: "Profile",
+                symbol: "person.crop.rectangle.stack", keywords: "profile"
+            ) { [weak self] in self?.engine.switchProfile(to: index) })
+        }
+        for (letter, bundleID) in settings.launchSlots.sorted(by: { $0.key < $1.key }) {
+            list.append(PaletteCommand(
+                id: "launch-\(letter)", title: "Open \(UsageStats.appName(bundleID))", subtitle: "Quick launch · \(letter.uppercased())",
+                symbol: "app.badge", keywords: "launch app"
+            ) { [weak self] in self?.engine.quickLaunch(letter) })
+        }
+        for action in Action.allCases where action.columnNumber == nil && action.workspaceNumber == nil
+            && action.moveToWorkspaceNumber == nil && action != .commandPalette
+        {
+            let keys = settings.keymap.shortcuts(for: action).first?.displayString ?? ""
+            list.append(PaletteCommand(
+                id: "action-\(action.rawValue)", title: action.title, subtitle: keys, symbol: "keyboard",
+                keywords: action.rawValue.replacingOccurrences(of: "-", with: " ")
+            ) { [weak self] in self?.engine.perform(action) })
+        }
+        list.append(PaletteCommand(id: "settings", title: "Open Settings", symbol: "gearshape") { [weak self] in
+            self?.showSettings()
+        })
+        return list
     }
 
     private func saveAppPair(from id: WindowID) {
@@ -373,7 +562,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         button.imagePosition = .imageLeading
         if store.settings.showColumnIndicator, !engine.isPaused, let status = engine.status() {
             let position = "\(status.focusedColumn)/\(status.columnCount)"
-            button.title = engine.workspaceCount > 1 ? " \(status.workspace) · \(position)" : " \(position)"
+            var title = engine.workspaceCount > 1 ? " \(status.workspace) · \(position)" : " \(position)"
+            if store.settings.menuBarShowsApp, let app = engine.focusedAppName { title = " \(app) ·" + title }
+            if engine.isFocusMode { title = " ◉" + title }
+            button.title = title
             button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .regular)
         } else {
             button.title = ""
@@ -420,9 +612,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item(engine.isPaused ? "Resume Tiling" : "Pause Tiling", #selector(togglePause), action: .togglePause))
         menu.addItem(item("Overview", #selector(showOverview), action: .overview))
         menu.addItem(item("Search Windows…", #selector(showSwitcher), action: .windowSwitcher))
+        menu.addItem(item("Command Palette…", #selector(showPalette), action: .commandPalette))
+        let focusItem = item(
+            engine.isFocusMode ? "End Focus Mode" : "Focus Mode", #selector(toggleFocusMode), action: .toggleFocusMode)
+        if let ends = engine.focusEnds {
+            focusItem.toolTip = "Ends at \(DateFormatter.localizedString(from: ends, dateStyle: .none, timeStyle: .short))"
+        }
+        menu.addItem(focusItem)
         menu.addItem(item("Reset to Smart Pairs", #selector(regroup), action: .regroup))
         menu.addItem(savedLayoutsMenu())
         menu.addItem(appPairsMenu())
+        menu.addItem(snapshotsMenu())
         let undoItem = item("Undo Layout Change", #selector(undoLayout), action: .undo)
         undoItem.isEnabled = engine.canUndo
         menu.addItem(undoItem)
@@ -521,6 +721,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showOverview() { overview.show() }
+    @objc private func showPalette() { afterMenu { $0.palette.show() } }
+    @objc private func toggleFocusMode() { afterMenu { $0.engine.setFocusMode(!$0.engine.isFocusMode) } }
+
+    /// Snapshots ▸ Take Snapshot…, each snapshot to restore, and Delete ▸.
+    private func snapshotsMenu() -> NSMenuItem {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(item("Take Snapshot…", #selector(takeSnapshotFromMenu), action: .takeSnapshot))
+        let snapshots = engine.snapshots
+        if !snapshots.isEmpty {
+            menu.addItem(.separator())
+            for snapshot in snapshots {
+                let entry = item(snapshot.name, #selector(restoreSnapshotFromMenu(_:)))
+                entry.representedObject = snapshot.name
+                entry.toolTip = "\(snapshot.windowCount) windows, \(snapshot.apps?.count ?? 0) apps"
+                menu.addItem(entry)
+            }
+            menu.addItem(.separator())
+            let delete = NSMenu()
+            for snapshot in snapshots {
+                let entry = item(snapshot.name, #selector(deleteLayout(_:)))
+                entry.representedObject = snapshot.name
+                delete.addItem(entry)
+            }
+            let parent = NSMenuItem(title: "Delete", action: nil, keyEquivalent: "")
+            parent.submenu = delete
+            menu.addItem(parent)
+        }
+        let parent = NSMenuItem(title: "Snapshots", action: nil, keyEquivalent: "")
+        parent.submenu = menu
+        return parent
+    }
+
+    @objc private func takeSnapshotFromMenu() { afterMenu { $0.takeSnapshot() } }
+
+    @objc private func restoreSnapshotFromMenu(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        afterMenu { $0.engine.restoreSnapshot(named: name) }
+    }
 
     @objc private func toggleParkFromMenu(_ sender: NSMenuItem) {
         let index = sender.tag - 1
@@ -591,7 +830,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.addItem(item("Save Current Layout…", #selector(saveLayout)))
-        let layouts = engine.savedLayouts
+        let layouts = engine.layouts
         if !layouts.isEmpty {
             menu.addItem(.separator())
             for layout in layouts {
@@ -715,6 +954,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let view = SettingsView(
                 store: store,
                 navigation: navigation,
+                stats: stats,
                 isPaused: { [weak self] in self?.engine.isPaused ?? false },
                 setPaused: { [weak self] in self?.engine.setPaused($0) }
             )
