@@ -571,6 +571,17 @@ public struct Strip: Equatable, Codable, Sendable {
         public var width: Double
         public var arrangement: Arrangement
         public var isCustom: Bool
+
+        public init(
+            columnIndex: Int, row: Int, mates: [WindowID], width: Double, arrangement: Arrangement, isCustom: Bool
+        ) {
+            self.columnIndex = columnIndex
+            self.row = row
+            self.mates = mates
+            self.width = width
+            self.arrangement = arrangement
+            self.isCustom = isCustom
+        }
     }
 
     public func slot(of window: WindowID) -> Slot? {
