@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/icon.png" width="160" alt="MacSlider icon">
+
 # MacSlider
 
 **A scrolling window manager for macOS.**
@@ -332,6 +334,7 @@ Sources/MacSliderCore/   Layout model: strips, columns, widths, scrolling, keyma
 Sources/MacSlider/       macOS app: engine, input, overlays, menu bar, settings UI
 Tests/                   Unit tests for the layout model
 Resources/Info.plist     App bundle metadata
+assets/icon.png          App icon master (rendered by scripts/render-icon.py)
 scripts/                 Build, package, install, icon and command-line tools
 .github/workflows/       CI, plus release builds on version tags
 ```

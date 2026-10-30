@@ -23,9 +23,15 @@ cp LICENSE "$APP/Contents/Resources/LICENSE"
 sed -e "s/__VERSION__/${VERSION}/" -e "s/__BUILD__/${BUILD}/" Resources/Info.plist > "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-echo "==> Rendering icon"
+echo "==> Icon"
+# assets/icon.png is the 1024px master (re-render with scripts/render-icon.py).
 ICONSET="$(mktemp -d)/AppIcon.iconset"
-swift scripts/make-icon.swift "$ICONSET" > /dev/null
+mkdir -p "$ICONSET"
+for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" assets/icon.png --out "$ICONSET/icon_${size}x${size}.png" > /dev/null
+    double=$((size * 2))
+    sips -z "$double" "$double" assets/icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" > /dev/null
+done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 echo "==> Signing"

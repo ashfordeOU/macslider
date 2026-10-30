@@ -258,10 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateStatusItem() {
         guard let button = statusItem?.button else { return }
-        let symbol = engine.isPaused ? "pause.rectangle" : "rectangle.split.3x1"
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "MacSlider")
-        image?.isTemplate = true
-        button.image = image
+        button.image = StatusIcon.image(paused: engine.isPaused)
         button.imagePosition = .imageLeading
         if store.settings.showColumnIndicator, !engine.isPaused, let status = engine.status() {
             let position = "\(status.focusedColumn)/\(status.columnCount)"
