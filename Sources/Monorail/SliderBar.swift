@@ -618,13 +618,18 @@ private struct PreviewView: View {
                     ZStack(alignment: .topLeading) {
                         ForEach(Array(tile.windows.enumerated()), id: \.element.id) { index, window in
                             let unit = frames[index]
+                            // 8pt between tiles, each clipped to its own rounded rectangle.
                             PreviewTile(window: window, image: model.images[window.id])
                                 .frame(
-                                    width: max(unit.width * geometry.size.width - 6, 10),
-                                    height: max(unit.height * geometry.size.height - 6, 10))
+                                    width: max(unit.width * geometry.size.width - 8, 10),
+                                    height: max(unit.height * geometry.size.height - 8, 10))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
                                 .onTapGesture { commands().focus(window.id) }
                                 .windowControls(window.id, commands())
-                                .offset(x: unit.minX * geometry.size.width + 3, y: unit.minY * geometry.size.height + 3)
+                                .offset(x: unit.minX * geometry.size.width + 4, y: unit.minY * geometry.size.height + 4)
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel("\(window.appName), \(window.title)")
+                                .accessibilityAddTraits(.isButton)
                         }
                     }
                 }
@@ -647,11 +652,14 @@ private struct PreviewTile: View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08))
             if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
+                // Fill the tile exactly: never wider than it, whatever the window's shape.
+                GeometryReader { geometry in
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+                        .clipped()
+                }
             } else if let icon = AppIcons.icon(for: window.pid) {
                 Image(nsImage: icon).resizable().frame(width: 36, height: 36)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -335,9 +335,10 @@ private struct ColumnCard: View {
                         let x = strip.isRightToLeft ? 1 - unit.maxX : unit.minX
                         tile(window)
                             .frame(
-                                width: max(unit.width * geometry.size.width - 4, 4),
-                                height: max(unit.height * geometry.size.height - 4, 4))
-                            .offset(x: x * geometry.size.width + 2, y: unit.minY * geometry.size.height + 2)
+                                width: max(unit.width * geometry.size.width - 6, 4),
+                                height: max(unit.height * geometry.size.height - 6, 4))
+                            .clipShape(RoundedRectangle(cornerRadius: 7))
+                            .offset(x: x * geometry.size.width + 3, y: unit.minY * geometry.size.height + 3)
                     }
                 }
             }
@@ -362,11 +363,13 @@ private struct WindowTile: View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 7).fill(Color(white: 0.18))
             if let thumbnail {
-                Image(nsImage: thumbnail)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
+                GeometryReader { geometry in
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+                        .clipped()
+                }
             } else if let icon = window.icon {
                 Image(nsImage: icon)
                     .resizable()
