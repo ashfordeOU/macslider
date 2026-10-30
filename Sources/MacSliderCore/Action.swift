@@ -94,7 +94,7 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .mainLarger: return "Main window larger"
         case .mainSmaller: return "Main window smaller"
         case .makeMain: return "Make main window"
-        case .regroup: return "Group windows by app"
+        case .regroup: return "Reset to smart pairs"
         case .overview: return "Overview of all windows"
         case .toggleNativeFullScreen: return "macOS full screen"
         case .windowSwitcher: return "Search windows"

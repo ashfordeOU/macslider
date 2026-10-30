@@ -96,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         popover.controls = SliderPopover.Controls(
             isPaused: { [weak self] in self?.engine.isPaused ?? false },
+            resetPairs: { [weak self] in self?.engine.perform(.regroup) },
             togglePause: { [weak self] in self?.engine.togglePause() },
             openSettings: { [weak self] in self?.showSettings() }
         )
@@ -303,7 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item(engine.isPaused ? "Resume Tiling" : "Pause Tiling", #selector(togglePause), action: .togglePause))
         menu.addItem(item("Overview", #selector(showOverview), action: .overview))
         menu.addItem(item("Search Windows…", #selector(showSwitcher), action: .windowSwitcher))
-        menu.addItem(item("Group Windows by App", #selector(regroup), action: .regroup))
+        menu.addItem(item("Reset to Smart Pairs", #selector(regroup), action: .regroup))
         menu.addItem(item("Retile Windows", #selector(retile), action: .retile))
 
         if store.settings.workspaceCount > 1 {

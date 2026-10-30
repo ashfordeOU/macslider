@@ -328,6 +328,7 @@ private struct TileOutlines: Shape {
 final class SliderPopover: NSObject, NSPopoverDelegate {
     struct Controls {
         var isPaused: () -> Bool
+        var resetPairs: () -> Void
         var togglePause: () -> Void
         var openSettings: () -> Void
     }
@@ -335,7 +336,7 @@ final class SliderPopover: NSObject, NSPopoverDelegate {
     var mapProvider: () -> Engine.MiniMap? = { nil }
     var actions = SliderBarController.Actions(
         slide: { _, _ in }, endSlide: {}, focus: { _ in }, switchWorkspace: { _ in }, showOverview: {})
-    var controls = Controls(isPaused: { false }, togglePause: {}, openSettings: {})
+    var controls = Controls(isPaused: { false }, resetPairs: {}, togglePause: {}, openSettings: {})
 
     private let popover = NSPopover()
     private let model = SliderBarModel()
@@ -364,6 +365,10 @@ final class SliderPopover: NSObject, NSPopoverDelegate {
             let controls = self.controls
             let view = SliderPopoverView(
                 model: model, paused: paused, actions: wrapped,
+                resetPairs: { [weak self] in
+                    controls.resetPairs()
+                    self?.refresh()
+                },
                 togglePause: { [weak self] in
                     controls.togglePause()
                     self?.paused.value = controls.isPaused()
@@ -398,6 +403,7 @@ private struct SliderPopoverView: View {
     @ObservedObject var model: SliderBarModel
     @ObservedObject var paused: PausedState
     let actions: SliderBarController.Actions
+    let resetPairs: () -> Void
     let togglePause: () -> Void
     let openSettings: () -> Void
 
@@ -411,6 +417,8 @@ private struct SliderPopoverView: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button(action: resetPairs) { Image(systemName: "wand.and.stars") }
+                    .help("Reset to smart pairs: windows of the same app together")
                 Button(action: togglePause) {
                     Image(systemName: paused.value ? "play.fill" : "pause.fill")
                 }

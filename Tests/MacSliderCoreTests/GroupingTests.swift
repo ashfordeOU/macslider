@@ -93,4 +93,20 @@ final class GroupingTests: XCTestCase {
         XCTAssertEqual(strip.columns[1].arrangement, .mainLeft)
         XCTAssertEqual(strip.focusedWindow, 4)
     }
+
+    func testCustomPairsAreLeftAlone() {
+        var strip = Strip()
+        strip.insertSlide([1], width: 1)  // Safari
+        strip.insertSlide([4], width: 1)  // Notes
+        strip.focus(4)
+        XCTAssertTrue(strip.consumeIntoLeft())  // the user pairs Notes with Safari
+        XCTAssertTrue(strip.columns[0].isCustom)
+        // A second Safari window doesn't pull the first out of the user's pair...
+        XCTAssertEqual(Grouping.decide(newApp: "safari", strip: strip, app: app, capacity: capacity), .newSlide)
+        // ...and a lone window doesn't join it either.
+        XCTAssertEqual(Grouping.decide(newApp: "mail", strip: strip, app: app, capacity: capacity), .newSlide)
+        // Resetting to smart pairs clears the mark.
+        strip.regroup([[1], [4]], width: 1)
+        XCTAssertFalse(strip.columns.contains(where: \.isCustom))
+    }
 }

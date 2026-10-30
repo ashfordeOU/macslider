@@ -28,6 +28,9 @@ public struct Column: Equatable, Codable, Sendable {
     public var split: Double
     /// Pinned columns stay at a screen edge while the rest of the strip scrolls.
     public var pin: PinSide?
+    /// Set when the user arranged this column by hand. Automatic grouping
+    /// leaves custom columns alone until the strip is reset to smart pairs.
+    public var isCustom: Bool
 
     public init(
         windows: [WindowID],
@@ -37,7 +40,8 @@ public struct Column: Equatable, Codable, Sendable {
         isTabbed: Bool = false,
         arrangement: Arrangement = .stack,
         split: Double = Arrangement.defaultSplit,
-        pin: PinSide? = nil
+        pin: PinSide? = nil,
+        isCustom: Bool = false
     ) {
         self.windows = windows
         self.active = active
@@ -47,6 +51,7 @@ public struct Column: Equatable, Codable, Sendable {
         self.arrangement = arrangement
         self.split = split
         self.pin = pin
+        self.isCustom = isCustom
     }
 
     public var effectiveWidth: Double { isFullWidth ? 1 : width }
@@ -59,7 +64,7 @@ public struct Column: Equatable, Codable, Sendable {
     public var unitFrames: [Rect] { arrangement.unitFrames(count: windows.count, split: split) }
 
     private enum CodingKeys: String, CodingKey {
-        case windows, active, width, isFullWidth, isTabbed, arrangement, split, isGrid, pin
+        case windows, active, width, isFullWidth, isTabbed, arrangement, split, isGrid, pin, isCustom
     }
 
     public init(from decoder: Decoder) throws {
@@ -73,7 +78,8 @@ public struct Column: Equatable, Codable, Sendable {
             arrangement: try c.decodeIfPresent(Arrangement.self, forKey: .arrangement)
                 ?? ((try c.decodeIfPresent(Bool.self, forKey: .isGrid)) == true ? .grid : .stack),
             split: try c.decodeIfPresent(Double.self, forKey: .split) ?? Arrangement.defaultSplit,
-            pin: try c.decodeIfPresent(PinSide.self, forKey: .pin)
+            pin: try c.decodeIfPresent(PinSide.self, forKey: .pin),
+            isCustom: try c.decodeIfPresent(Bool.self, forKey: .isCustom) ?? false
         )
         active = min(max(active, 0), max(windows.count - 1, 0))
     }
@@ -88,6 +94,7 @@ public struct Column: Equatable, Codable, Sendable {
         try c.encode(arrangement, forKey: .arrangement)
         try c.encode(split, forKey: .split)
         try c.encodeIfPresent(pin, forKey: .pin)
+        try c.encode(isCustom, forKey: .isCustom)
     }
 }
 
@@ -326,6 +333,7 @@ public struct Strip: Equatable, Codable, Sendable {
         }
         columns[target].windows.append(window)
         columns[target].active = columns[target].windows.count - 1
+        columns[target].isCustom = true
         focusedColumn = target
         return true
     }
@@ -346,6 +354,7 @@ public struct Strip: Equatable, Codable, Sendable {
         }
         columns[target].windows.append(window)
         columns[target].active = columns[target].windows.count - 1
+        columns[target].isCustom = true
         focusedColumn = target
         return true
     }
@@ -368,8 +377,9 @@ public struct Strip: Equatable, Codable, Sendable {
         var source = columns[focusedColumn]
         let window = source.windows.remove(at: source.active)
         source.active = min(source.active, source.windows.count - 1)
+        source.isCustom = true
         columns[focusedColumn] = source
-        columns.insert(Column(windows: [window], width: source.width), at: focusedColumn + 1)
+        columns.insert(Column(windows: [window], width: source.width, isCustom: true), at: focusedColumn + 1)
         focusedColumn += 1
         return true
     }
@@ -399,9 +409,10 @@ public struct Strip: Equatable, Codable, Sendable {
     }
 
     /// Adds a window that is not on the strip to the column at `index`.
-    public mutating func add(_ window: WindowID, toColumn index: Int, focus: Bool = true) {
+    public mutating func add(_ window: WindowID, toColumn index: Int, focus: Bool = true, custom: Bool = false) {
         guard columns.indices.contains(index), !contains(window) else { return }
         columns[index].windows.append(window)
+        if custom { columns[index].isCustom = true }
         if focus {
             focusedColumn = index
             columns[index].active = columns[index].windows.count - 1
@@ -419,6 +430,7 @@ public struct Strip: Equatable, Codable, Sendable {
         remove(window)
         guard let (newTarget, _) = locate(anchor) else { return false }
         columns[newTarget].windows.append(window)
+        columns[newTarget].isCustom = true
         focus(window)
         return true
     }
@@ -433,7 +445,7 @@ public struct Strip: Equatable, Codable, Sendable {
         let keepWidth = sourceVanishes ? columns[source].width : width
         remove(window)
         target = min(target, columns.count)
-        columns.insert(Column(windows: [window], width: keepWidth), at: target)
+        columns.insert(Column(windows: [window], width: keepWidth, isCustom: true), at: target)
         focusedColumn = target
     }
 
@@ -467,6 +479,7 @@ public struct Strip: Equatable, Codable, Sendable {
         public var mates: [WindowID]
         public var width: Double
         public var arrangement: Arrangement
+        public var isCustom: Bool
     }
 
     public func slot(of window: WindowID) -> Slot? {
@@ -474,7 +487,7 @@ public struct Strip: Equatable, Codable, Sendable {
         let column = columns[c]
         return Slot(
             columnIndex: c, row: r, mates: column.windows.filter { $0 != window },
-            width: column.width, arrangement: column.arrangement)
+            width: column.width, arrangement: column.arrangement, isCustom: column.isCustom)
     }
 
     /// Puts `window` back where `slot` says: into its old column if any of its
@@ -492,7 +505,9 @@ public struct Strip: Equatable, Codable, Sendable {
             return
         }
         let index = min(max(slot.columnIndex, 0), columns.count)
-        columns.insert(Column(windows: [window], width: slot.width, arrangement: slot.arrangement), at: index)
+        columns.insert(
+            Column(windows: [window], width: slot.width, arrangement: slot.arrangement, isCustom: slot.isCustom),
+            at: index)
         if focus || columns.count == 1 {
             focusedColumn = index
         } else if index <= focusedColumn {

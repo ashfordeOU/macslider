@@ -199,6 +199,10 @@ final class Engine {
             switchWorkspace(to: n - 1)
             return
         }
+        if action == .regroup {
+            resetToSmartPairs()
+            return
+        }
         if let n = action.moveToWorkspaceNumber {
             moveFocusedWindow(toWorkspace: n - 1)
             return
@@ -255,16 +259,7 @@ final class Engine {
         case .mainSmaller: strip.adjustSplit(by: -0.05)
         case .makeMain: strip.promoteToMain()
         case .regroup:
-            let groups = Grouping.plan(
-                strip.columns.filter { $0.pin == nil }.flatMap(\.windows),
-                app: { [weak self] id in self?.windows[id].map(Self.appKey) ?? "" },
-                capacity: { [weak self] app in self?.settings.tiles(for: app) ?? 2 },
-                pairSize: settings.tilesPerSlide
-            )
-            strip.regroup(groups, width: 1) { [weak self] group in
-                guard let self, let first = group.first else { return .grid }
-                return self.settings.arrangement(for: self.windows[first]?.bundleID)
-            }
+            strip = smartPairs(strip)
         case .pinLeft: strip.togglePin(.left)
         case .pinRight: strip.togglePin(.right)
         case .toggleTabbed: strip.toggleTabbed()
@@ -404,6 +399,40 @@ final class Engine {
         window.bundleID ?? window.appName
     }
 
+    /// Regroups `strip` by app: same-app windows share slides, lone windows pair up.
+    private func smartPairs(_ strip: Strip) -> Strip {
+        var strip = strip
+        let groups = Grouping.plan(
+            strip.columns.filter { $0.pin == nil }.flatMap(\.windows),
+            app: { [weak self] id in self?.windows[id].map(Self.appKey) ?? "" },
+            capacity: { [weak self] app in self?.settings.tiles(for: app) ?? 2 },
+            pairSize: settings.tilesPerSlide
+        )
+        strip.regroup(groups, width: 1) { [weak self] group in
+            guard let self, let first = group.first else { return .grid }
+            return self.settings.arrangement(for: self.windows[first]?.bundleID)
+        }
+        return strip
+    }
+
+    /// The single "undo my own pairings" action: every workspace on the
+    /// visible Spaces goes back to smart pairs.
+    func resetToSmartPairs() {
+        guard isRunning, !isPaused else { return }
+        let screens = Set(displays.map { currentKey($0).screen })
+        for (key, strip) in strips where screens.contains(key.screen) {
+            var paired = smartPairs(strip)
+            if let display = display(for: key) {
+                paired.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+            }
+            strips[key] = paired
+        }
+        appMemory.removeAll()
+        windowMemory.removeAll()
+        layout(animated: true)
+        scheduleSave()
+    }
+
     // MARK: - Workspaces
 
     /// Shows workspace `index` on the active display.
@@ -521,7 +550,7 @@ final class Engine {
             removeFromStrip(window)
             var strip = strips[target] ?? Strip()
             if let column, strip.columns.indices.contains(column) {
-                strip.add(id, toColumn: column, focus: true)
+                strip.add(id, toColumn: column, focus: true, custom: true)
             } else {
                 strip.insert(id, width: width, position: .end, focus: true)
                 if let newColumnAt { strip.moveColumn(from: strip.columns.count - 1, to: newColumnAt) }

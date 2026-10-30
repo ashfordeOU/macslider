@@ -69,7 +69,8 @@ public enum Grouping {
         for window in strip.allWindows {
             if let name = app(window) { counts[name, default: 0] += 1 }
         }
-        let scrolling = strip.columns.indices.filter { strip.columns[$0].pin == nil }
+        // Pinned columns and columns the user arranged by hand are never touched.
+        let scrolling = strip.columns.indices.filter { strip.columns[$0].pin == nil && !strip.columns[$0].isCustom }
         func apps(of column: Int) -> [String?] { strip.columns[column].windows.map(app) }
 
         let existing = counts[newApp] ?? 0
@@ -96,7 +97,7 @@ public enum Grouping {
 
         if existing == 1, let other = strip.allWindows.first(where: { app($0) == newApp }),
             let (column, _) = strip.locate(other), strip.columns[column].windows.count > 1,
-            strip.columns[column].pin == nil
+            strip.columns[column].pin == nil, !strip.columns[column].isCustom
         {
             return .pairWith(window: other)
         }

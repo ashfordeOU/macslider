@@ -89,6 +89,7 @@ struct OverviewActions {
     var show: (StripKey) -> Void
     var moveWindow: (WindowID, StripKey, _ column: Int?, _ newColumnAt: Int?) -> Void
     var moveColumn: (_ from: Int, _ to: Int, StripKey) -> Void
+    var resetPairs: () -> Void
     var close: () -> Void
 }
 
@@ -120,9 +121,15 @@ struct OverviewView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Overview").font(.system(size: 26, weight: .semibold)).foregroundStyle(.white)
-            Text("Click to jump · drag a window onto a slide to group it, or between slides to give it its own · drag ≡ to reorder slides · esc to close")
+            Text("Click to jump · drag a window onto a slide to pair it (your pairings stay until you reset) · drag between slides to give it its own · drag ≡ to reorder · esc to close")
                 .font(.callout).foregroundStyle(.white.opacity(0.7))
             Spacer()
+            Button {
+                actions.resetPairs()
+            } label: {
+                Label("Reset to smart pairs", systemImage: "wand.and.stars")
+            }
+            .help("Put windows of the same app back together, undoing your own pairings")
             if !model.previewsAllowed {
                 Button("Show live previews…") {
                     WindowThumbnails.requestAccess()
@@ -431,6 +438,10 @@ final class OverviewController {
             },
             moveColumn: { [weak self] from, to, key in
                 self?.engine?.overviewMoveColumn(from: from, to: to, in: key)
+                self?.refresh()
+            },
+            resetPairs: { [weak self] in
+                self?.engine?.perform(.regroup)
                 self?.refresh()
             },
             close: { [weak self] in self?.close() }

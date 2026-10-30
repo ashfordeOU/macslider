@@ -111,8 +111,14 @@ the strip with full-screen slides:
 - Open a second window of an app that is sharing a slide, and the two windows move to a slide of their own.
 - Windows that come back return to exactly where they were: unhidden, unminimised, reopened from the Dock after closing, or after quitting and relaunching the app.
 
-Press <kbd>⌃⌥A</kbd> to regroup everything. Change the tiles per slide (up to
-nine) and the layout for any app under **Settings → Apps**.
+**Your own pairings stick.** Pair windows yourself (say one Safari and one
+Finder window) by dragging in the overview or with <kbd>⌃⌥[</kbd> / <kbd>⌃⌥]</kbd>,
+and MacSlider keeps that slide as you made it: new windows won't break it up
+or squeeze into it, and it's saved across MacSlider restarts. To go back,
+**Reset to smart pairs** (<kbd>⌃⌥A</kbd>, the ✨ button in the menu bar slider,
+or the overview) regroups every workspace by app in one step.
+
+Change the tiles per slide (up to nine) and the layout for any app under **Settings → Apps**.
 
 ### Slide layouts
 
@@ -204,7 +210,7 @@ AZERTY, QWERTZ, Dvorak and other layouts.
 | Full width on / off | <kbd>⌃⌥F</kbd> |
 | Centre column | <kbd>⌃⌥C</kbd> |
 | macOS full screen | <kbd>⌃⌥⇧F</kbd> |
-| Group windows into slides by app | <kbd>⌃⌥A</kbd> |
+| Reset to smart pairs (regroup by app) | <kbd>⌃⌥A</kbd> |
 | Stack into the column on the left / right | <kbd>⌃⌥[</kbd> <kbd>⌃⌥]</kbd> |
 | Pop out of a stack to the left / right | <kbd>⌃⌥⇧[</kbd> <kbd>⌃⌥⇧]</kbd> |
 | Next slide layout | <kbd>⌃⌥G</kbd> |

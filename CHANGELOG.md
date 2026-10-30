@@ -8,6 +8,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 - A new app icon, and a matching menu bar icon.
+- Your own pairings stick: slides you arrange by hand are kept as they are and saved, until you reset.
+- Reset to smart pairs (⌃⌥A, the menu, the menu bar slider or the overview) regroups every workspace by app in one step.
 
 ### Fixed
 - Clicking an app in the Dock no longer rearranges the strip: hidden, minimised and reopened windows, and relaunched apps, return to exactly where they were.
