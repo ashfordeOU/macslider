@@ -219,7 +219,7 @@ private struct SliderBarView: View {
                                 }
                             }
                             .contextMenu {
-                                Button("Rename “\(name)”…") { actions.renameWorkspace(index) }
+                                Button("Rename “\(name)”") { actions.renameWorkspace(index) }
                                 Button("Switch to \(name)") { actions.switchWorkspace(index) }
                             }
                     }

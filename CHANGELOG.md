@@ -4,6 +4,31 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-10-30
+
+### Added
+- Snap layouts picker: drag a window towards the top of the screen and drop it on a zone.
+- Swap inside a slide: drag a window over a slide-mate and they trade places live.
+- Custom slide layouts, designed in Settings (columns, each split into rows).
+- App pairs: save a slide's apps and open them together from the menu bar.
+- Profiles: separate sets of workspaces, switched with ⌃⌥0 or the menu bar.
+- Dynamic workspaces: show only the workspaces in use, plus one.
+- Marks (⌃⌥⇧; then a letter, ⌃⌥; then the letter to jump back).
+- Scratchpad: one floating window that drops in and hides with ⌃⌥`.
+- Park a workspace's windows in the Dock and bring them back to the same slides.
+- Attention markers: red dots on windows whose apps show a Dock badge.
+- ⌥ + pinch opens the overview; arrow keys, return and delete work there, and a bin closes windows dropped on it.
+- Live previews in window search.
+- Haptic taps as the strip settles on a slide, and VoiceOver labels for window tiles.
+
+### Changed
+- Workspaces are renamed in place in the overview: the name becomes a text field right where it is; no more dialogs.
+- The overview's header clears the menu bar with even spacing, and its hint sits on its own line.
+
+### Fixed
+- Apps whose windows can't shrink to half the screen (like the App Store) no longer spill off the edge or over their neighbour: Monorail notices, gives the window a slide of its own, and remembers the app for next time.
+- Previews and the overview leave gaps between windows.
+
 ## [0.4.0] - 2026-10-30
 
 ### Added

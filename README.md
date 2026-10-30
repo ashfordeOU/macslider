@@ -99,6 +99,24 @@ change with <kbd>⌃⌥Z</kbd>.
 
 </td>
 </tr>
+<tr>
+<td valign="top">
+
+### 🧲 Snap, swap and pair
+Drag a window to the top of the screen and pick a layout to drop it into.
+Drag it over its slide-mate and they swap sides as you go. Save a slide as an
+**app pair** and open both apps together any time.
+
+</td>
+<td valign="top">
+
+### 🎛️ Profiles, marks and a scratchpad
+Separate **profiles** for work and home, **marks** to jump to a window with one
+letter, a **scratchpad** window that drops in and hides with <kbd>⌃⌥`</kbd>, and
+**park** a whole workspace in the Dock until you need it.
+
+</td>
+</tr>
 </table>
 
 <p align="center"><img src="assets/readme/layouts.svg" alt="Slide layouts: side by side, up and down, grids of four and six, main + side, main + bottom, columns and tabs" width="100%"></p>
@@ -234,6 +252,30 @@ Change the tiles per slide (up to six — more gets too crowded) and the layout 
 slide into tabs. Arrow keys move between tiles by where they are on screen, then
 on to the next slide. Choose the layout for new slides in **Settings → Layout**.
 
+**Design your own** in **Settings → Layout → Custom slide layouts**: choose how
+many columns and how many rows each has ("one big beside two stacked", "two,
+big, two"), up to six windows. Pick one from a slide's right-click menu ▸
+**Slide Layout**.
+
+**Windows that can't shrink.** Some apps (the App Store, a few settings
+windows) have a minimum size bigger than half the screen. Monorail notices
+when a window refuses its tile, gives it a slide of its own, and remembers
+the app so its windows open on their own slide from then on.
+
+**Swap and resize inside a slide.** Drag a window by its title bar over
+another window in the same slide and the two trade places as you drag, the
+other one sliding across to the side you came from; in a main layout the
+window takes over the main spot. Drag the edge between two windows and the
+neighbour grows or shrinks to match.
+
+### Snap layouts picker
+
+Drag any window towards the top of the screen and a strip of layouts drops
+down: halves, thirds, two thirds, quarters and full screen. Let go over a zone
+and the window snaps there, floating. Turn it off in **Settings → Layout**.
+If macOS also tiles windows dragged to the very top edge, you can switch that
+off in System Settings → Desktop & Dock → Windows.
+
 ### Saved layouts
 
 Arrange things the way you like for a task, then **Saved Layouts → Save
@@ -274,6 +316,9 @@ menu bar) to see every slide of every workspace at once:
 - **Click** a window to jump to it, or a workspace title to switch to it.
 - **Drag a window** onto another slide to group it there, or into the gap between slides to give it a column of its own. It can go to another workspace too.
 - **Drag a slide** by its ≡ handle to reorder the strip.
+- **Drop a window on the bin** at the top to close it.
+- **Arrow keys** move a highlight between windows, <kbd>↩</kbd> jumps to it, <kbd>⌫</kbd> closes it.
+- Hold <kbd>⌥</kbd> and **pinch** on the trackpad to open the overview; pinch out to close it.
 - Turn on **Show live previews** to see window contents. This needs Screen Recording permission; without it you see app icons and titles.
 
 ### Slider bar
@@ -301,13 +346,47 @@ Give an app a home workspace in **Settings → Apps** and its new windows
 always open there (Slack in "Chat", Mail in "Personal").
 
 Name your workspaces ("Work", "Personal", "Design") in **Settings → General**,
-from the overview, or by right-clicking a dot on the slider bar. Each workspace
+or right in the overview: click the pencil (or right-click a dot on the slider
+bar) and type the new name in place. Each workspace
 has its own colour in the overview and the slider bar.
 
 Each display has four workspaces by default (up to nine in **Settings → General**).
 <kbd>⌃⌥1</kbd>–<kbd>⌃⌥9</kbd> switches workspace, and <kbd>⌃⌥⇧1</kbd>–<kbd>⌃⌥⇧9</kbd>
 moves the focused window to one. The menu bar shows where you are (`2 · 3/5` is
 workspace 2, slide 3 of 5). Switching to a window with ⌘Tab takes you to its workspace.
+
+### Profiles
+
+A profile is a whole set of workspaces, for keeping work and home (or two
+clients) apart. Add profiles in **Settings → General → Profiles**, then switch
+with <kbd>⌃⌥0</kbd> or **Profile** in the menu bar. Windows of the other
+profiles wait out of sight, each workspace remembering its slides. Turn on
+**Only show workspaces in use** and the dots, menus and overview list just the
+workspaces you are using, plus one empty one.
+
+### Marks and the scratchpad
+
+- **Marks**: press <kbd>⌃⌥⇧;</kbd> then a letter to mark the focused window; later <kbd>⌃⌥;</kbd> and the same letter jumps straight back to it, wherever it is. Marked windows show their letter in the overview.
+- **Scratchpad**: <kbd>⌃⌥⇧`</kbd> makes the focused window the scratchpad (a notes app or a terminal, say). <kbd>⌃⌥`</kbd> drops it in over everything, centred; press again to tuck it away.
+
+### App pairs
+
+Right-click a window in a slide (in the slider's preview or the overview) and
+choose **Save Slide as App Pair…**. Later, **App Pairs** in the menu bar opens
+those apps, launching any that aren't running, and puts them together in one
+slide with the same layout.
+
+### Parking a workspace
+
+**Workspaces → Park Workspace** in the menu bar (or right-click a workspace in
+the overview) minimises all its windows to the Dock. **Bring Back** puts every
+one of them back on exactly the same slides.
+
+### Attention markers
+
+When an app shows a badge on its Dock icon (unread mail, a new message), its
+windows get a small red dot on the slider bar, in the overview and in window
+search, so you can see which slide wants you.
 
 ### With the mouse
 
@@ -353,6 +432,10 @@ AZERTY, QWERTZ, Dvorak and other layouts.
 | Tabbed column on / off | <kbd>⌃⌥W</kbd> · <kbd>⌃⌥⇧T</kbd> |
 | Pin column to left / right edge | <kbd>⌃⌥P</kbd> <kbd>⌃⌥⇧P</kbd> |
 | Float / tile window | <kbd>⌃⌥T</kbd> |
+| Mark window / jump to mark | <kbd>⌃⌥⇧;</kbd> then a letter · <kbd>⌃⌥;</kbd> then the letter |
+| Show / hide scratchpad | <kbd>⌃⌥`</kbd> |
+| Make window the scratchpad | <kbd>⌃⌥⇧`</kbd> |
+| Next profile | <kbd>⌃⌥0</kbd> |
 | Undo last layout change | <kbd>⌃⌥Z</kbd> |
 | Retile everything | <kbd>⌃⌥Esc</kbd> |
 | Pause / resume | <kbd>⌃⌥Q</kbd> |
@@ -364,12 +447,14 @@ can be bound to any keys in Settings. Every shortcut is also listed under
 ## Mouse and trackpad
 
 - **Click** any window, including the thin edge of one parked off-screen, and the strip scrolls to show it.
-- **Drag** a window by its title bar onto another column to reorder the strip. Dragging a window out of a stack unstacks it.
+- **Drag** a window by its title bar onto another column to reorder the strip. Dragging a window out of a stack unstacks it. Drag it over a window in its own slide to swap the two, or to the top of the screen for the snap layouts picker.
 - **Resize** a window's edge to change its column's width.
 - **Scroll** while holding <kbd>⌥</kbd> (you can choose ⌘, ⌃ or ⌃⌥ instead), or with no keys over the menu bar. A mouse wheel moves one window per notch; a trackpad or Magic Mouse moves the strip with your fingers.
 - **‹ › buttons** next to the menu bar icon step one window at a time.
 - **Hot edges** (optional, in **Settings → Motion & Input**): rest the pointer against the left or right edge of the screen and the strip slides that way.
 - **Swipe** with three or four fingers, no keys, once you turn it on in **Settings → Motion & Input**. If macOS uses the same finger count to switch Spaces, **Settings → General → Mac setup** shows you where to change it.
+- **Pinch** with <kbd>⌥</kbd> held to open or close the overview.
+- On Force Touch trackpads you feel a light **tap** each time the strip lands on a slide (turn it off in **Settings → Motion & Input**).
 - **Focus follows mouse** and **mouse follows focus** are optional and off by default.
 
 ## Settings

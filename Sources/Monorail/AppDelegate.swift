@@ -119,9 +119,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         let commands = windowCommands()
         sliderBar.actions.commands = commands
-        sliderBar.actions.renameWorkspace = { [weak self] index in self?.renameWorkspace(index) }
+        sliderBar.actions.renameWorkspace = { [weak self] index in self?.overview.showRenaming(index) }
         overview.commands = commands
-        overview.renameWorkspace = { [weak self] index in self?.renameWorkspace(index) }
+        overview.setWorkspaceName = { [weak self] index, name in
+            self?.store.settings.setWorkspaceName(name, at: index)
+        }
         popover.actions = sliderBar.actions
         updater.$available
             .receive(on: DispatchQueue.main)
@@ -350,16 +352,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             placeholder: current?.title ?? "")
         else { return }
         engine.rename(id, to: name)
-    }
-
-    private func renameWorkspace(_ index: Int) {
-        guard let name = TextPrompt.ask(
-            title: "Rename workspace",
-            message: "Leave empty for “Workspace \(index + 1)”.",
-            initial: store.settings.workspaceNames.indices.contains(index) ? store.settings.workspaceNames[index] : "",
-            placeholder: "Workspace \(index + 1)")
-        else { return }
-        store.settings.setWorkspaceName(name, at: index)
     }
 
     @objc private func stepLeft() { engine.step(forward: false, honourReverse: false, visual: true) }

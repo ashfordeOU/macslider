@@ -10,6 +10,10 @@ final class OverviewModel: ObservableObject {
     @Published var previewsAllowed = WindowThumbnails.isAllowed
     /// The window chosen with the arrow keys.
     @Published var selection: WindowID?
+    /// The workspace whose name is being edited in place.
+    @Published var editing: StripKey?
+    /// Room for the menu bar above the overview's content.
+    @Published var topInset: CGFloat = 0
 
     func loadThumbnails() {
         previewsAllowed = WindowThumbnails.isAllowed
@@ -61,10 +65,10 @@ struct OverviewActions {
     var moveColumn: (_ from: Int, _ to: Int, StripKey) -> Void
     var resetPairs: () -> Void
     var close: () -> Void
-    var renameWorkspace: (Int) -> Void = { _ in }
     var commands = WindowCommands()
     var park: (Int) -> Void = { _ in }
     var unpark: (Int) -> Void = { _ in }
+    var setWorkspaceName: (Int, String) -> Void = { _, _ in }
 }
 
 /// The overview's backdrop: a deep, colourful gradient with soft glows and a
@@ -122,7 +126,7 @@ struct OverviewView: View {
             OverviewBackground()
                 .contentShape(Rectangle())
                 .onTapGesture { actions.close() }
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 22) {
                 header
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: 22) {
@@ -133,22 +137,33 @@ struct OverviewView: View {
                     .padding(.bottom, 24)
                 }
             }
-            .padding(36)
+            .padding(.horizontal, 44)
+            .padding(.bottom, 32)
+            // Clear the menu bar, then leave the same breathing room as the sides.
+            .padding(.top, model.topInset + 34)
         }
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Overview").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            Text("Click or arrow keys + return to jump · drag a window onto a slide to pair it · between slides for its own · onto the bin to close it · drag ≡ to reorder · esc to close")
-                .font(.callout).foregroundStyle(.white.opacity(0.7))
-            Spacer()
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Overview").font(.system(size: 32, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                Text("Click or use the arrow keys and return to jump · drag a window onto a slide to pair it, between slides for its own, or onto the bin to close it · drag ≡ to reorder · esc closes")
+                    .font(.callout).foregroundStyle(.white.opacity(0.65))
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 24)
             CloseDropTarget { id in actions.commands.close(id) }
             Button {
                 actions.resetPairs()
             } label: {
                 Label("Reset to smart pairs", systemImage: "wand.and.stars")
+                    .font(.callout)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Capsule().fill(Color.white.opacity(0.12)))
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.85))
             .help("Put windows of the same app back together, undoing your own pairings")
             if !model.previewsAllowed {
                 LivePreviewsButton { model.loadThumbnails() }
@@ -164,45 +179,88 @@ private struct StripRow: View {
     let actions: OverviewActions
     private let height: CGFloat = 190
 
+    @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
+
     private var color: Color { WorkspaceColor.color(strip.workspace) }
+    private var isEditing: Bool { model.editing == strip.key }
+
+    private func startEditing() {
+        draft = strip.name
+        model.editing = strip.key
+    }
+
+    private func finishEditing(save: Bool) {
+        guard isEditing else { return }
+        if save { actions.setWorkspaceName(strip.workspace, draft) }
+        model.editing = nil
+    }
+
+    /// The workspace's name, edited right where it is shown.
+    private var nameField: some View {
+        HStack(spacing: 8) {
+            Circle().fill(color).frame(width: 10, height: 10)
+            TextField("Workspace \(strip.workspace + 1)", text: $draft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 220)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.14)))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(color.opacity(0.9), lineWidth: 1.5))
+                .focused($fieldFocused)
+                .onSubmit { finishEditing(save: true) }
+                .onExitCommand { finishEditing(save: false) }
+                .onChange(of: fieldFocused) { focused in if !focused { finishEditing(save: true) } }
+                .onAppear {
+                    draft = strip.name
+                    DispatchQueue.main.async { fieldFocused = true }
+                }
+            Text("return to save · esc to cancel").font(.caption).foregroundStyle(.white.opacity(0.5))
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Button {
-                    actions.show(strip.key)
-                } label: {
-                    HStack(spacing: 8) {
-                        Circle().fill(color).frame(width: 10, height: 10)
-                            .shadow(color: color.opacity(0.8), radius: strip.isActive ? 6 : 0)
-                        Text(strip.title).font(.system(size: 15, weight: .semibold, design: .rounded))
-                        Text("\(strip.columns.count) \(strip.columns.count == 1 ? "slide" : "slides")")
-                            .font(.subheadline).foregroundStyle(.white.opacity(0.6))
-                        if strip.isActive {
-                            Text("Current").font(.caption.weight(.semibold))
-                                .padding(.horizontal, 7).padding(.vertical, 2)
-                                .background(Capsule().fill(color.opacity(0.35)))
+                if isEditing {
+                    nameField
+                } else {
+                    Button {
+                        actions.show(strip.key)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Circle().fill(color).frame(width: 10, height: 10)
+                                .shadow(color: color.opacity(0.8), radius: strip.isActive ? 6 : 0)
+                            Text(strip.title).font(.system(size: 15, weight: .semibold, design: .rounded))
+                            Text("\(strip.columns.count) \(strip.columns.count == 1 ? "slide" : "slides")")
+                                .font(.subheadline).foregroundStyle(.white.opacity(0.6))
+                            if strip.isActive {
+                                Text("Current").font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 7).padding(.vertical, 2)
+                                    .background(Capsule().fill(color.opacity(0.35)))
+                            }
+                        }
+                        .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("Rename “\(strip.name)”") { startEditing() }
+                        if strip.parkedCount > 0 {
+                            Button("Bring Back Parked Windows") { actions.unpark(strip.workspace) }
+                        } else if !strip.columns.isEmpty {
+                            Button("Park Workspace (minimise its windows)") { actions.park(strip.workspace) }
                         }
                     }
-                    .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    Button("Rename “\(strip.title)”…") { actions.renameWorkspace(strip.workspace) }
-                    if strip.parkedCount > 0 {
-                        Button("Bring Back Parked Windows") { actions.unpark(strip.workspace) }
-                    } else if !strip.columns.isEmpty {
-                        Button("Park Workspace (minimise its windows)") { actions.park(strip.workspace) }
+                    Button {
+                        startEditing()
+                    } label: {
+                        Image(systemName: "pencil").font(.system(size: 11, weight: .semibold))
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .help("Rename this workspace")
                 }
-                Button {
-                    actions.renameWorkspace(strip.workspace)
-                } label: {
-                    Image(systemName: "pencil").font(.system(size: 11, weight: .semibold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.5))
-                .help("Rename this workspace")
                 if strip.parkedCount > 0 {
                     Button {
                         actions.unpark(strip.workspace)
@@ -520,13 +578,17 @@ final class OverviewController {
         guard let engine else { return }
         model.strips = engine.overview()
         model.selection = nil
+        model.editing = nil
         model.thumbnails = [:]
         model.loadThumbnails()
         let panel = self.panel ?? makePanel()
         self.panel = panel
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-        if let screen { panel.setFrame(screen.frame, display: true) }
+        if let screen {
+            panel.setFrame(screen.frame, display: true)
+            model.topInset = screen.frame.maxY - screen.visibleFrame.maxY
+        }
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
     }
@@ -537,7 +599,14 @@ final class OverviewController {
     }
 
     var commands = WindowCommands()
-    var renameWorkspace: (Int) -> Void = { _ in }
+    var setWorkspaceName: (Int, String) -> Void = { _, _ in }
+
+    /// Opens the overview with workspace `index`'s name ready to edit.
+    func showRenaming(_ index: Int) {
+        show()
+        let current = model.strips.filter { $0.workspace == index }
+        model.editing = (current.first { $0.isActive } ?? current.first)?.key
+    }
 
     /// Window commands for overview tiles: they act, then refresh the overview.
     private func overviewCommands() -> WindowCommands {
@@ -593,6 +662,7 @@ final class OverviewController {
     /// Arrow keys move a selection through the windows, return jumps to it,
     /// delete closes it.
     private func handleKey(_ event: NSEvent) -> Bool {
+        guard model.editing == nil else { return false }
         let rows = model.strips.map { strip -> [WindowID] in
             let ids = strip.columns.flatMap { $0.windows.map(\.id) }
             return strip.isRightToLeft ? ids.reversed() : ids
@@ -683,10 +753,6 @@ final class OverviewController {
                 self?.refresh()
             },
             close: { [weak self] in self?.close() },
-            renameWorkspace: { [weak self] index in
-                self?.close()
-                self?.renameWorkspace(index)
-            },
             commands: overviewCommands(),
             park: { [weak self] index in
                 self?.engine?.parkWorkspace(index)
@@ -695,6 +761,10 @@ final class OverviewController {
             unpark: { [weak self] index in
                 self?.engine?.unparkWorkspace(index)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self?.refresh() }
+            },
+            setWorkspaceName: { [weak self] index, name in
+                self?.setWorkspaceName(index, name)
+                DispatchQueue.main.async { self?.refresh() }
             }
         )
         // Frosted glass: blur whatever is behind the overview, then draw on top.

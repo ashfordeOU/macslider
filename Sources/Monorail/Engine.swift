@@ -122,7 +122,10 @@ final class Engine {
         overlays.onSelectWindow = { [weak self] id in self?.focusAndReveal(id) }
         // The app's own move/resize notifications arrive after the write lands;
         // stamping the time then keeps them from looking like the user's moves.
-        writer.didApply = { [weak self] id in self?.windows[id]?.appliedAt = CACurrentMediaTime() }
+        writer.didApply = { [weak self] id in
+            self?.windows[id]?.appliedAt = CACurrentMediaTime()
+            self?.scheduleFitCheck(id)
+        }
     }
 
     // MARK: - Lifecycle
@@ -424,7 +427,12 @@ final class Engine {
         var strip = strips[key] ?? Strip()
         let rule = settings.rule(for: window.bundleID)
         let position = rule?.position ?? settings.newWindowPosition
-        if settings.groupByApp {
+        if settings.groupByApp && roomyApps.contains(Self.appKey(window)) {
+            // This app can't shrink to share a slide: give it one of its own.
+            strip.insertSlide(
+                [window.id], width: 1, arrangement: settings.arrangement(for: window.bundleID),
+                position: position, focus: focus)
+        } else if settings.groupByApp {
             let decision = Grouping.decide(
                 newApp: Self.appKey(window),
                 strip: strip,
@@ -433,7 +441,18 @@ final class Engine {
                 pairSize: settings.tilesPerSlide,
                 pairLoneWindows: settings.pairLoneWindowsOnOpen
             )
+            let roomy = { [weak self] (id: WindowID) -> Bool in
+                guard let self, let other = self.windows[id] else { return false }
+                return self.roomyApps.contains(Self.appKey(other))
+            }
+            // Never squeeze a window in next to one that can't shrink.
+            let blocked: Bool
             switch decision {
+            case .join(let column): blocked = strip.columns[column].windows.contains(where: roomy)
+            case .pairWith(let other): blocked = roomy(other)
+            case .newSlide: blocked = false
+            }
+            switch blocked ? Grouping.Decision.newSlide : decision {
             case .join(let column):
                 strip.add(window.id, toColumn: column, focus: focus)
             case .pairWith(let other):
@@ -717,6 +736,8 @@ final class Engine {
         var isRightToLeft: Bool
         /// Windows waiting in the Dock while the workspace is parked.
         var parkedCount: Int = 0
+        /// The workspace's own name, without display or profile.
+        var name: String = ""
     }
 
     /// Every workspace on the displays' current Spaces, for the overview.
@@ -752,7 +773,8 @@ final class Engine {
                         key: key, title: title, isActive: key == current, columns: columns, workspace: workspace,
                         aspectRatio: display.visibleFrame.width / max(display.visibleFrame.height, 1),
                         isRightToLeft: settings.layout.direction == .rightToLeft,
-                        parkedCount: parked[key]?.elements.count ?? 0))
+                        parkedCount: parked[key]?.elements.count ?? 0,
+                        name: settings.workspaceName(workspace)))
             }
         }
         return result
@@ -1999,6 +2021,7 @@ final class Engine {
         var profileWorkspaces: [Int: [ScreenKey: Int]]?
         var marks: [String: WindowID]?
         var scratchpad: WindowID?
+        var roomyApps: [String]?
     }
 
     struct SessionStrip: Codable {
@@ -2025,7 +2048,8 @@ final class Engine {
         let state = SavedState(
             strips: strips.filter { !$0.value.isEmpty }, activeWorkspace: activeWorkspace,
             names: names.filter { windows[$0.key] != nil }, session: session,
-            activeProfile: activeProfile, profileWorkspaces: profileWorkspaces, marks: marks, scratchpad: scratchpad)
+            activeProfile: activeProfile, profileWorkspaces: profileWorkspaces, marks: marks, scratchpad: scratchpad,
+            roomyApps: roomyApps.sorted())
         do {
             try FileManager.default.createDirectory(at: SettingsStore.directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(state).write(to: Self.stateURL, options: .atomic)
@@ -2045,6 +2069,7 @@ final class Engine {
         profileWorkspaces = state.profileWorkspaces ?? [:]
         marks = state.marks ?? [:]
         scratchpad = state.scratchpad
+        roomyApps = Set(state.roomyApps ?? [])
         lastSession = state.session ?? []
         lastSessionLoaded = Date()
         savedLayouts = (try? Data(contentsOf: Self.layoutsURL))
@@ -2398,6 +2423,44 @@ final class Engine {
                 self.onStateChange()
             }
         }
+    }
+
+    // MARK: - Windows that won't shrink
+
+    /// Apps whose windows can't shrink to share a slide (App Store, some
+    /// settings windows): they always get a slide of their own.
+    private var roomyApps: Set<String> = []
+    private var fitChecks: [WindowID: Timer] = [:]
+
+    /// After Monorail sizes a window, check the app accepted the size.
+    private func scheduleFitCheck(_ id: WindowID) {
+        fitChecks[id]?.invalidate()
+        fitChecks[id] = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.fitChecks[id] = nil
+            self.checkFit(id)
+        }
+    }
+
+    /// A window bigger than its tile in a shared slide overlaps its
+    /// neighbours or spills off screen: move it to a slide of its own.
+    private func checkFit(_ id: WindowID) {
+        guard isRunning, !isPaused, !animator.isRunning, NSEvent.pressedMouseButtons == 0, resizing == nil,
+            let window = windows[id], let key = window.key, var strip = strips[key],
+            let (c, _) = strip.locate(id), strip.columns[c].windows.count > 1, !strip.columns[c].isTabbed,
+            let target = window.lastApplied, let frame = window.element.frame
+        else { return }
+        let tooWide = Double(frame.width) > target.width + 24
+        let tooTall = Double(frame.height) > target.height + 24
+        guard tooWide || tooTall else { return }
+        roomyApps.insert(Self.appKey(window))
+        let focused = strip.focusedWindow
+        strip.moveWindow(id, toNewColumnAt: c + 1, width: 1)
+        if let focused { strip.focus(focused) }
+        window.lastApplied = nil
+        commit(strip, key)
+        scheduleSave()
+        onNotice("\(window.appName) can’t get that small, so it has a slide of its own")
     }
 
     // MARK: - Haptics
