@@ -14,6 +14,38 @@ struct WindowCommands {
     var moveToWorkspace: (WindowID, Int) -> Void = { _, _ in }
     var workspaceNames: () -> [String] = { [] }
     var currentWorkspace: (WindowID) -> Int? = { _ in nil }
+    /// nil arrangement means tabs.
+    var setLayout: (WindowID, Arrangement?) -> Void = { _, _ in }
+    /// The slide's layout (inner nil = tabs); outer nil if the window isn't tiled.
+    var currentLayout: (WindowID) -> Arrangement?? = { _ in nil }
+}
+
+/// "Slide Layout ▸" for the slide holding a window.
+struct SlideLayoutMenu: View {
+    let window: WindowID
+    let commands: WindowCommands
+
+    var body: some View {
+        let current = commands.currentLayout(window)
+        Menu("Slide Layout") {
+            ForEach([Arrangement.columns, .stack, .grid, .mainLeft, .mainTop], id: \.self) { arrangement in
+                Button {
+                    commands.setLayout(window, arrangement)
+                } label: {
+                    if current == .some(.some(arrangement)) {
+                        Label(arrangement.title, systemImage: "checkmark")
+                    } else {
+                        Text(arrangement.title)
+                    }
+                }
+            }
+            Button {
+                commands.setLayout(window, nil)
+            } label: {
+                if current == .some(.none) { Label("Tabs", systemImage: "checkmark") } else { Text("Tabs") }
+            }
+        }
+    }
 }
 
 /// Close, minimise and full-screen buttons, like a window's title bar.
@@ -63,6 +95,7 @@ struct WindowContextMenu: View {
         Divider()
         Button("Focus") { commands.focus(window) }
         Button("Give It Its Own Slide") { commands.ownSlide(window) }
+        if commands.currentLayout(window) != nil { SlideLayoutMenu(window: window, commands: commands) }
         let names = commands.workspaceNames()
         if names.count > 1 {
             Menu("Move to Workspace") {

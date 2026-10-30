@@ -288,7 +288,10 @@ private struct ColumnCard: View {
             .frame(height: 14)
             .contentShape(Rectangle())
             .onDrag { DragItem.column(row: row, column: column.id).provider }
-            .help("Drag to reorder this slide")
+            .contextMenu {
+                if let first = column.windows.first { SlideLayoutMenu(window: first.id, commands: actions.commands) }
+            }
+            .help("Drag to reorder this slide · right-click to change its layout")
 
             tiles
                 .frame(width: width, height: height - 22)
@@ -481,6 +484,11 @@ final class OverviewController {
         }
         commands.workspaceNames = { [weak self] in self?.commands.workspaceNames() ?? [] }
         commands.currentWorkspace = { [weak self] id in self?.commands.currentWorkspace(id) }
+        commands.setLayout = { [weak self] id, arrangement in
+            self?.commands.setLayout(id, arrangement)
+            self?.refresh()
+        }
+        commands.currentLayout = { [weak self] id in self?.commands.currentLayout(id) ?? nil }
         return commands
     }
 

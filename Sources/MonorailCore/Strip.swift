@@ -139,6 +139,13 @@ public struct Strip: Equatable, Codable, Sendable {
     public private(set) var columns: [Column] = []
     public private(set) var focusedColumn: Int = 0
     public var scroll: Double = 0
+    /// The layout a single-window column takes when a second window joins it
+    /// (the user's slide layout). Not saved; the engine sets it.
+    public var pairingArrangement: Arrangement = .grid
+
+    private enum CodingKeys: String, CodingKey {
+        case columns, focusedColumn, scroll
+    }
 
     public init() {}
 
@@ -338,6 +345,7 @@ public struct Strip: Equatable, Codable, Sendable {
         columns[target].windows.append(window)
         columns[target].active = columns[target].windows.count - 1
         columns[target].isCustom = true
+        adoptPairingLayout(target)
         focusedColumn = target
         return true
     }
@@ -361,6 +369,7 @@ public struct Strip: Equatable, Codable, Sendable {
         columns[target].windows.append(window)
         columns[target].active = columns[target].windows.count - 1
         columns[target].isCustom = true
+        adoptPairingLayout(target)
         focusedColumn = target
         return true
     }
@@ -425,6 +434,7 @@ public struct Strip: Equatable, Codable, Sendable {
         }
         columns[index].windows.append(window)
         if custom { columns[index].isCustom = true }
+        adoptPairingLayout(index)
         if focus {
             focusedColumn = index
             columns[index].active = columns[index].windows.count - 1
@@ -445,6 +455,7 @@ public struct Strip: Equatable, Codable, Sendable {
         guard let (newTarget, _) = locate(anchor) else { return false }
         columns[newTarget].windows.append(window)
         columns[newTarget].isCustom = true
+        adoptPairingLayout(newTarget)
         focus(window)
         return true
     }
@@ -480,6 +491,15 @@ public struct Strip: Equatable, Codable, Sendable {
         columns = fresh
         focusedColumn = 0
         if let focused { focus(focused) }
+    }
+
+    /// A column that just went from one window to two follows the slide
+    /// layout (side by side by default) instead of stacking.
+    private mutating func adoptPairingLayout(_ index: Int) {
+        guard columns.indices.contains(index), columns[index].windows.count == 2,
+            columns[index].arrangement == .stack, !columns[index].isTabbed
+        else { return }
+        columns[index].arrangement = pairingArrangement == .stack ? .stack : pairingArrangement
     }
 
     // MARK: - Resizing inside a slide

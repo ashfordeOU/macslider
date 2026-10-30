@@ -8,6 +8,15 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - MacSlider is now **Monorail**. The app, its menus, downloads, the `monorail` command-line tool and `monorail://` links all use the new name; old `macslider://` links keep working.
+- Windows dragged into a single-window slide now follow your slide layout (side by side by default) instead of stacking. Right-click a window, or a slide's handle in the overview, for Slide Layout: side by side, up and down, grid, main + side, main + bottom or tabs.
+- The app icon fills macOS's icon shape exactly, so newer macOS shows it full size instead of on a grey plate.
+- Built with the newest Xcode available.
+
+### Fixed
+- Menu bar menu commands (Reset to Smart Pairs, Undo Layout Change and the rest) now always run: the menu opens in a way that delivers the chosen item reliably.
+- Reset to smart pairs and Undo confirm what they did with a short message.
+
+### Changed (continued)
 - Updating keeps everything: the app's identity and signature are unchanged, so Accessibility and Screen Recording stay granted, and settings and layouts move over automatically. The app is installed as Monorail.app on update.
 
 ## [0.2.5] - 2026-10-30

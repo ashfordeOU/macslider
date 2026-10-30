@@ -13,9 +13,9 @@ public enum Arrangement: String, Codable, CaseIterable, Sendable {
 
     public var title: String {
         switch self {
-        case .stack: return "Rows"
+        case .stack: return "Up and down"
         case .grid: return "Grid"
-        case .columns: return "Columns"
+        case .columns: return "Side by side"
         case .mainLeft: return "Main + side"
         case .mainTop: return "Main + bottom"
         }

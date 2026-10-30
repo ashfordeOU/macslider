@@ -100,6 +100,7 @@ final class StripTests: XCTestCase {
 
     func testConsumeAndExpel() {
         var s = strip([1, 2, 3])
+        s.pairingArrangement = .stack  // up and down, as this test walks the stack vertically
         XCTAssertTrue(s.consumeIntoLeft())
         XCTAssertEqual(s.columns.count, 2)
         XCTAssertEqual(s.columns[1].windows, [2, 3])
@@ -234,6 +235,7 @@ final class StripTests: XCTestCase {
     func testLayoutSplitsStacksWithGaps() {
         let config = LayoutConfig(gap: 10, edgeGap: 10)
         var s = strip([1, 2])
+        s.pairingArrangement = .stack
         s.consumeIntoLeft()
         let placements = s.layout(config: config, viewport: viewport)
         XCTAssertEqual(placements.count, 2)
@@ -385,6 +387,24 @@ final class StripTests: XCTestCase {
         XCTAssertEqual(s.focusedWindow, 1)
         s.focus(3)
         XCTAssertFalse(s.consumeIntoRight())
+    }
+
+    func testJoiningASingleWindowFollowsTheSlideLayout() {
+        var s = strip([1, 2])
+        XCTAssertTrue(s.consumeIntoLeft())
+        XCTAssertEqual(s.columns[0].arrangement, .grid, "two windows go side by side by default")
+        var rows = strip([1, 2])
+        rows.pairingArrangement = .stack
+        rows.consumeIntoLeft()
+        XCTAssertEqual(rows.columns[0].arrangement, .stack)
+        // An existing multi-window layout the user chose is left as it is.
+        var chosen = strip([1, 2, 3])
+        chosen.focus(2)
+        chosen.consumeIntoLeft()
+        chosen.setArrangement(.mainTop)
+        chosen.focus(3)
+        chosen.consumeIntoLeft()
+        XCTAssertEqual(chosen.columns[0].arrangement, .mainTop)
     }
 
     func testStripIsCodable() throws {

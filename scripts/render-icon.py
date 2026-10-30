@@ -67,7 +67,8 @@ def render(path):
     # Tile: Apple's grid puts an 824pt rounded square in 1024.
     tile_box = (s(100), s(100), s(924), s(924))
     tile = rounded_mask(tile_box, s(186))
-    soft(canvas, tile, (60, 10, 30, 255), s(26), (0, s(16)), 0.45)
+    # Nothing is drawn outside the tile: macOS shrinks icons whose artwork
+    # (even a soft shadow) spills past its rounded-square shape onto a grey plate.
     composite(canvas, tile, gradient((SIZE, SIZE), [
         (0.0, (255, 158, 98, 255)),
         (0.5, (246, 98, 112, 255)),
@@ -120,9 +121,12 @@ def render(path):
     # Fine highlight around the tile edge.
     edge = Image.new("L", (SIZE, SIZE), 0)
     ImageDraw.Draw(edge).rounded_rectangle(tile_box, radius=s(186), outline=255, width=s(3))
-    composite(canvas, edge, (255, 255, 255, 60))
+    composite(canvas, edge, (255, 255, 255, 60), tile)
 
     canvas = canvas.resize((1024, 1024), Image.LANCZOS)
+    # Clip to the exact tile shape (downsampling can ring a pixel or two outside it).
+    shape = tile.resize((1024, 1024), Image.LANCZOS)
+    canvas.putalpha(ImageChops.multiply(canvas.getchannel("A"), shape))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     canvas.save(path)
     print(f"Wrote {path}")

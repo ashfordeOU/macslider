@@ -277,4 +277,61 @@ private struct SlideHUDView: View {
         .fixedSize()
     }
 }
+
+/// A short message that fades in under the menu bar and away again.
+final class Toast {
+    private var panel: NSPanel?
+    private let model = Model()
+    private var timer: Timer?
+
+    final class Model: ObservableObject {
+        @Published var text = ""
+    }
+
+    func show(_ text: String) {
+        model.text = text
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        guard let screen = NSScreen.main?.visibleFrame else { return }
+        let size = NSSize(width: 460, height: 48)  // the capsule sizes itself inside
+        panel.setFrame(
+            NSRect(x: screen.midX - size.width / 2, y: screen.maxY - size.height - 16, width: size.width, height: size.height),
+            display: true)
+        panel.alphaValue = 0
+        panel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { $0.duration = 0.15; panel.animator().alphaValue = 1 }
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.8, repeats: false) { _ in
+            NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; panel.animator().alphaValue = 0 },
+                                                 completionHandler: { panel.orderOut(nil) })
+        }
+    }
+
+    private func makePanel() -> NSPanel {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 240, height: 40),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .statusBar
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle, .fullScreenAuxiliary]
+        panel.contentView = NSHostingView(rootView: ToastView(model: model))
+        return panel
+    }
+
+    private struct ToastView: View {
+        @ObservedObject var model: Model
+
+        var body: some View {
+            Text(model.text)
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 16).padding(.vertical, 9)
+                .background(.regularMaterial, in: Capsule())
+                .fixedSize()
+                .frame(width: 460, height: 48)
+        }
+    }
+}
 #endif

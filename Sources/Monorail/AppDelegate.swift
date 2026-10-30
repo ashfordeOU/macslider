@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let practice = PracticeTracker()
     private let sliderBar = SliderBarController()
     private let resizeAssist = ResizeAssist()
+    private let toast = Toast()
     private let popover = SliderPopover()
     private let statusMenu = NSMenu()
     private let navigation = SettingsNavigation()
@@ -118,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         popover.updater = updater
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
+        engine.onNotice = { [weak self] text in self?.toast.show(text) }
         engine.onResized = { [weak self] id, frame, name, hasOthers in
             self?.resizeAssist.show(for: id, frame: frame, appName: name, hasOthers: hasOthers)
         }
@@ -222,9 +224,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let event = NSApp.currentEvent
         let wantsMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
         if wantsMenu || !store.settings.iconOpensSlider || !engine.isRunning {
-            statusItem.menu = statusMenu
-            sender.performClick(nil)
-            statusItem.menu = nil
+            // Pop the menu up directly: this returns only after the user picks an
+            // item (or dismisses it), so the chosen action is always delivered.
+            menuNeedsUpdate(statusMenu)
+            statusMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 5), in: sender)
         } else {
             popover.toggle(relativeTo: sender)
         }
@@ -281,6 +284,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return (0..<settings.workspaceCount).map(settings.workspaceName)
         }
         commands.currentWorkspace = { [weak self] id in self?.engine.workspaceIndex(of: id) }
+        commands.setLayout = { [weak self] id, arrangement in self?.engine.setSlideLayout(of: id, to: arrangement) }
+        commands.currentLayout = { [weak self] id in self?.engine.slideLayout(of: id) ?? nil }
         return commands
     }
 
@@ -429,12 +434,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func switchWorkspaceFromMenu(_ sender: NSMenuItem) {
-        engine.switchWorkspace(to: sender.tag - 1)
+        let index = sender.tag - 1
+        afterMenu { $0.engine.switchWorkspace(to: index) }
     }
 
     @objc private func showOverview() { overview.show() }
-    @objc private func regroup() { engine.perform(.regroup) }
-    @objc private func undoLayout() { engine.undo() }
+    @objc private func regroup() { afterMenu { $0.engine.perform(.regroup) } }
+    @objc private func undoLayout() { afterMenu { $0.engine.undo() } }
+
+    /// Runs `work` once the menu has fully closed, so window moves and focus
+    /// changes don't race the menu's own teardown.
+    private func afterMenu(_ work: @escaping (AppDelegate) -> Void) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            work(self)
+        }
+    }
     @objc private func checkForUpdates() { updater.check(userInitiated: true) }
 
     private func headerTitle(trusted: Bool) -> String {
@@ -474,15 +489,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return name.count == 1 ? name.lowercased() : nil
     }
 
-    @objc private func togglePause() { engine.togglePause() }
-    @objc private func retile() { engine.retile() }
+    @objc private func togglePause() { afterMenu { $0.engine.togglePause() } }
+    @objc private func retile() { afterMenu { $0.engine.retile() } }
     @objc private func showSwitcher() { switcher.show() }
     @objc private func showSettingsFromMenu() { showSettings() }
     @objc private func showWelcomeFromMenu() { showWelcome() }
     @objc private func quit() { NSApp.terminate(nil) }
 
     @objc private func focusWindowFromMenu(_ sender: NSMenuItem) {
-        engine.focusAndReveal(WindowID(sender.tag))
+        let id = WindowID(sender.tag)
+        afterMenu { $0.engine.focusAndReveal(id) }
     }
 
     @objc private func showShortcuts() {

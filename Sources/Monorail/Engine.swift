@@ -82,6 +82,8 @@ final class Engine {
     var onShowSwitcher: () -> Void = {}
     /// Called for the "Overview" action.
     var onShowOverview: () -> Void = {}
+    /// A short confirmation to show the user ("Nothing to undo").
+    var onNotice: (String) -> Void = { _ in }
 
     private var windows: [WindowID: ManagedWindow] = [:]
     private var strips: [StripKey: Strip] = [:]
@@ -232,6 +234,7 @@ final class Engine {
         }
 
         guard let (display, key) = activeContext(), var strip = strips[key], !strip.isEmpty else { return }
+        strip.pairingArrangement = settings.slideArrangement
         let config = settings.layout
         let width = viewport(of: display).width
         if let focused = focusedWindowID(), strip.contains(focused) { strip.focus(focused) }
@@ -434,8 +437,13 @@ final class Engine {
     func resetToSmartPairs() {
         guard isRunning, !isPaused else { return }
         let screens = Set(displays.map { currentKey($0).screen })
+        var changed = false
+        var slides = 0
         for (key, strip) in strips where screens.contains(key.screen) {
             var paired = smartPairs(strip)
+            changed = changed || paired.columns.map(\.windows) != strip.columns.map(\.windows)
+                || paired.columns.contains(where: \.isCustom) != strip.columns.contains(where: \.isCustom)
+            if key == displays.first.map(currentKey) { slides = paired.columns.count }
             if let display = display(for: key) {
                 paired.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
             }
@@ -445,6 +453,8 @@ final class Engine {
         windowMemory.removeAll()
         layout(animated: true)
         scheduleSave()
+        onStateChange()
+        onNotice(changed ? "Smart pairs · \(slides) \(slides == 1 ? "slide" : "slides")" : "Already in smart pairs")
     }
 
     // MARK: - Workspaces
@@ -523,6 +533,26 @@ final class Engine {
     }
 
     func workspaceIndex(of id: WindowID) -> Int? { windows[id]?.key?.workspace }
+
+    /// The layout of the slide holding `id`: an arrangement, or nil for tabs.
+    func slideLayout(of id: WindowID) -> Arrangement?? {
+        guard let key = windows[id]?.key, let strip = strips[key], let (c, _) = strip.locate(id) else { return nil }
+        return .some(strip.columns[c].isTabbed ? nil : strip.columns[c].arrangement)
+    }
+
+    /// Sets the layout of the slide holding `id` (nil for tabs).
+    func setSlideLayout(of id: WindowID, to arrangement: Arrangement?) {
+        guard let key = windows[id]?.key, var strip = strips[key] else { return }
+        recordHistory()
+        strip.focus(id)
+        if let arrangement {
+            strip.setArrangement(arrangement)
+        } else if let (c, _) = strip.locate(id), !strip.columns[c].isTabbed {
+            strip.toggleTabbed()
+        }
+        commit(strip, key)
+        onStateChange()
+    }
 
     /// Moves any window (not just the focused one) to a workspace on its display.
     func moveWindow(_ id: WindowID, toWorkspace index: Int) {
@@ -608,6 +638,7 @@ final class Engine {
             ?? settings.layout.defaultWidth
         if source == target {
             guard var strip = strips[target] else { return }
+            strip.pairingArrangement = settings.slideArrangement
             if let column {
                 strip.moveWindow(id, intoColumn: column)
             } else if let newColumnAt {
@@ -618,6 +649,7 @@ final class Engine {
             // Work out the target position before removing, in case both strips are the same list.
             removeFromStrip(window)
             var strip = strips[target] ?? Strip()
+            strip.pairingArrangement = settings.slideArrangement
             if let column, strip.columns.indices.contains(column) {
                 strip.add(id, toColumn: column, focus: true, custom: true)
             } else {
@@ -1605,9 +1637,10 @@ final class Engine {
     /// that closed since are dropped; windows opened since are placed anew.
     func undo() {
         guard isRunning, !isPaused, let snapshot = history.popLast() else {
-            NSSound.beep()
+            onNotice("Nothing to undo")
             return
         }
+        onNotice("Undid last layout change")
         strips = snapshot.strips
         activeWorkspace = snapshot.activeWorkspace
         var placed = Set<WindowID>()
