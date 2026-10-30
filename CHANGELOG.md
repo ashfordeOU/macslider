@@ -4,6 +4,21 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-10-30
+
+### Added
+- Saved layouts: save the current arrangement under a name and bring it back from the menu; windows are matched by app and title.
+- Restore after restart: windows go back to their slide and workspace when apps reopen them after the Mac restarts.
+- Snapping for floating windows (⌃⌥⌘ + a key): halves, thirds, two thirds, quarters, maximise, centre, and restore.
+- Home workspaces per app in Settings → Apps.
+- Coach tips: during the welcome tour a card at the bottom of the screen shows the next step to try and ticks along.
+- Hot edges (optional): rest the pointer on a screen edge to slide.
+- An update waiting shows as a dot on the menu bar icon and an "Update to …" item at the top of the menu.
+
+### Changed
+- Much faster: windows are moved and resized in the background, one lane per app, so a busy app can never slow Monorail down; window titles are cached; live previews are captured in parallel.
+- Releases publish automatically when the version changes.
+
 ## [0.3.1] - 2026-10-30
 
 ### Added

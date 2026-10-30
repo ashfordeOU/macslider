@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 import MonorailCore
 import SwiftUI
 
@@ -10,15 +11,25 @@ final class PracticeTracker: ObservableObject {
         var id: String { title }
         var title: String
         var actions: Set<Action>
+        /// How to do it, shown in the coach card.
+        var hint: String
     }
 
     static let tasks = [
-        Task(title: "Slide to another window", actions: [.focusLeft, .focusRight]),
-        Task(title: "Move a window along", actions: [.moveLeft, .moveRight]),
-        Task(title: "Change a window’s width", actions: [.cycleWidth, .cycleWidthBackward, .narrower, .wider]),
-        Task(title: "Fill the screen", actions: [.toggleFullWidth]),
-        Task(title: "Open the overview", actions: [.overview]),
+        Task(title: "Slide to another window", actions: [.focusLeft, .focusRight],
+             hint: "Tap the right ⌥ key, then press →   (or ⌃⌥→)"),
+        Task(title: "Move a window along", actions: [.moveLeft, .moveRight],
+             hint: "In slide mode press ⇧→   (or ⌃⌥⇧→)"),
+        Task(title: "Change a window’s width", actions: [.cycleWidth, .cycleWidthBackward, .narrower, .wider],
+             hint: "In slide mode press R   (or ⌃⌥R)"),
+        Task(title: "Fill the screen", actions: [.toggleFullWidth],
+             hint: "In slide mode press F   (or ⌃⌥F)"),
+        Task(title: "Open the overview", actions: [.overview],
+             hint: "In slide mode press O   (or ⌃⌥O)"),
     ]
+
+    /// The first task not done yet.
+    var next: Task? { Self.tasks.first { !done.contains($0.id) } }
 
     @Published private(set) var done: Set<String> = []
 
@@ -144,6 +155,83 @@ struct WelcomeView: View {
         .padding(24)
         .frame(width: 560)
         .onReceive(timer) { _ in trusted = Accessibility.isTrusted(prompt: false) }
+    }
+}
+
+/// Coach tips: while the welcome tour is open, a card at the bottom of the
+/// screen shows the next practice step and how to do it, live.
+final class CoachTips {
+    private var panel: NSPanel?
+    private var subscription: AnyCancellable?
+
+    func start(_ practice: PracticeTracker) {
+        let panel = self.panel ?? makePanel(practice)
+        self.panel = panel
+        position(panel)
+        panel.orderFrontRegardless()
+        subscription = practice.$done.receive(on: DispatchQueue.main).sink { [weak self] done in
+            guard done.count == PracticeTracker.tasks.count else { return }
+            // All done: let the card say so, then go.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self?.stop() }
+        }
+    }
+
+    func stop() {
+        subscription = nil
+        panel?.orderOut(nil)
+    }
+
+    private func position(_ panel: NSPanel) {
+        guard let screen = NSScreen.main?.visibleFrame else { return }
+        let size = NSSize(width: 560, height: 92)
+        panel.setFrame(NSRect(x: screen.midX - size.width / 2, y: screen.minY + 90, width: size.width, height: size.height), display: true)
+    }
+
+    private func makePanel(_ practice: PracticeTracker) -> NSPanel {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 92),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .statusBar
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle, .fullScreenAuxiliary]
+        panel.contentView = NSHostingView(rootView: CoachView(practice: practice))
+        return panel
+    }
+
+    private struct CoachView: View {
+        @ObservedObject var practice: PracticeTracker
+
+        var body: some View {
+            let total = PracticeTracker.tasks.count
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle().fill(Color(red: 0.96, green: 0.38, blue: 0.44))
+                    if let next = practice.next, let index = PracticeTracker.tasks.firstIndex(where: { $0.id == next.id }) {
+                        Text("\(index + 1)/\(total)").font(.system(size: 13, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    } else {
+                        Image(systemName: "checkmark").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                    }
+                }
+                .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    if let next = practice.next {
+                        Text("Try it: \(next.title.lowercased())").font(.system(size: 15, weight: .semibold))
+                        Text(next.hint).font(.system(size: 13)).foregroundStyle(.secondary)
+                    } else {
+                        Text("All done. You’re ready to slide!").font(.system(size: 15, weight: .semibold))
+                        Text("Every shortcut is in the menu bar under Keyboard Shortcuts.").font(.system(size: 13)).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 18)
+            .frame(width: 560, height: 92)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+            .animation(.easeOut(duration: 0.2), value: practice.done)
+        }
     }
 }
 #endif

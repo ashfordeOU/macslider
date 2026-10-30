@@ -13,6 +13,8 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     public var tiles: Int?
     /// Layout of this app's slides, overriding the default.
     public var arrangement: Arrangement?
+    /// Workspace (0-based) this app's new windows open in.
+    public var workspace: Int?
 
     public var id: String { bundleID }
 
@@ -23,7 +25,8 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         width: Double? = nil,
         position: Strip.InsertPosition? = nil,
         tiles: Int? = nil,
-        arrangement: Arrangement? = nil
+        arrangement: Arrangement? = nil,
+        workspace: Int? = nil
     ) {
         self.bundleID = bundleID
         self.name = name
@@ -32,6 +35,7 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         self.position = position
         self.tiles = tiles
         self.arrangement = arrangement
+        self.workspace = workspace
     }
 }
 
@@ -113,6 +117,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var groupByApp = true
     /// Windows per slide when grouping, unless an app rule says otherwise.
     public var tilesPerSlide = 2
+    /// Push the pointer against the left or right screen edge to slide.
+    public var hotEdges = false
     /// Snap windows back when an app moves or resizes one by itself.
     public var keepWindowsInPlace = true
     /// After resizing a window in a slide, offer to rearrange the slide.
@@ -187,7 +193,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically, resizeAssist, workspaceNames
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically, resizeAssist, workspaceNames, hotEdges
     }
 
     public init(from decoder: Decoder) throws {
@@ -232,6 +238,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         keepWindowsInPlace = value(.keepWindowsInPlace, d.keepWindowsInPlace)
         resizeAssist = value(.resizeAssist, d.resizeAssist)
         workspaceNames = value(.workspaceNames, d.workspaceNames)
+        hotEdges = value(.hotEdges, d.hotEdges)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

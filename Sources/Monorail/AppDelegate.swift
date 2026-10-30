@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 import MonorailCore
 import SwiftUI
 
@@ -11,10 +12,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let switcher = SwitcherController()
     private lazy var overview = OverviewController(engine: engine)
     private let updater = Updater()
+    private var subscriptions: [AnyCancellable] = []
     private let practice = PracticeTracker()
     private let sliderBar = SliderBarController()
     private let resizeAssist = ResizeAssist()
     private let toast = Toast()
+    private let hotEdges = HotEdges()
+    private let coach = CoachTips()
     private let popover = SliderPopover()
     private let statusMenu = NSMenu()
     private let navigation = SettingsNavigation()
@@ -38,7 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        Accessibility.setGlobalTimeout(0.5)
+        // The main thread never waits long on a busy app; window moves run in
+        // the background with their own, longer allowance (see WindowWriter).
+        Accessibility.setGlobalTimeout(0.25)
         setUpStatusItem()
         wireUp()
         handleTerminationSignals()
@@ -116,6 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overview.commands = commands
         overview.renameWorkspace = { [weak self] index in self?.renameWorkspace(index) }
         popover.actions = sliderBar.actions
+        updater.$available
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusItem() }
+            .store(in: &subscriptions)
         popover.updater = updater
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
@@ -186,6 +196,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateArrowItems(visible: settings.showNavigationArrows)
         updater.setAutomatic(settings.checkForUpdates)
         updater.installAutomatically = settings.installUpdatesAutomatically
+        hotEdges.onSlide = { [weak self] right in self?.engine.step(forward: right, honourReverse: false, visual: true) }
+        hotEdges.setEnabled(settings.hotEdges && engine.isRunning)
         sliderBar.mode = settings.sliderBar
         sliderBar.edge = settings.sliderBarEdge
         sliderBar.update()
@@ -325,7 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateStatusItem() {
         guard let button = statusItem?.button else { return }
-        button.image = StatusIcon.image(paused: engine.isPaused)
+        button.image = StatusIcon.image(paused: engine.isPaused, badge: updater.available != nil)
         button.imagePosition = .imageLeading
         if store.settings.showColumnIndicator, !engine.isPaused, let status = engine.status() {
             let position = "\(status.focusedColumn)/\(status.columnCount)"
@@ -343,6 +355,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let header = NSMenuItem(title: headerTitle(trusted: trusted), action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
+
+        if let release = updater.available {
+            let update = item("Update to Monorail \(release.version)…", #selector(installUpdate))
+            update.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+            menu.addItem(update)
+        }
 
         if !trusted {
             menu.addItem(item("Grant Accessibility Access…", #selector(showWelcomeFromMenu)))
@@ -371,6 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Overview", #selector(showOverview), action: .overview))
         menu.addItem(item("Search Windows…", #selector(showSwitcher), action: .windowSwitcher))
         menu.addItem(item("Reset to Smart Pairs", #selector(regroup), action: .regroup))
+        menu.addItem(savedLayoutsMenu())
         let undoItem = item("Undo Layout Change", #selector(undoLayout), action: .undo)
         undoItem.isEnabled = engine.canUndo
         menu.addItem(undoItem)
@@ -440,6 +459,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func showOverview() { overview.show() }
     @objc private func regroup() { afterMenu { $0.engine.perform(.regroup) } }
+    @objc private func installUpdate() { afterMenu { $0.updater.installAvailable() } }
+
+    /// Saved Layouts ▸ Save Current Layout…, each saved layout, and Delete ▸.
+    private func savedLayoutsMenu() -> NSMenuItem {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(item("Save Current Layout…", #selector(saveLayout)))
+        let layouts = engine.savedLayouts
+        if !layouts.isEmpty {
+            menu.addItem(.separator())
+            for layout in layouts {
+                let entry = item(layout.name, #selector(applyLayout(_:)))
+                entry.representedObject = layout.name
+                entry.toolTip = "\(layout.windowCount) windows in \(layout.workspaces.count) workspace(s)"
+                menu.addItem(entry)
+            }
+            menu.addItem(.separator())
+            let delete = NSMenu()
+            for layout in layouts {
+                let entry = item(layout.name, #selector(deleteLayout(_:)))
+                entry.representedObject = layout.name
+                delete.addItem(entry)
+            }
+            let parent = NSMenuItem(title: "Delete", action: nil, keyEquivalent: "")
+            parent.submenu = delete
+            menu.addItem(parent)
+        }
+        let parent = NSMenuItem(title: "Saved Layouts", action: nil, keyEquivalent: "")
+        parent.submenu = menu
+        return parent
+    }
+
+    @objc private func saveLayout() {
+        afterMenu { delegate in
+            guard let name = TextPrompt.ask(
+                title: "Save layout",
+                message: "Saves how the windows on this display are arranged in every workspace. Apply it any time from Saved Layouts.",
+                initial: "", placeholder: "Coding, Writing, Meetings…"),
+                !name.trimmingCharacters(in: .whitespaces).isEmpty
+            else { return }
+            delegate.engine.saveLayout(named: name.trimmingCharacters(in: .whitespaces))
+        }
+    }
+
+    @objc private func applyLayout(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        afterMenu { $0.engine.applyLayout(named: name) }
+    }
+
+    @objc private func deleteLayout(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        afterMenu { $0.engine.deleteLayout(named: name) }
+    }
     @objc private func undoLayout() { afterMenu { $0.engine.undo() } }
 
     /// Runs `work` once the menu has fully closed, so window moves and focus
@@ -546,6 +618,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             welcomeWindow = window
         }
         present(welcomeWindow!)
+        // Coach tips stay up while you try things out (also after the tour
+        // closes), until every practice step is done or ten minutes pass.
+        if practice.next != nil, Accessibility.isTrusted(prompt: false) {
+            coach.start(practice)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 600) { [weak self] in self?.coach.stop() }
+        }
     }
 
     private func present(_ window: NSWindow) {

@@ -143,6 +143,7 @@ public struct Keymap: Equatable, Codable, Sendable {
     public static let `default`: Keymap = {
         let co: Modifiers = [.control, .option]
         let cos: Modifiers = [.control, .option, .shift]
+        let coc: Modifiers = [.control, .option, .command]
         func s(_ key: UInt16, _ mods: Modifiers) -> Shortcut { Shortcut(keyCode: key, modifiers: mods) }
 
         var b: [Action: [Shortcut]] = [
@@ -181,6 +182,23 @@ public struct Keymap: Equatable, Codable, Sendable {
             .sendToNextDisplay: [s(KeyCode.d, co), s(KeyCode.n, co)],
             .retile: [s(KeyCode.escape, co)],
             .undo: [s(KeyCode.z, co)],
+            // Snapping (floats the window first): Control-Option-Command plus a key.
+            .snapLeftHalf: [s(KeyCode.left, coc)],
+            .snapRightHalf: [s(KeyCode.right, coc)],
+            .snapTopHalf: [s(KeyCode.up, coc)],
+            .snapBottomHalf: [s(KeyCode.down, coc)],
+            .snapFirstThird: [s(KeyCode.d, coc)],
+            .snapCenterThird: [s(KeyCode.f, coc)],
+            .snapLastThird: [s(KeyCode.g, coc)],
+            .snapFirstTwoThirds: [s(KeyCode.e, coc)],
+            .snapLastTwoThirds: [s(KeyCode.t, coc)],
+            .snapTopLeft: [s(KeyCode.u, coc)],
+            .snapTopRight: [s(KeyCode.i, coc)],
+            .snapBottomLeft: [s(KeyCode.j, coc)],
+            .snapBottomRight: [s(KeyCode.k, coc)],
+            .snapMaximize: [s(KeyCode.returnKey, coc)],
+            .snapCenter: [s(KeyCode.c, coc)],
+            .snapRestore: [s(KeyCode.delete, coc)],
             .togglePause: [s(KeyCode.q, co)],
         ]
         // Digits switch workspaces (add Shift to take the window along).

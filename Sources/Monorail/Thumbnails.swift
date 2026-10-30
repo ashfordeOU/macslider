@@ -33,8 +33,8 @@ enum WindowThumbnails {
         guard isAllowed, !ids.isEmpty else { return }
         if #available(macOS 14.0, *) {
             Task {
-                let images = await ModernCapture.capture(ids)
-                await MainActor.run { completion(images) }
+                let images = ImageBox(await ModernCapture.capture(ids))
+                await MainActor.run { completion(images.value) }
             }
         } else {
             DispatchQueue.global(qos: .userInitiated).async {
@@ -59,6 +59,13 @@ enum WindowThumbnails {
     }
 }
 
+/// Hands captured images from the capture task to the main thread. The images
+/// are created once and never mutated, so sharing them is safe.
+private final class ImageBox: @unchecked Sendable {
+    let value: [WindowID: NSImage]
+    init(_ value: [WindowID: NSImage]) { self.value = value }
+}
+
 @available(macOS 14.0, *)
 private enum ModernCapture {
     /// The window list is reused briefly; previews refresh several times a second.
@@ -72,24 +79,32 @@ private enum ModernCapture {
         return content
     }
 
+    /// Captures all windows at once rather than one after another.
     static func capture(_ ids: [WindowID]) async -> [WindowID: NSImage] {
         guard let content = await content() else { return [:] }
-        var images: [WindowID: NSImage] = [:]
-        for id in ids {
-            guard let window = content.windows.first(where: { $0.windowID == id }) else { continue }
-            let filter = SCContentFilter(desktopIndependentWindow: window)
-            let config = SCStreamConfiguration()
-            // Thumbnail size: sharp at preview scale without capturing full resolution.
-            let scale = min(1, 720 / max(window.frame.width, 1)) * 2
-            config.width = max(Int(window.frame.width * scale), 2)
-            config.height = max(Int(window.frame.height * scale), 2)
-            config.showsCursor = false
-            config.ignoreShadowsSingleWindow = true
-            if let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) {
-                images[id] = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+        let targets = ids.compactMap { id in content.windows.first { $0.windowID == id } }
+        return await withTaskGroup(of: (WindowID, CGImage?).self) { group in
+            for window in targets {
+                group.addTask { (window.windowID, await capture(window)) }
             }
+            var images: [WindowID: NSImage] = [:]
+            for await (id, image) in group {
+                if let image { images[id] = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)) }
+            }
+            return images
         }
-        return images
+    }
+
+    private static func capture(_ window: SCWindow) async -> CGImage? {
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let config = SCStreamConfiguration()
+        // Thumbnail size: sharp at preview scale without capturing full resolution.
+        let scale = min(1, 640 / max(window.frame.width, 1)) * 2
+        config.width = max(Int(window.frame.width * scale), 2)
+        config.height = max(Int(window.frame.height * scale), 2)
+        config.showsCursor = false
+        config.ignoreShadowsSingleWindow = true
+        return try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
     }
 }
 

@@ -5,8 +5,9 @@ import AppKit
 /// middle one slid down (hollow while paused). Drawn as a template image so macOS
 /// tints it for light and dark menu bars.
 enum StatusIcon {
-    static func image(paused: Bool) -> NSImage {
-        let image = NSImage(size: NSSize(width: 18, height: 16), flipped: false) { _ in
+    /// `badge` adds a dot in the corner (an update is waiting).
+    static func image(paused: Bool, badge: Bool = false) -> NSImage {
+        let image = NSImage(size: NSSize(width: badge ? 22 : 18, height: 16), flipped: false) { _ in
             NSColor.black.set()
             // The M: two outlined windows standing tall…
             let sides = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 1.5, width: 4.5, height: 13), xRadius: 1.6, yRadius: 1.6)
@@ -21,6 +22,9 @@ enum StatusIcon {
                 outline.stroke()
             } else {
                 NSBezierPath(roundedRect: middle, xRadius: 1.4, yRadius: 1.4).fill()
+            }
+            if badge {
+                NSBezierPath(ovalIn: NSRect(x: 18, y: 10.5, width: 4, height: 4)).fill()
             }
             // Where it slid from.
             NSBezierPath(roundedRect: NSRect(x: 8.4, y: 12, width: 1.2, height: 2.5), xRadius: 0.6, yRadius: 0.6).fill()

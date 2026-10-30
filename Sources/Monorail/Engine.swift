@@ -60,7 +60,9 @@ final class ManagedWindow {
         self.home = home
     }
 
-    var title: String { element.title ?? "" }
+    /// Cached; refreshed when the window reports a title change, so building
+    /// menus and the overview never waits on a busy app.
+    lazy var title: String = element.title ?? ""
 }
 
 /// Owns the strips and keeps real windows in line with them.
@@ -92,6 +94,7 @@ final class Engine {
     private var observers: [pid_t: AXObserver] = [:]
     private var displays: [Display] = []
     private let animator = Animator()
+    private let writer = WindowWriter()
     private let overlays = Overlays()
     private var lastApplyTime: CFTimeInterval = 0
     private var enhancedUIRestore: Set<pid_t> = []
@@ -113,6 +116,9 @@ final class Engine {
             self?.updateOverlays()
         }
         overlays.onSelectWindow = { [weak self] id in self?.focusAndReveal(id) }
+        // The app's own move/resize notifications arrive after the write lands;
+        // stamping the time then keeps them from looking like the user's moves.
+        writer.didApply = { [weak self] id in self?.windows[id]?.appliedAt = CACurrentMediaTime() }
     }
 
     // MARK: - Lifecycle
@@ -209,6 +215,14 @@ final class Engine {
         }
         if action == .regroup {
             resetToSmartPairs()
+            return
+        }
+        if let position = action.snapPosition {
+            snap(position)
+            return
+        }
+        if action == .snapRestore {
+            snapRestore()
             return
         }
         if let n = action.moveToWorkspaceNumber {
@@ -361,6 +375,9 @@ final class Engine {
         _ window: ManagedWindow, in key: StripKey, display: Display, focus: Bool, width: Double? = nil,
         restoring: Bool = true
     ) {
+        // After a restart (new window IDs), windows go back to the slide they
+        // were in last session, matched by app and title.
+        if restoring, placeFromLastSession(window, display: display, focus: focus) { return }
         // A window coming back (unhidden, unminimised, reopened from the Dock,
         // or its app relaunched) returns to exactly where it was.
         if restoring, let memory = memory(for: window), memory.key.screen == key.screen {
@@ -1002,7 +1019,7 @@ final class Engine {
 
     private func apply(_ rect: Rect, to id: WindowID, sizeChanged: Bool) {
         guard let window = windows[id] else { return }
-        window.element.setFrame(CGRect(rect), sizeChanged: sizeChanged)
+        writer.set(CGRect(rect), of: id, element: window.element, pid: window.pid, sizeChanged: sizeChanged)
         window.lastApplied = rect
         window.appliedAt = CACurrentMediaTime()
         lastApplyTime = window.appliedAt
@@ -1268,7 +1285,10 @@ final class Engine {
         let floats = rule?.float == true || element.hasFixedSize || !element.isSettable(kAXSizeAttribute)
         if floats && !force { return false }
 
-        place(window, in: key, display: display, focus: focus)
+        // Apps can have a home workspace ("Slack opens in Chat").
+        var target = key
+        if let home = rule?.workspace, home >= 0, home < settings.workspaceCount { target.workspace = home }
+        place(window, in: target, display: display, focus: focus && target == key)
         return true
     }
 
@@ -1428,6 +1448,7 @@ final class Engine {
     }
 
     private func stopObserving(_ pid: pid_t) {
+        writer.forget(pid: pid)
         if let observer = observers.removeValue(forKey: pid) {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
         }
@@ -1471,6 +1492,7 @@ final class Engine {
             userMovedOrResized(element, resized: notification == kAXWindowResizedNotification)
 
         case kAXTitleChangedNotification:
+            if let window = window(for: element) { window.title = element.title ?? "" }
             updateOverlays()
 
         default:
@@ -1808,6 +1830,15 @@ final class Engine {
         var strips: [StripKey: Strip]
         var activeWorkspace: [ScreenKey: Int]?
         var names: [WindowID: String]?
+        /// Every strip by display and workspace, described by window fingerprints,
+        /// to restore after the Mac restarts.
+        var session: [SessionStrip]?
+    }
+
+    struct SessionStrip: Codable {
+        var display: String
+        var workspace: Int
+        var columns: [SavedColumn]
     }
 
     private static var stateURL: URL { SettingsStore.directory.appendingPathComponent("layout.json") }
@@ -1820,9 +1851,14 @@ final class Engine {
     /// Window IDs survive a restart of Monorail (not of the apps), so saving
     /// the strips lets an update or relaunch pick up exactly where it left off.
     private func saveState() {
+        let session = strips.filter { !$0.value.isEmpty }.map { key, strip in
+            SessionStrip(
+                display: key.display, workspace: key.workspace,
+                columns: strip.columns.map { SavedColumn($0, fingerprint: fingerprint(of:)) })
+        }
         let state = SavedState(
             strips: strips.filter { !$0.value.isEmpty }, activeWorkspace: activeWorkspace,
-            names: names.filter { windows[$0.key] != nil })
+            names: names.filter { windows[$0.key] != nil }, session: session)
         do {
             try FileManager.default.createDirectory(at: SettingsStore.directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(state).write(to: Self.stateURL, options: .atomic)
@@ -1838,6 +1874,159 @@ final class Engine {
         strips = state.strips
         activeWorkspace = state.activeWorkspace ?? [:]
         names = state.names ?? [:]
+        lastSession = state.session ?? []
+        lastSessionLoaded = Date()
+        savedLayouts = (try? Data(contentsOf: Self.layoutsURL))
+            .flatMap { try? JSONDecoder().decode([SavedLayout].self, from: $0) } ?? []
+    }
+
+    // MARK: - Restoring after a restart
+
+    private var lastSession: [SessionStrip] = []
+    private var lastSessionLoaded = Date.distantPast
+
+    func fingerprint(of id: WindowID) -> WindowFingerprint? {
+        windows[id].map { WindowFingerprint(app: Self.appKey($0), title: $0.title) }
+    }
+
+    /// Puts a window whose ID MacSlider doesn't know back where an identical
+    /// window (same app and title) sat last session. Only for a while after
+    /// launch, while apps reopen their windows.
+    private func placeFromLastSession(_ window: ManagedWindow, display: Display, focus: Bool) -> Bool {
+        guard !lastSession.isEmpty, Date().timeIntervalSince(lastSessionLoaded) < 15 * 60,
+            strips.values.allSatisfy({ !$0.contains(window.id) }),
+            let mark = fingerprint(of: window.id), !mark.title.isEmpty
+        else { return false }
+        for (s, saved) in lastSession.enumerated() where saved.display == display.uuid {
+            for (c, column) in saved.columns.enumerated() {
+                guard let row = column.windows.firstIndex(of: mark) else { continue }
+                let key = StripKey(screen: currentKey(display).screen, workspace: min(saved.workspace, settings.workspaceCount - 1))
+                var strip = strips[key] ?? Strip()
+                let mates = column.windows.enumerated().filter { $0.offset != row }.compactMap { mate in
+                    strip.allWindows.first { fingerprint(of: $0) == mate.element }
+                }
+                let slot = Strip.Slot(
+                    columnIndex: min(c, strip.columns.count), row: row, mates: mates, width: column.width,
+                    arrangement: column.arrangement, isCustom: true)
+                strip.restore(window.id, to: slot, focus: focus && key == currentKey(display))
+                strips[key] = strip
+                window.key = key
+                lastSession[s].columns[c].windows.remove(at: row)
+                scheduleSave()
+                return true
+            }
+        }
+        return false
+    }
+
+    // MARK: - Saved layouts
+
+    private(set) var savedLayouts: [SavedLayout] = []
+    private static var layoutsURL: URL { SettingsStore.directory.appendingPathComponent("saved-layouts.json") }
+
+    private func writeLayouts() {
+        try? FileManager.default.createDirectory(at: SettingsStore.directory, withIntermediateDirectories: true)
+        try? JSONEncoder().encode(savedLayouts).write(to: Self.layoutsURL, options: .atomic)
+    }
+
+    /// Saves every workspace of the active display under `name`.
+    func saveLayout(named name: String) {
+        guard let (display, _) = activeContext() else { return }
+        let screen = currentKey(display).screen
+        var workspaces: [Int: [SavedColumn]] = [:]
+        for (key, strip) in strips where key.screen == screen && !strip.isEmpty {
+            workspaces[key.workspace] = strip.columns.map { SavedColumn($0, fingerprint: fingerprint(of:)) }
+        }
+        savedLayouts.removeAll { $0.name == name }
+        savedLayouts.append(SavedLayout(name: name, workspaces: workspaces))
+        savedLayouts.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        writeLayouts()
+        onNotice("Saved layout “\(name)”")
+    }
+
+    func deleteLayout(named name: String) {
+        savedLayouts.removeAll { $0.name == name }
+        writeLayouts()
+    }
+
+    /// Arranges the open windows of the active display like `name`: matching
+    /// windows go to their saved slides; the rest stay, after them.
+    func applyLayout(named name: String) {
+        guard isRunning, !isPaused, let saved = savedLayouts.first(where: { $0.name == name }),
+            let (display, _) = activeContext()
+        else { return }
+        recordHistory()
+        let screen = currentKey(display).screen
+        let candidates = windows.values
+            .filter { $0.key?.screen == screen }
+            .compactMap { window in fingerprint(of: window.id).map { (id: window.id, fingerprint: $0) } }
+        var used = Set<WindowID>()
+        var placed: [Int: [Column]] = [:]
+        for (workspace, columns) in saved.workspaces.sorted(by: { $0.key < $1.key }) where workspace < settings.workspaceCount {
+            placed[workspace] = LayoutMatcher.columns(for: columns, windows: candidates, used: &used)
+        }
+        let focused = focusedWindowID()
+        for workspace in 0..<settings.workspaceCount {
+            let key = StripKey(screen: screen, workspace: workspace)
+            var strip = strips[key] ?? Strip()
+            let leftover: [Column] = strip.columns.compactMap { column in
+                var column = column
+                column.windows.removeAll { used.contains($0) }
+                column.active = min(column.active, max(column.windows.count - 1, 0))
+                return column.windows.isEmpty ? nil : column
+            }
+            strip.replaceColumns((placed[workspace] ?? []) + leftover, keepingFocusOn: focused)
+            strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+            strips[key] = strip
+            for id in strip.allWindows { windows[id]?.key = key }
+        }
+        layout(animated: true)
+        scheduleSave()
+        onStateChange()
+        onNotice(used.isEmpty ? "No open windows match “\(name)”" : "Applied layout “\(name)”")
+    }
+
+    // MARK: - Snapping floating windows
+
+    /// Where a snapped window was before, so "restore" can put it back.
+    private var snapOrigins: [WindowID: (frame: CGRect, key: StripKey?, slot: Strip.Slot?)] = [:]
+
+    private func snap(_ position: SnapPosition) {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+            let element = AXUIElement.application(app.processIdentifier).focusedWindow,
+            let id = element.windowID, let frame = element.frame,
+            let display = display(containing: frame) ?? displays.first
+        else { return }
+        if snapOrigins[id] == nil {
+            let window = windows[id]
+            let slot = window?.key.flatMap { strips[$0]?.slot(of: id) }
+            snapOrigins[id] = (frame, window?.key, slot)
+        }
+        if let window = windows[id], window.key != nil {
+            // Snapping floats a tiled window; restore tiles it again.
+            removeFromStrip(window)
+            window.lastApplied = nil
+            layout(animated: true)
+        }
+        let target = position.frame(in: display.viewport, gap: settings.layout.gap)
+        element.setFrame(CGRect(target))
+    }
+
+    private func snapRestore() {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+            let element = AXUIElement.application(app.processIdentifier).focusedWindow,
+            let id = element.windowID, let origin = snapOrigins.removeValue(forKey: id)
+        else { return }
+        if let key = origin.key, let slot = origin.slot, let window = windows[id] {
+            var strip = strips[key] ?? Strip()
+            strip.restore(id, to: slot)
+            strips[key] = strip
+            window.key = key
+            window.lastApplied = nil
+            layout(animated: true)
+        } else {
+            element.setFrame(origin.frame)
+        }
     }
 }
 

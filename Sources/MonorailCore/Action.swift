@@ -61,6 +61,22 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case moveToWorkspace7 = "move-to-workspace-7"
     case moveToWorkspace8 = "move-to-workspace-8"
     case moveToWorkspace9 = "move-to-workspace-9"
+    case snapLeftHalf = "snap-left-half"
+    case snapRightHalf = "snap-right-half"
+    case snapTopHalf = "snap-top-half"
+    case snapBottomHalf = "snap-bottom-half"
+    case snapFirstThird = "snap-first-third"
+    case snapCenterThird = "snap-center-third"
+    case snapLastThird = "snap-last-third"
+    case snapFirstTwoThirds = "snap-first-two-thirds"
+    case snapLastTwoThirds = "snap-last-two-thirds"
+    case snapTopLeft = "snap-top-left"
+    case snapTopRight = "snap-top-right"
+    case snapBottomLeft = "snap-bottom-left"
+    case snapBottomRight = "snap-bottom-right"
+    case snapMaximize = "snap-maximize"
+    case snapCenter = "snap-center"
+    case snapRestore = "snap-restore"
     case retile
     case undo
     case togglePause = "toggle-pause"
@@ -100,6 +116,22 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .toggleNativeFullScreen: return "macOS full screen"
         case .windowSwitcher: return "Search windows"
         case .sendToNextDisplay: return "Send to next display"
+        case .snapLeftHalf: return "Snap: left half"
+        case .snapRightHalf: return "Snap: right half"
+        case .snapTopHalf: return "Snap: top half"
+        case .snapBottomHalf: return "Snap: bottom half"
+        case .snapFirstThird: return "Snap: first third"
+        case .snapCenterThird: return "Snap: centre third"
+        case .snapLastThird: return "Snap: last third"
+        case .snapFirstTwoThirds: return "Snap: first two thirds"
+        case .snapLastTwoThirds: return "Snap: last two thirds"
+        case .snapTopLeft: return "Snap: top-left quarter"
+        case .snapTopRight: return "Snap: top-right quarter"
+        case .snapBottomLeft: return "Snap: bottom-left quarter"
+        case .snapBottomRight: return "Snap: bottom-right quarter"
+        case .snapMaximize: return "Snap: maximise"
+        case .snapCenter: return "Snap: centre"
+        case .snapRestore: return "Snap: restore"
         case .retile: return "Retile everything"
         case .undo: return "Undo last layout change"
         case .togglePause: return "Pause / resume"
@@ -108,6 +140,28 @@ public enum Action: String, Codable, CaseIterable, Sendable {
             if let n = workspaceNumber { return "Switch to workspace \(n)" }
             if let n = moveToWorkspaceNumber { return "Move window to workspace \(n)" }
             return rawValue
+        }
+    }
+
+    /// Where a "snap" action puts a floating window.
+    public var snapPosition: SnapPosition? {
+        switch self {
+        case .snapLeftHalf: return .leftHalf
+        case .snapRightHalf: return .rightHalf
+        case .snapTopHalf: return .topHalf
+        case .snapBottomHalf: return .bottomHalf
+        case .snapFirstThird: return .firstThird
+        case .snapCenterThird: return .centerThird
+        case .snapLastThird: return .lastThird
+        case .snapFirstTwoThirds: return .firstTwoThirds
+        case .snapLastTwoThirds: return .lastTwoThirds
+        case .snapTopLeft: return .topLeft
+        case .snapTopRight: return .topRight
+        case .snapBottomLeft: return .bottomLeft
+        case .snapBottomRight: return .bottomRight
+        case .snapMaximize: return .maximize
+        case .snapCenter: return .center
+        default: return nil
         }
     }
 

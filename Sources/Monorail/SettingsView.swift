@@ -309,6 +309,11 @@ private struct InputPane: View {
                 Text("With a mouse, each notch of the wheel moves one window. On a trackpad the strip follows your fingers and settles on the nearest window. If macOS uses the same finger count to switch Spaces, change it in System Settings → Trackpad → More Gestures.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            Section {
+                Toggle("Hot edges: rest the pointer on the left or right screen edge to slide", isOn: $store.settings.hotEdges)
+            } header: {
+                Text("Screen edges")
+            }
             Section("Focus") {
                 Toggle("Focus follows mouse", isOn: $store.settings.focusFollowsMouse)
                 Toggle("Mouse follows focus", isOn: $store.settings.mouseFollowsFocus)
@@ -423,6 +428,14 @@ private struct AppsPane: View {
                                 ForEach(1...Column.maximumWindows, id: \.self) { Text("\($0)").tag(Int?.some($0)) }
                             }
                             .frame(width: 130)
+                            .disabled(rule.float)
+                            Picker("Workspace", selection: $rule.workspace) {
+                                Text("Current").tag(Int?.none)
+                                ForEach(0..<store.settings.workspaceCount, id: \.self) { index in
+                                    Text(store.settings.workspaceName(index)).tag(Int?.some(index))
+                                }
+                            }
+                            .frame(width: 190)
                             .disabled(rule.float)
                             Picker("Layout", selection: $rule.arrangement) {
                                 Text("Default").tag(Arrangement?.none)

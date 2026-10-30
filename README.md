@@ -140,7 +140,9 @@ This downloads the latest release, installs it in `/Applications` and opens it.
 
 ### Updates
 
-Monorail updates itself. When a new version is out it offers **Install and
+Monorail updates itself. It checks GitHub once a day, puts a dot on its menu
+bar icon and an **Update to …** item at the top of its menu when a new version
+is out, and offers **Install and
 Relaunch** (or shows **Update** in the menu bar slider): it downloads the
 release from GitHub, checks it against the published SHA-256 checksum and
 Monorail's code signature, swaps it in and reopens, with your windows where
@@ -232,6 +234,34 @@ Change the tiles per slide (up to six — more gets too crowded) and the layout 
 slide into tabs. Arrow keys move between tiles by where they are on screen, then
 on to the next slide. Choose the layout for new slides in **Settings → Layout**.
 
+### Saved layouts
+
+Arrange things the way you like for a task, then **Saved Layouts → Save
+Current Layout…** in the menu and give it a name ("Coding", "Writing"). Later,
+choose it from **Saved Layouts** and every open window that matches goes back
+to its slide, in every workspace: same app and title first, then any window of
+the same app. Windows that aren't in the layout stay, after it.
+
+### After a restart
+
+Monorail remembers your slides by app and window title. When your Mac
+restarts and apps reopen their windows, each one goes back to the slide and
+workspace it was in.
+
+### Snapping floating windows
+
+Need one window somewhere specific for a moment? <kbd>⌃⌥⌘</kbd> plus a key snaps
+the focused window (floating it first if it was tiled):
+
+| Keys | Snap to |
+| --- | --- |
+| <kbd>⌃⌥⌘←</kbd> <kbd>⌃⌥⌘→</kbd> <kbd>⌃⌥⌘↑</kbd> <kbd>⌃⌥⌘↓</kbd> | Left, right, top or bottom half |
+| <kbd>⌃⌥⌘D</kbd> <kbd>⌃⌥⌘F</kbd> <kbd>⌃⌥⌘G</kbd> | First, centre or last third |
+| <kbd>⌃⌥⌘E</kbd> <kbd>⌃⌥⌘T</kbd> | First or last two thirds |
+| <kbd>⌃⌥⌘U</kbd> <kbd>⌃⌥⌘I</kbd> <kbd>⌃⌥⌘J</kbd> <kbd>⌃⌥⌘K</kbd> | Top-left, top-right, bottom-left, bottom-right quarter |
+| <kbd>⌃⌥⌘↩</kbd> / <kbd>⌃⌥⌘C</kbd> | Maximise / centre |
+| <kbd>⌃⌥⌘⌫</kbd> | Restore: back where it was (back on the strip if it was tiled) |
+
 ### Right to left
 
 Set **Strip direction** to **Right to left** in **Settings → Layout** and the
@@ -266,6 +296,9 @@ In **Settings → Appearance** you can keep it on screen all the time (windows
 then leave room for it), move it to the top, or turn it off.
 
 ### Workspaces
+
+Give an app a home workspace in **Settings → Apps** and its new windows
+always open there (Slack in "Chat", Mail in "Personal").
 
 Name your workspaces ("Work", "Personal", "Design") in **Settings → General**,
 from the overview, or by right-clicking a dot on the slider bar. Each workspace
@@ -335,6 +368,7 @@ can be bound to any keys in Settings. Every shortcut is also listed under
 - **Resize** a window's edge to change its column's width.
 - **Scroll** while holding <kbd>⌥</kbd> (you can choose ⌘, ⌃ or ⌃⌥ instead), or with no keys over the menu bar. A mouse wheel moves one window per notch; a trackpad or Magic Mouse moves the strip with your fingers.
 - **‹ › buttons** next to the menu bar icon step one window at a time.
+- **Hot edges** (optional, in **Settings → Motion & Input**): rest the pointer against the left or right edge of the screen and the strip slides that way.
 - **Swipe** with three or four fingers, no keys, once you turn it on in **Settings → Motion & Input**. If macOS uses the same finger count to switch Spaces, **Settings → General → Mac setup** shows you where to change it.
 - **Focus follows mouse** and **mouse follows focus** are optional and off by default.
 

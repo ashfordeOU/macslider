@@ -1,7 +1,10 @@
 name: Release
 
 on:
+  # Bumping VERSION on main publishes that version.
   push:
+    branches: [main]
+    paths: [VERSION]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -16,7 +19,7 @@ jobs:
   release:
     runs-on: macos-15
     env:
-      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      TAG: ${{ github.event.inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '' }}
       GH_TOKEN: ${{ github.token }}
       MACSLIDER_SIGNING_CERT: ${{ secrets.MACSLIDER_SIGNING_CERT }}
       MACSLIDER_SIGNING_PASSWORD: ${{ secrets.MACSLIDER_SIGNING_PASSWORD }}
@@ -32,30 +35,43 @@ jobs:
       - name: Check version
         run: |
           version="$(tr -d '[:space:]' < VERSION)"
-          if [ "v${version}" != "${TAG}" ]; then
+          if [ -z "$TAG" ]; then
+            TAG="v${version}"
+            echo "TAG=${TAG}" >> "$GITHUB_ENV"
+            # A push that didn't change to a new version: nothing to publish.
+            if gh release view "$TAG" > /dev/null 2>&1; then
+              echo "Release ${TAG} already exists"
+              echo "SKIP=1" >> "$GITHUB_ENV"
+            fi
+          elif [ "v${version}" != "${TAG}" ]; then
             echo "VERSION (${version}) does not match tag ${TAG}" >&2
             exit 1
           fi
       - name: Test
+        if: env.SKIP != '1'
         run: swift test
       - name: Import signing certificate
         # Signing with the same certificate every release keeps macOS
         # permissions across updates. See scripts/make-signing-cert.sh.
-        if: env.MACSLIDER_SIGNING_CERT != ''
+        if: env.SKIP != '1' && env.MACSLIDER_SIGNING_CERT != ''
         run: scripts/ci-import-signing-cert.sh
       - name: Warn about ad-hoc signing
-        if: env.MACSLIDER_SIGNING_CERT == ''
+        if: env.SKIP != '1' && env.MACSLIDER_SIGNING_CERT == ''
         run: echo "::warning::MACSLIDER_SIGNING_CERT is not set; this release is signed ad hoc and users must re-grant Accessibility after updating."
       - name: Build app
+        if: env.SKIP != '1'
         run: scripts/build-app.sh
       - name: Install dmgbuild
+        if: env.SKIP != '1'
         run: |
           python3 -m venv "$RUNNER_TEMP/dmg"
           "$RUNNER_TEMP/dmg/bin/pip" install --quiet dmgbuild
           echo "$RUNNER_TEMP/dmg/bin" >> "$GITHUB_PATH"
       - name: Package
+        if: env.SKIP != '1'
         run: scripts/package.sh
       - name: Release notes
+        if: env.SKIP != '1'
         run: |
           version="${TAG#v}"
           awk -v v="$version" '
@@ -74,6 +90,7 @@ jobs:
           This build is not notarized. If macOS says it can't verify the developer, open **System Settings → Privacy & Security** and click **Open Anyway**.
           NOTES
       - name: Publish
+        if: env.SKIP != '1'
         run: |
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" dist/*.zip dist/*.dmg dist/SHA256SUMS --clobber

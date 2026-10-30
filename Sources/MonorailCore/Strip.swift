@@ -552,6 +552,13 @@ public struct Strip: Equatable, Codable, Sendable {
         return true
     }
 
+    /// Replaces the strip's columns, e.g. when a saved layout is applied.
+    public mutating func replaceColumns(_ columns: [Column], keepingFocusOn window: WindowID? = nil) {
+        self.columns = columns.filter { !$0.windows.isEmpty }
+        focusedColumn = 0
+        if let window { focus(window) }
+    }
+
     // MARK: - Remembering places
 
     /// Where a window sits, so it can go back there after being hidden,
