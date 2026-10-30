@@ -697,6 +697,7 @@ final class Engine {
                     targets[id] = (current, hidden)
                 }
             }
+        }
 
         if animated && settings.animate {
             disableEnhancedUI(for: Set(targets.keys.compactMap { windows[$0]?.pid }))
