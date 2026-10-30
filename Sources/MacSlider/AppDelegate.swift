@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let switcher = SwitcherController()
     private let navigation = SettingsNavigation()
     private var statusItem: NSStatusItem!
+    private var arrowItems: [NSStatusItem] = []
+    private let slideHUD = SlideHUD()
     private var settingsWindow: NSWindow?
     private var welcomeWindow: NSWindow?
     private var permissionTimer: Timer?
@@ -80,6 +82,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         input.onAction = { [weak self] action in self?.engine.perform(action) }
         input.onScroll = { [weak self] delta in self?.engine.swipe(by: delta) }
         input.onScrollEnd = { [weak self] in self?.engine.endSwipe() }
+        input.onStep = { [weak self] forward in self?.engine.step(forward: forward) }
+        input.isOverMenuBar = { point in Self.isOverMenuBar(point) }
+        input.onSlideModeChange = { [weak self] on in
+            if on { self?.slideHUD.show() } else { self?.slideHUD.hide() }
+        }
 
         trackpad.onScroll = { [weak self] fraction in
             guard let self else { return }
@@ -114,6 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.settings = settings
         input.keymap = settings.keymap
         input.modifierSwipe = settings.modifierSwipe
+        input.scrollModifier = settings.scrollModifier
+        input.scrollOverMenuBar = settings.scrollOverMenuBar
+        input.slideTrigger = settings.slideTrigger
+        updateArrowItems(visible: settings.showNavigationArrows)
 
         trackpad.fingers = settings.swipeFingers.rawValue
         if settings.swipeFingers == .off { trackpad.stop() } else if engine.isRunning { trackpad.start() }
@@ -143,6 +154,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: - Menu bar
+
+    /// True for points (Accessibility coordinates) on any display's menu bar.
+    private static func isOverMenuBar(_ point: CGPoint) -> Bool {
+        guard let primaryHeight = NSScreen.screens.first?.frame.height else { return false }
+        let cocoa = CGPoint(x: point.x, y: primaryHeight - point.y)
+        return NSScreen.screens.contains { screen in
+            let frame = screen.frame
+            let menuBarHeight = max(frame.maxY - screen.visibleFrame.maxY, NSStatusBar.system.thickness)
+            return cocoa.x >= frame.minX && cocoa.x < frame.maxX
+                && cocoa.y <= frame.maxY && cocoa.y >= frame.maxY - menuBarHeight
+        }
+    }
+
+    /// The ‹ › buttons next to the menu bar icon. Created after the main item,
+    /// so they sit to its left.
+    private func updateArrowItems(visible: Bool) {
+        if !visible {
+            arrowItems.forEach { NSStatusBar.system.removeStatusItem($0) }
+            arrowItems.removeAll()
+            return
+        }
+        guard arrowItems.isEmpty else { return }
+        for (symbol, selector, label) in [
+            ("chevron.right", #selector(stepRight), "Next window"),
+            ("chevron.left", #selector(stepLeft), "Previous window"),
+        ] {
+            let item = NSStatusBar.system.statusItem(withLength: 22)
+            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+            image?.isTemplate = true
+            item.button?.image = image
+            item.button?.toolTip = label
+            item.button?.target = self
+            item.button?.action = selector
+            arrowItems.append(item)
+        }
+    }
+
+    @objc private func stepLeft() { engine.step(forward: false, honourReverse: false) }
+    @objc private func stepRight() { engine.step(forward: true, honourReverse: false) }
 
     private func setUpStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

@@ -43,8 +43,16 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var animate = true
     /// Animation length in seconds.
     public var animationDuration = 0.2
-    /// Scroll the strip with a two-finger swipe while holding the shortcut modifiers.
+    /// Scroll the strip with the mouse wheel or trackpad while holding `scrollModifier`.
     public var modifierSwipe = true
+    /// Keys to hold while scrolling to move the strip instead of the app under the pointer.
+    public var scrollModifier: Modifiers = [.option]
+    /// Scrolling over the menu bar moves the strip, no keys needed.
+    public var scrollOverMenuBar = true
+    /// Show clickable ‹ › buttons in the menu bar.
+    public var showNavigationArrows = true
+    /// Tapping this key on its own turns on slide mode.
+    public var slideTrigger: SlideTrigger = .rightOption
     /// Scroll the strip with a three- or four-finger swipe.
     public var swipeFingers: SwipeFingers = .off
     /// Multiplier applied to swipe distance.
@@ -91,7 +99,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case layout, animate, animationDuration, modifierSwipe, swipeFingers, swipeSensitivity, invertSwipe
+        case layout, animate, animationDuration, modifierSwipe, scrollModifier, scrollOverMenuBar
+        case showNavigationArrows, slideTrigger, swipeFingers, swipeSensitivity, invertSwipe
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding
@@ -107,6 +116,10 @@ public struct AppSettings: Equatable, Codable, Sendable {
         animate = value(.animate, d.animate)
         animationDuration = value(.animationDuration, d.animationDuration)
         modifierSwipe = value(.modifierSwipe, d.modifierSwipe)
+        scrollModifier = value(.scrollModifier, d.scrollModifier)
+        scrollOverMenuBar = value(.scrollOverMenuBar, d.scrollOverMenuBar)
+        showNavigationArrows = value(.showNavigationArrows, d.showNavigationArrows)
+        slideTrigger = value(.slideTrigger, d.slideTrigger)
         swipeFingers = value(.swipeFingers, d.swipeFingers)
         swipeSensitivity = value(.swipeSensitivity, d.swipeSensitivity)
         invertSwipe = value(.invertSwipe, d.invertSwipe)

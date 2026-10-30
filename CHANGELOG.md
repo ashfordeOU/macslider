@@ -4,6 +4,21 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-10-30
+
+Much easier to drive, with or without the keyboard.
+
+### Added
+- Slide mode: tap the right ⌥ key, then use plain keys (← → to slide, ⇧← ⇧→ to move, R, F, C, 1–9 …). A cheat sheet shows while it is on.
+- Mouse wheel support: hold ⌥ and scroll to move one window per notch.
+- Scroll over the menu bar to move the strip, no keys needed.
+- ‹ › buttons in the menu bar to step between windows.
+- Settings for the slide mode key, the scroll modifier, menu bar scrolling and the ‹ › buttons.
+
+### Changed
+- Scrolling the strip now uses ⌥ alone instead of ⌃⌥ (configurable).
+- The welcome tour teaches slide mode and mouse scrolling first.
+
 ## [0.1.0] - 2026-10-30
 
 First public release.

@@ -22,7 +22,7 @@ extension Modifiers {
     }
 }
 
-/// Global keyboard shortcuts and modifier + two-finger scrolling, through a
+/// Global keyboard shortcuts, slide mode and strip scrolling, through a
 /// `CGEventTap`. Matching events are consumed; everything else passes through.
 final class InputMonitor {
     var keymap: Keymap = .default
@@ -30,15 +30,33 @@ final class InputMonitor {
     var isSuspended = false
     /// When paused only the pause shortcut is handled.
     var isPaused: () -> Bool = { false }
+    /// Scroll the strip while holding `scrollModifier`.
     var modifierSwipe = true
+    var scrollModifier: Modifiers = [.option]
+    /// Scroll the strip when the pointer is over the menu bar, without keys.
+    var scrollOverMenuBar = true
+    /// True if a point (Accessibility coordinates) is on a menu bar.
+    var isOverMenuBar: (CGPoint) -> Bool = { _ in false }
+    var slideTrigger: SlideTrigger = .rightOption {
+        didSet { if slideTrigger == .off { setSlideMode(false) } }
+    }
 
     var onAction: (Action) -> Void = { _ in }
+    /// Free scrolling by a number of points (trackpads, Magic Mouse).
     var onScroll: (Double) -> Void = { _ in }
     var onScrollEnd: () -> Void = {}
+    /// One notch of a mouse wheel: true for the next column, false for the previous.
+    var onStep: (Bool) -> Void = { _ in }
+    var onSlideModeChange: (Bool) -> Void = { _ in }
 
+    private(set) var isSlideMode = false
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var scrollEndTimer: Timer?
+    private var slideIdleTimer: Timer?
+    private var triggerDownAt: CFTimeInterval?
+    private var triggerInterrupted = false
+    private var lastStep: CFTimeInterval = 0
 
     var isActive: Bool { tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
 
@@ -46,13 +64,14 @@ final class InputMonitor {
     @discardableResult
     func start() -> Bool {
         guard tap == nil else { return true }
-        let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.scrollWheel.rawValue)
+        let types: [CGEventType] = [.keyDown, .flagsChanged, .scrollWheel]
+        let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
         guard
             let tap = CGEvent.tapCreate(
                 tap: .cgSessionEventTap,
                 place: .headInsertEventTap,
                 options: .defaultTap,
-                eventsOfInterest: CGEventMask(mask),
+                eventsOfInterest: mask,
                 callback: eventTapCallback,
                 userInfo: Unmanaged.passUnretained(self).toOpaque()
             )
@@ -68,11 +87,53 @@ final class InputMonitor {
     }
 
     func stop() {
+        setSlideMode(false)
         if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         tap = nil
         source = nil
     }
+
+    // MARK: Slide mode
+
+    func setSlideMode(_ on: Bool) {
+        slideIdleTimer?.invalidate()
+        slideIdleTimer = nil
+        if on { restartSlideIdleTimer() }
+        guard on != isSlideMode else { return }
+        isSlideMode = on
+        onSlideModeChange(on)
+    }
+
+    private func restartSlideIdleTimer() {
+        slideIdleTimer?.invalidate()
+        slideIdleTimer = Timer.scheduledTimer(withTimeInterval: SlideMode.idleTimeout, repeats: false) {
+            [weak self] _ in self?.setSlideMode(false)
+        }
+    }
+
+    /// A tap of the trigger key on its own (pressed and released quickly,
+    /// with nothing else pressed in between) toggles slide mode.
+    private func handleFlagsChanged(_ event: CGEvent) {
+        guard !isSuspended, let triggerCode = slideTrigger.keyCode else { return }
+        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        guard keyCode == triggerCode else {
+            if triggerDownAt != nil { triggerInterrupted = true }
+            return
+        }
+        let now = CACurrentMediaTime()
+        if event.flags.rawValue & slideTrigger.deviceFlag != 0 {
+            triggerDownAt = now
+            triggerInterrupted = false
+        } else if let start = triggerDownAt {
+            triggerDownAt = nil
+            if !triggerInterrupted && now - start <= SlideMode.maximumTapDuration && !isPaused() {
+                setSlideMode(!isSlideMode)
+            }
+        }
+    }
+
+    // MARK: Events
 
     fileprivate func handle(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
         let pass = Unmanaged.passUnretained(event)
@@ -80,34 +141,73 @@ final class InputMonitor {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return pass
+        case .flagsChanged:
+            handleFlagsChanged(event)
+            return pass
         case .keyDown:
+            if triggerDownAt != nil { triggerInterrupted = true }
             guard !isSuspended else { return pass }
             let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-            let shortcut = Shortcut(keyCode: keyCode, modifiers: Modifiers(event.flags))
-            guard let action = keymap.action(for: shortcut) else { return pass }
+            let modifiers = Modifiers(event.flags)
+            if isSlideMode {
+                switch SlideMode.resolve(keyCode: keyCode, modifiers: modifiers) {
+                case .action(let action):
+                    restartSlideIdleTimer()
+                    DispatchQueue.main.async { self.onAction(action) }
+                    return nil
+                case .exit:
+                    setSlideMode(false)
+                    return nil
+                case .passThrough:
+                    setSlideMode(false)
+                }
+            }
+            guard let action = keymap.action(for: Shortcut(keyCode: keyCode, modifiers: modifiers)) else {
+                return pass
+            }
             if isPaused() && action != .togglePause { return pass }
             DispatchQueue.main.async { self.onAction(action) }
             return nil
         case .scrollWheel:
-            guard !isSuspended, modifierSwipe, !isPaused(),
-                event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
-            else { return pass }
-            var mods = Modifiers(event.flags)
-            mods.remove(.shift)
-            guard mods == keymap.dominantPrefix else { return pass }
+            if triggerDownAt != nil { triggerInterrupted = true }
+            return handleScroll(event) ? nil : pass
+        default:
+            return pass
+        }
+    }
+
+    /// Returns true if the scroll moved the strip (and should not reach the app).
+    private func handleScroll(_ event: CGEvent) -> Bool {
+        guard !isSuspended, !isPaused() else { return false }
+        var mods = Modifiers(event.flags)
+        mods.remove(.shift)  // Shift turns a mouse wheel sideways; allow it.
+        let withModifier = modifierSwipe && !scrollModifier.isEmpty && mods == scrollModifier
+        let overMenuBar = scrollOverMenuBar && mods.isEmpty && isOverMenuBar(event.location)
+        guard withModifier || overMenuBar || isSlideMode else { return false }
+        if isSlideMode { restartSlideIdleTimer() }
+
+        if event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0 {
+            // Trackpad or Magic Mouse: follow the fingers point for point.
             let dx = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
             let dy = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
             let delta = abs(dx) >= abs(dy) ? -dx : -dy
-            guard delta != 0 else { return nil }
+            guard delta != 0 else { return true }
             onScroll(delta)
             scrollEndTimer?.invalidate()
             scrollEndTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
                 self?.onScrollEnd()
             }
-            return nil
-        default:
-            return pass
+        } else {
+            // Mouse wheel: one notch moves one column.
+            let dx = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
+            let dy = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
+            let value = abs(dx) >= abs(dy) ? dx : dy
+            let now = CACurrentMediaTime()
+            guard value != 0, now - lastStep > 0.07 else { return true }
+            lastStep = now
+            onStep(value < 0)
         }
+        return true
     }
 }
 

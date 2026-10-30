@@ -201,6 +201,7 @@ private struct LabeledSlider: View {
 
 private struct InputPane: View {
     @ObservedObject var store: SettingsStore
+    static let scrollModifiers: [Modifiers] = [[.option], [.command], [.control], [.control, .option]]
 
     var body: some View {
         Form {
@@ -219,10 +220,29 @@ private struct InputPane: View {
                 .disabled(!store.settings.animate)
             }
             Section {
-                Toggle(
-                    "Two-finger swipe while holding \(store.settings.keymap.dominantPrefix.symbols)",
-                    isOn: $store.settings.modifierSwipe)
-                Picker("Swipe without modifier keys", selection: $store.settings.swipeFingers) {
+                Picker("Slide mode key", selection: $store.settings.slideTrigger) {
+                    ForEach(SlideTrigger.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+            } header: {
+                Text("Slide mode")
+            } footer: {
+                Text("Tap this key on its own, then use plain keys: ← → to slide, ⇧← ⇧→ to move a window, R width, F fill, C centre, 1–9 jump. Esc, Return or a few idle seconds end it. You can also scroll the strip while it’s on.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle(isOn: $store.settings.modifierSwipe) {
+                    HStack {
+                        Text("Scroll the strip while holding")
+                        Picker("", selection: $store.settings.scrollModifier) {
+                            ForEach(Self.scrollModifiers, id: \.rawValue) { Text($0.symbols).tag($0) }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+                Toggle("Scroll the strip when the pointer is over the menu bar", isOn: $store.settings.scrollOverMenuBar)
+                Toggle("Show ‹ › buttons in the menu bar", isOn: $store.settings.showNavigationArrows)
+                Picker("Swipe without any keys", selection: $store.settings.swipeFingers) {
                     Text("Off").tag(SwipeFingers.off)
                     Text("Three fingers").tag(SwipeFingers.three)
                     Text("Four fingers").tag(SwipeFingers.four)
@@ -230,14 +250,14 @@ private struct InputPane: View {
                 LabeledContent("Sensitivity") {
                     Slider(value: $store.settings.swipeSensitivity, in: 0.25...3).frame(width: 240)
                 }
-                Toggle("Reverse swipe direction", isOn: $store.settings.invertSwipe)
+                Toggle("Reverse scroll direction", isOn: $store.settings.invertSwipe)
             } header: {
-                Text("Trackpad")
+                Text("Mouse & trackpad scrolling")
             } footer: {
-                Text("A swipe moves the strip with your fingers and settles on the nearest window. If macOS uses the same finger count to switch Spaces, change it in System Settings → Trackpad → More Gestures.")
+                Text("With a mouse, each notch of the wheel moves one window. On a trackpad the strip follows your fingers and settles on the nearest window. If macOS uses the same finger count to switch Spaces, change it in System Settings → Trackpad → More Gestures.")
                     .font(.callout).foregroundStyle(.secondary)
             }
-            Section("Mouse") {
+            Section("Focus") {
                 Toggle("Focus follows mouse", isOn: $store.settings.focusFollowsMouse)
                 Toggle("Mouse follows focus", isOn: $store.settings.mouseFollowsFocus)
             }

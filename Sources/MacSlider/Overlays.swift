@@ -210,3 +210,71 @@ extension NSColor {
     }
 }
 #endif
+
+#if os(macOS)
+/// The cheat sheet shown at the bottom of the screen while slide mode is on.
+final class SlideHUD {
+    private var panel: NSPanel?
+
+    func show() {
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        let size = panel.contentView?.fittingSize ?? NSSize(width: 640, height: 56)
+        let location = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(location) } ?? NSScreen.main
+        if let visible = screen?.visibleFrame {
+            panel.setFrame(
+                NSRect(x: visible.midX - size.width / 2, y: visible.minY + 40, width: size.width, height: size.height),
+                display: true)
+        }
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+    }
+
+    func hide() {
+        panel?.orderOut(nil)
+    }
+
+    private func makePanel() -> NSPanel {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 56),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: true
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+        panel.level = .statusBar
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle, .fullScreenAuxiliary]
+        let host = NSHostingView(rootView: SlideHUDView())
+        host.frame.size = host.fittingSize
+        panel.contentView = host
+        return panel
+    }
+}
+
+private struct SlideHUDView: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            Label("Slide", systemImage: "rectangle.split.3x1.fill")
+                .font(.system(size: 13, weight: .semibold))
+            ForEach(SlideMode.hints, id: \.keys) { hint in
+                HStack(spacing: 5) {
+                    Text(hint.keys)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.12)))
+                    Text(hint.label).font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: Capsule())
+        .fixedSize()
+    }
+}
+#endif

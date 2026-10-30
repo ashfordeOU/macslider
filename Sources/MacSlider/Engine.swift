@@ -328,6 +328,25 @@ final class Engine {
         scheduleSave()
     }
 
+    /// Moves one column left or right on the display under the mouse pointer
+    /// (a mouse-wheel notch or a click on the menu bar arrows).
+    func step(forward: Bool, honourReverse: Bool = true) {
+        guard isRunning, !isPaused else { return }
+        let next = honourReverse && settings.invertSwipe ? !forward : forward
+        guard let display = displayUnderMouse() ?? displays.first else { return }
+        let key = currentKey(display)
+        guard var strip = strips[key], !strip.isEmpty else { return }
+        if let focused = focusedWindowID(), strip.contains(focused) { strip.focus(focused) }
+        strip.moveFocus(next ? .right : .left)
+        strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+        strips[key] = strip
+        layout(animated: true)
+        if let target = strip.focusedWindow, target != focusedWindowID() {
+            focus(target, warpMouse: false)
+        }
+        scheduleSave()
+    }
+
     // MARK: - Focus follows mouse
 
     func mouseMoved(to point: CGPoint) {

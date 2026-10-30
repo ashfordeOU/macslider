@@ -29,8 +29,10 @@ glides just far enough to bring the window into view.
 
 - **One endless strip per display.** Each display, and each Space on it, has its own strip with its own focus and scroll position.
 - **Windows keep their size.** New windows open beside the focused one. Nothing gets resized to make room.
-- **Keyboard first.** Focus, move, resize and arrange with Control-Option plus Vim keys (H J K L) or the arrow keys. Every shortcut can be rebound.
-- **Trackpad native.** Hold ⌃⌥ and swipe two fingers, or turn on a plain three- or four-finger swipe. The strip follows your fingers and settles on the nearest window.
+- **Slide mode: no chords to remember.** Tap the right ⌥ key, then press ← → to slide between windows. R sets the width, F fills the screen, Esc finishes.
+- **Scroll with your mouse.** Hold ⌥ and turn the wheel: each notch moves one window. Or just scroll over the menu bar, or click the ‹ › buttons next to the menu bar icon.
+- **Trackpad native.** Hold ⌥ and swipe two fingers, or turn on a plain three- or four-finger swipe. The strip follows your fingers and settles on the nearest window.
+- **Shortcuts too.** Focus, move, resize and arrange with Control-Option plus the arrow keys or H J K L. Every shortcut can be rebound.
 - **Stacks and tabs.** Put several windows in one column, stacked or as tabs with a clickable tab bar.
 - **Pinned columns.** Keep a column at the left or right edge while the rest of the strip scrolls.
 - **Smart floating.** Dialogs, panels and fixed-size windows float automatically. Per-app rules float apps or give them a default width and position.
@@ -67,22 +69,44 @@ This downloads the latest release, installs it in `/Applications` and opens it.
 ## Getting started
 
 When MacSlider first opens, a short welcome tour walks you through granting
-Accessibility access and the five shortcuts that matter most:
+Accessibility access and the easiest ways to get around.
 
-| Shortcut | What it does |
+### Slide mode
+
+Tap the **right ⌥ Option** key on its own. A small cheat sheet appears at
+the bottom of the screen, and until you press <kbd>Esc</kbd> (or pause for a
+few seconds) plain keys drive MacSlider:
+
+| Key | What it does |
 | --- | --- |
-| <kbd>⌃⌥→</kbd> / <kbd>⌃⌥←</kbd> | Focus the next / previous window. The strip slides to show it. |
-| <kbd>⌃⌥⇧→</kbd> / <kbd>⌃⌥⇧←</kbd> | Move the focused window along the strip. |
-| <kbd>⌃⌥R</kbd> | Step through preset widths (¼ ⅓ ½ ⅔ ¾). |
-| <kbd>⌃⌥F</kbd> | Fill the screen. Press again to go back. |
-| <kbd>⌃⌥C</kbd> | Centre the window on screen. |
+| <kbd>←</kbd> <kbd>→</kbd> | Slide to the previous / next window. |
+| <kbd>⇧←</kbd> <kbd>⇧→</kbd> | Move the window along the strip. |
+| <kbd>↑</kbd> <kbd>↓</kbd> | Move between windows stacked in a column (add <kbd>⇧</kbd> to reorder). |
+| <kbd>R</kbd> | Step through preset widths (¼ ⅓ ½ ⅔ ¾). |
+| <kbd>F</kbd> | Fill the screen. Press again to go back. |
+| <kbd>C</kbd> | Centre the window. |
+| <kbd>1</kbd>–<kbd>9</kbd> | Jump to a column. |
+| <kbd>-</kbd> <kbd>=</kbd> | Narrower / wider. |
+| <kbd>[</kbd> <kbd>]</kbd> | Stack into the left column / unstack. |
+| <kbd>T</kbd> <kbd>W</kbd> <kbd>P</kbd> <kbd>D</kbd> | Float, tabs, pin, send to the next display. |
+| <kbd>Esc</kbd> <kbd>Return</kbd> | Done. Any other key also ends slide mode and goes to your app. |
+
+The trigger key can be right ⌥, ⌘, ⌃ or ⇧ in **Settings → Motion & Input**.
+Holding the key as a normal modifier never turns slide mode on, only a tap does.
+
+### With the mouse
+
+- Hold <kbd>⌥</kbd> and **scroll**. With a mouse wheel each notch moves one window; on a trackpad the strip follows your fingers.
+- **Scroll over the menu bar**. No keys needed.
+- **Click ‹ ›** next to the MacSlider icon in the menu bar.
+- **Click** any window, even the thin edge of one off-screen, and the strip scrolls to show it.
 
 The menu bar icon shows where you are (`3/8`), lists the windows on the
 current strip, and has Pause, Search Windows, Retile and Settings.
 
 ## Keyboard shortcuts
 
-All shortcuts start with <kbd>⌃⌥</kbd> by default. In **Settings → Shortcuts**
+If you prefer chords to slide mode, all shortcuts start with <kbd>⌃⌥</kbd> by default. In **Settings → Shortcuts**
 you can switch the prefix to <kbd>⌥</kbd>, <kbd>⌘⌥</kbd> or <kbd>⌃⌘</kbd> in
 one step, rebind any action and give an action more than one shortcut.
 Shortcuts are stored by physical key, so they stay on the same keys with
@@ -116,7 +140,9 @@ AZERTY, QWERTZ, Dvorak and other layouts.
 - **Click** any window, including the thin edge of one parked off-screen, and the strip scrolls to show it.
 - **Drag** a window by its title bar onto another column to reorder the strip. Dragging a window out of a stack unstacks it.
 - **Resize** a window's edge to change its column's width.
-- **Swipe** with two fingers while holding <kbd>⌃⌥</kbd> to scroll the strip. Turn on three- or four-finger swipes in **Settings → Motion & Input**. If macOS uses the same finger count to switch Spaces, **Settings → General → Mac setup** shows you where to change it.
+- **Scroll** while holding <kbd>⌥</kbd> (you can choose ⌘, ⌃ or ⌃⌥ instead), or with no keys over the menu bar. A mouse wheel moves one window per notch; a trackpad or Magic Mouse moves the strip with your fingers.
+- **‹ › buttons** next to the menu bar icon step one window at a time.
+- **Swipe** with three or four fingers, no keys, once you turn it on in **Settings → Motion & Input**. If macOS uses the same finger count to switch Spaces, **Settings → General → Mac setup** shows you where to change it.
 - **Focus follows mouse** and **mouse follows focus** are optional and off by default.
 
 ## Settings
@@ -127,7 +153,7 @@ Everything is set in a standard Settings window, and changes apply immediately.
 | --- | --- |
 | General | Launch at login, pause, menu bar position indicator, where new windows open, Mac setup checks |
 | Layout | Gaps between windows and at screen edges (down to zero), default width, width presets, centring behaviour, keep each window's own height, tab bar height |
-| Motion & Input | Animation on/off and speed, modifier swipe, three/four-finger swipe, sensitivity, direction, focus follows mouse, mouse follows focus |
+| Motion & Input | Slide mode key, scroll modifier, menu bar scrolling, ‹ › buttons, three/four-finger swipe, sensitivity, direction, animation speed, focus follows mouse, mouse follows focus |
 | Appearance | Focus border with colour and width, dimming of inactive windows |
 | Apps | Per-app rules: always float, default width, open at the start, next to focus or at the end |
 | Shortcuts | Modifier prefix, every binding, extra bindings, restore defaults |
@@ -177,7 +203,7 @@ code, so it is unit-tested on macOS and Linux. The app
 (`Sources/MacSlider`) applies that model to real windows:
 
 - **Accessibility (`AXUIElement`, `AXObserver`)** moves and resizes windows and follows window creation, focus, minimising and closing.
-- **A `CGEventTap`** handles global shortcuts and modifier swipes, and passes every other event straight through.
+- **A `CGEventTap`** handles global shortcuts, slide mode and strip scrolling, and passes every other event straight through.
 - **Mission Control Spaces** are read through the system window server, so each Space keeps its own layout. If that lookup ever fails, MacSlider treats each display as one Space instead of breaking.
 - **Multitouch input** is read directly from the trackpad for three- and four-finger swipes. It is only loaded when that option is on.
 - **Animations** use a short ease-out curve. Windows are resized once, then slid into place, so apps don't have to re-layout their content on every frame.

@@ -74,6 +74,25 @@ final class KeymapTests: XCTestCase {
         XCTAssertNil(settings.rule(for: nil))
     }
 
+    func testSlideModeKeys() {
+        XCTAssertEqual(SlideMode.resolve(keyCode: KeyCode.right, modifiers: []), .action(.focusRight))
+        XCTAssertEqual(SlideMode.resolve(keyCode: KeyCode.h, modifiers: []), .action(.focusLeft))
+        XCTAssertEqual(SlideMode.resolve(keyCode: KeyCode.left, modifiers: [.shift]), .action(.moveLeft))
+        XCTAssertEqual(SlideMode.resolve(keyCode: KeyCode.r, modifiers: []), .action(.cycleWidth))
+        XCTAssertEqual(SlideMode.resolve(keyCode: KeyCode.digits[2], modifiers: []), .action(.focusColumn3))
+        XCTAssertEqual(SlideMode.resolve(keyCode: KeyCode.escape, modifiers: []), .exit)
+        XCTAssertEqual(SlideMode.resolve(keyCode: KeyCode.returnKey, modifiers: []), .exit)
+        XCTAssertEqual(SlideMode.resolve(keyCode: KeyCode.x, modifiers: []), .passThrough)
+        XCTAssertEqual(SlideMode.resolve(keyCode: KeyCode.c, modifiers: [.command]), .passThrough)
+    }
+
+    func testSlideTriggers() {
+        XCTAssertNil(SlideTrigger.off.keyCode)
+        XCTAssertEqual(SlideTrigger.rightOption.keyCode, 61)
+        XCTAssertEqual(AppSettings().slideTrigger, .rightOption)
+        XCTAssertEqual(AppSettings().scrollModifier, [.option])
+    }
+
     func testSettingsRoundTripAndTolerantDecoding() throws {
         var settings = AppSettings()
         settings.layout.gap = 3

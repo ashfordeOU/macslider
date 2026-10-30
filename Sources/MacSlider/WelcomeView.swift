@@ -3,21 +3,26 @@ import AppKit
 import MacSliderCore
 import SwiftUI
 
-/// First-run tour: grant Accessibility, then learn the five core shortcuts.
+/// First-run tour: grant Accessibility, then learn the easy ways to get around.
 struct WelcomeView: View {
     @ObservedObject var store: SettingsStore
     let onFinish: () -> Void
     @State private var trusted = Accessibility.isTrusted(prompt: false)
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    private var core: [(Action, String)] {
-        [
-            (.focusRight, "Move focus to the next window. The strip slides to show it."),
-            (.moveRight, "Move the focused window along the strip."),
-            (.cycleWidth, "Step the window through your preset widths."),
-            (.toggleFullWidth, "Fill the screen; press again to go back."),
-            (.center, "Centre the window on screen."),
-        ]
+    private func shortcut(_ action: Action) -> String {
+        store.settings.keymap.shortcuts(for: action).first?.displayString ?? "—"
+    }
+
+    private func tip(keys: String, text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(keys)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.08)))
+                .frame(width: 130, alignment: .leading)
+            Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     var body: some View {
@@ -63,18 +68,16 @@ struct WelcomeView: View {
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("2. Learn five shortcuts").fontWeight(.medium)
-                    ForEach(core, id: \.0) { action, explanation in
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(store.settings.keymap.shortcuts(for: action).first?.displayString ?? "—")
-                                .monospaced()
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.08)))
-                                .frame(width: 90, alignment: .leading)
-                            Text(explanation).font(.callout)
-                        }
-                    }
-                    Text("Use H J K L or the arrow keys. Hold \(store.settings.keymap.dominantPrefix.symbols) and swipe two fingers on the trackpad to scroll the strip.")
+                    Text("2. Get around").fontWeight(.medium)
+                    tip(
+                        keys: store.settings.slideTrigger == .off ? "—" : "tap \(store.settings.slideTrigger.title)",
+                        text: "Slide mode. Then just press ← → to slide between windows, ⇧← ⇧→ to move one, R for width, F to fill. Esc when done.")
+                    tip(
+                        keys: "\(store.settings.scrollModifier.symbols) + scroll",
+                        text: "Hold \(store.settings.scrollModifier.symbols) and use the mouse wheel or trackpad. Each wheel notch moves one window.")
+                    tip(keys: "menu bar", text: "Scroll over the menu bar, or click ‹ › next to the MacSlider icon. No keys needed.")
+                    tip(keys: "click", text: "Click any window, even the thin edge of one off-screen, to bring it into view.")
+                    Text("Prefer shortcuts? \(shortcut(.focusLeft)) \(shortcut(.focusRight)) focus, \(shortcut(.cycleWidth)) width, \(shortcut(.toggleFullWidth)) fill. All of them can be changed in Settings.")
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
