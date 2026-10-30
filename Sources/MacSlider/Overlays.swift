@@ -38,7 +38,7 @@ final class Overlays {
         focused: (WindowID, CGRect)?,
         inactive: [(WindowID, CGRect)],
         tabBars: [TabBarModel],
-        settings: Settings
+        settings: AppSettings
     ) {
         updateBorder(focused: focused, settings: settings)
         updateDimming(inactive: settings.dimInactive ? inactive : [], amount: settings.dimAmount)
@@ -47,7 +47,7 @@ final class Overlays {
 
     // MARK: Focus border
 
-    private func updateBorder(focused: (WindowID, CGRect)?, settings: Settings) {
+    private func updateBorder(focused: (WindowID, CGRect)?, settings: AppSettings) {
         guard settings.focusBorder, let (id, frame) = focused else {
             border?.orderOut(nil)
             return

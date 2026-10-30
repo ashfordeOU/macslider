@@ -44,7 +44,7 @@ final class ManagedWindow {
 /// global messaging timeout so an unresponsive app cannot stall the engine
 /// for long.
 final class Engine {
-    var settings: Settings {
+    var settings: AppSettings {
         didSet { settingsDidChange(from: oldValue) }
     }
 
@@ -72,7 +72,7 @@ final class Engine {
     private var lastFocusFollowsMouse: CFTimeInterval = 0
     private let ownPID = ProcessInfo.processInfo.processIdentifier
 
-    init(settings: Settings) {
+    init(settings: AppSettings) {
         self.settings = settings
         animator.apply = { [weak self] id, rect, sizeChanged in
             self?.apply(rect, to: id, sizeChanged: sizeChanged)
@@ -129,7 +129,7 @@ final class Engine {
         sync()
     }
 
-    private func settingsDidChange(from old: Settings) {
+    private func settingsDidChange(from old: AppSettings) {
         guard isRunning, !isPaused else { return }
         if settings.layout != old.layout || settings.keepHeights != old.keepHeights {
             for (key, var strip) in strips {
@@ -352,7 +352,7 @@ final class Engine {
         for entry in info {
             guard (entry[kCGWindowLayer as String] as? Int) == 0,
                 let boundsDict = entry[kCGWindowBounds as String] as? NSDictionary,
-                let bounds = CGRect(dictionaryRepresentation: boundsDict),
+                let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary),
                 bounds.contains(point),
                 let number = entry[kCGWindowNumber as String] as? NSNumber
             else { continue }
@@ -917,8 +917,12 @@ final class Engine {
     // MARK: - Workspace notifications
 
     private func registerWorkspaceNotifications() {
-        let center = NSWorkspace.shared.notificationCenter
-        func on(_ name: Notification.Name, center: NotificationCenter = center, _ block: @escaping (Notification) -> Void) {
+        let workspace = NSWorkspace.shared.notificationCenter
+        func on(
+            _ name: Notification.Name, in center: NotificationCenter? = nil,
+            _ block: @escaping (Notification) -> Void
+        ) {
+            let center = center ?? workspace
             workspaceTokens.append(center.addObserver(forName: name, object: nil, queue: .main, using: block))
         }
         func app(_ note: Notification) -> NSRunningApplication? {
@@ -963,7 +967,7 @@ final class Engine {
             self?.animator.finishNow()
             self?.saveState()
         }
-        on(NSApplication.didChangeScreenParametersNotification, center: .default) { [weak self] _ in
+        on(NSApplication.didChangeScreenParametersNotification, in: .default) { [weak self] _ in
             self?.scheduleSync(after: 0.5)
         }
     }

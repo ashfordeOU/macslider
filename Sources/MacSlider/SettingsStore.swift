@@ -7,7 +7,7 @@ import ServiceManagement
 /// Loads and saves `Settings`, and publishes changes to the UI and engine.
 /// Changes apply immediately; there is no Save button.
 final class SettingsStore: ObservableObject {
-    @Published var settings: Settings {
+    @Published var settings: AppSettings {
         didSet {
             guard settings != oldValue else { return }
             save()
@@ -20,7 +20,7 @@ final class SettingsStore: ObservableObject {
         didSet { onRecordingChange(isRecordingShortcut) }
     }
 
-    var onChange: (Settings) -> Void = { _ in }
+    var onChange: (AppSettings) -> Void = { _ in }
     var onRecordingChange: (Bool) -> Void = { _ in }
 
     static var directory: URL {
@@ -33,11 +33,11 @@ final class SettingsStore: ObservableObject {
 
     init() {
         if let data = try? Data(contentsOf: Self.fileURL),
-            let decoded = try? JSONDecoder().decode(Settings.self, from: data)
+            let decoded = try? JSONDecoder().decode(AppSettings.self, from: data)
         {
             settings = decoded
         } else {
-            settings = Settings()
+            settings = AppSettings()
         }
     }
 
@@ -82,7 +82,7 @@ struct SetupCheck: Identifiable {
     var state: State
     var fixURL: URL?
 
-    static func run(settings: Settings) -> [SetupCheck] {
+    static func run(settings: AppSettings) -> [SetupCheck] {
         var checks: [SetupCheck] = []
         let accessibilityURL = URL(
             string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")

@@ -37,7 +37,7 @@ public enum SwipeFingers: Int, Codable, CaseIterable, Sendable {
 
 /// User settings, persisted as JSON. Every field has a default and missing
 /// fields decode to it, so older or hand-edited files keep working.
-public struct Settings: Equatable, Codable, Sendable {
+public struct AppSettings: Equatable, Codable, Sendable {
     public var layout = LayoutConfig()
     /// Animate windows into place instead of jumping.
     public var animate = true
@@ -71,7 +71,7 @@ public struct Settings: Equatable, Codable, Sendable {
     /// Where newly opened windows join the strip.
     public var newWindowPosition: Strip.InsertPosition = .afterFocused
     /// Per-app rules.
-    public var appRules: [AppRule] = Settings.defaultAppRules
+    public var appRules: [AppRule] = AppSettings.defaultAppRules
     public var keymap: Keymap = .default
     /// Set once the welcome tour has been shown.
     public var hasCompletedOnboarding = false
@@ -99,7 +99,7 @@ public struct Settings: Equatable, Codable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        let d = Settings()
+        let d = AppSettings()
         func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
             (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback
         }

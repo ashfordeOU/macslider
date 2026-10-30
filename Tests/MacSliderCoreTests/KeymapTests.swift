@@ -68,21 +68,21 @@ final class KeymapTests: XCTestCase {
     }
 
     func testAppRuleLookup() {
-        let settings = Settings()
+        let settings = AppSettings()
         XCTAssertEqual(settings.rule(for: "com.apple.calculator")?.float, true)
         XCTAssertNil(settings.rule(for: "com.example.none"))
         XCTAssertNil(settings.rule(for: nil))
     }
 
     func testSettingsRoundTripAndTolerantDecoding() throws {
-        var settings = Settings()
+        var settings = AppSettings()
         settings.layout.gap = 3
         settings.keymap.unbind(.center, at: 0)
         let data = try JSONEncoder().encode(settings)
-        XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: data), settings)
+        XCTAssertEqual(try JSONDecoder().decode(AppSettings.self, from: data), settings)
 
         let partial = #"{"animate": false, "layout": {"gap": 2}, "keymap": {"bogus": []}}"#
-        let decoded = try JSONDecoder().decode(Settings.self, from: Data(partial.utf8))
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: Data(partial.utf8))
         XCTAssertFalse(decoded.animate)
         XCTAssertEqual(decoded.layout.gap, 2)
         XCTAssertEqual(decoded.layout.edgeGap, LayoutConfig().edgeGap)

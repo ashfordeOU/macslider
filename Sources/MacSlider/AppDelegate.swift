@@ -110,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func apply(_ settings: Settings) {
+    private func apply(_ settings: AppSettings) {
         engine.settings = settings
         input.keymap = settings.keymap
         input.modifierSwipe = settings.modifierSwipe
