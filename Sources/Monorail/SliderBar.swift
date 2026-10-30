@@ -255,6 +255,26 @@ private struct SliderBarView: View {
         return map.isRightToLeft ? span * scale - left - width * scale : left
     }
 
+    /// The window under a click on the track: the slide under the pointer, then
+    /// the tile within it (left or right half of a pair, a cell of a grid…).
+    private func window(
+        at point: CGPoint, map: Engine.MiniMap, lower: Double, span: Double, scale: Double, height: Double
+    ) -> WindowID? {
+        let x = Double(point.x)
+        func left(_ tile: Engine.MiniTile) -> Double {
+            trackX(tile.x, width: tile.width, lower: lower, span: span, scale: scale, map: map)
+        }
+        let hit = map.tiles.first { x >= left($0) - 2 && x <= left($0) + $0.width * scale + 2 }
+        let nearest = map.tiles.min { abs(left($0) + $0.width * scale / 2 - x) < abs(left($1) + $1.width * scale / 2 - x) }
+        guard let tile = hit ?? nearest else { return nil }
+        var ux = min(max((x - left(tile)) / max(tile.width * scale, 1), 0), 0.999)
+        let uy = min(max((Double(point.y) - 4) / max(height - 8, 1), 0), 0.999)
+        if map.isRightToLeft { ux = 1 - ux }
+        let frames = tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split)
+        let index = frames.firstIndex { $0.contains(x: ux, y: uy) } ?? 0
+        return tile.windows.indices.contains(index) ? tile.windows[index].id : tile.windows.first?.id
+    }
+
     private func bounds(_ map: Engine.MiniMap) -> (min: Double, span: Double) {
         let lower = min(0, map.viewportX)
         let upper = max(map.totalWidth, map.viewportX + map.viewportWidth)
@@ -273,9 +293,6 @@ private struct SliderBarView: View {
                     TileView(tile: tile, height: size.height - 8)
                         .frame(width: max(tile.width * scale - 3, 6), height: size.height - 8)
                         .offset(x: trackX(tile.x, width: tile.width, lower: lower, span: span, scale: scale, map: map) + 1.5, y: 4)
-                        .onTapGesture {
-                            if let window = tile.windows.first { actions.focus(window.id) }
-                        }
                         .onHover { hovering in
                             if hovering {
                                 model.hoveredTile = tile
@@ -298,9 +315,14 @@ private struct SliderBarView: View {
             }
             .animation(model.isDragging ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: map)
             .contentShape(Rectangle())
+            // One gesture for both clicks and drags, so a click with a little
+            // pointer movement still counts as a click.
             .gesture(
-                DragGesture(minimumDistance: 3)
+                DragGesture(minimumDistance: 0)
                     .onChanged { value in
+                        guard dragScale != nil || hypot(value.translation.width, value.translation.height) > 4 else {
+                            return
+                        }
                         // Freeze the mapping for the whole drag so the bar doesn't rescale under the pointer.
                         if dragScale == nil {
                             dragScale = scale
@@ -313,10 +335,18 @@ private struct SliderBarView: View {
                         let stripX = trackPosition / scaleNow + dragOrigin - map.viewportWidth / 2
                         actions.slide(stripX, map.displayUUID)
                     }
-                    .onEnded { _ in
+                    .onEnded { value in
+                        if dragScale == nil {
+                            // A click: jump to the window under the pointer.
+                            if let id = window(at: value.location, map: map, lower: lower, span: span, scale: scale,
+                                               height: Double(size.height)) {
+                                actions.focus(id)
+                            }
+                        } else {
+                            actions.endSlide()
+                        }
                         dragScale = nil
                         model.isDragging = false
-                        actions.endSlide()
                         onInteraction()
                     }
             )

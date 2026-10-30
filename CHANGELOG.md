@@ -13,6 +13,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Changed
 - Links point to the repository's new home, github.com/ashfordeOU/monorail.
 
+### Fixed
+- Clicking a slide on the slider bar always jumps to it, even if the pointer moves a little while clicking. Clicking one half of a pair (or one cell of a grid) jumps straight to that window.
+
 ## [0.3.0] - 2026-10-30
 
 ### Changed
