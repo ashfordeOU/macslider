@@ -1206,6 +1206,9 @@ final class Engine {
         else { return false }
         let app = NSRunningApplication(processIdentifier: pid)
         guard app?.activationPolicy == .regular, app?.isHidden == false else { return false }
+        guard !Self.isSystemUI(app?.bundleIdentifier) else { return false }
+        // ⌃⌥T (force) can still tile a window the dialog heuristic got wrong.
+        guard force || !Self.looksLikeDialog(element) else { return false }
 
         if displays.isEmpty { refreshDisplays() }
         guard let display = display(containing: frame) ?? displays.first else { return false }
@@ -1294,6 +1297,58 @@ final class Engine {
         return windows.values.first { CFEqual($0.element, element) }
     }
 
+    // MARK: - Dialogs
+
+    /// macOS processes that show panels on behalf of apps (open/save panels,
+    /// Quick Look, password prompts…). Their windows are never tiled.
+    private static func isSystemUI(_ bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        if bundleID.contains(".xpc.") || bundleID.hasSuffix("UIService") || bundleID.hasSuffix("UIAgent") { return true }
+        return [
+            "com.apple.appkit.xpc.openAndSavePanelService",
+            "com.apple.quicklook.QuickLookUIService",
+            "com.apple.CoreServicesUIAgent",
+            "com.apple.SecurityAgent",
+            "com.apple.UserNotificationCenter",
+            "com.apple.ViewBridgeAuxiliary",
+            "com.apple.coreservices.uiagent",
+        ].contains(bundleID)
+    }
+
+    /// Open and save panels, alerts and other dialogs: modal windows, or ones
+    /// without minimise and full-screen buttons. They float instead of tiling.
+    private static func looksLikeDialog(_ element: AXUIElement) -> Bool {
+        if element.bool("AXModal") == true { return true }
+        return element.element(kAXMinimizeButtonAttribute) == nil && element.element("AXFullScreenButton") == nil
+    }
+
+    /// The tiled window most recently focused, to place dialogs over.
+    private var lastTiledFocus: WindowID?
+    private var placedDialogs: Set<WindowID> = []
+
+    /// Puts a new dialog (say, a file picker) over the window that opened it,
+    /// centred near its top like a sheet, instead of wherever it appeared.
+    private func centerDialog(_ element: AXUIElement, pid: pid_t) {
+        guard isRunning, !isPaused, element.role == kAXWindowRole, let id = element.windowID, windows[id] == nil,
+            !placedDialogs.contains(id), !element.isFullScreen, let frame = element.frame
+        else { return }
+        placedDialogs.insert(id)
+        if placedDialogs.count > 200 { placedDialogs.removeAll() }
+
+        let owner = windows.values
+            .filter { $0.pid == pid && $0.key != nil && $0.lastApplied != nil }
+            .max { $0.appliedAt < $1.appliedAt }
+        guard let parent = (owner ?? lastTiledFocus.flatMap { windows[$0] })?.lastApplied,
+            let display = display(containing: CGRect(parent))
+        else { return }
+        let visible = display.visibleFrame
+        var x = parent.midX - Double(frame.width) / 2
+        var y = parent.y + min(48, max(parent.height - Double(frame.height), 0) / 2)
+        x = min(max(x, Double(visible.minX)), Double(visible.maxX - frame.width))
+        y = min(max(y, Double(visible.minY)), Double(visible.maxY - frame.height))
+        element.setPosition(CGPoint(x: x, y: y))
+    }
+
     // MARK: - Accessibility notifications
 
     private static let appNotifications = [
@@ -1355,7 +1410,11 @@ final class Engine {
         switch notification {
         case kAXWindowCreatedNotification:
             let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
-            if adopt(element, pid: pid, focus: frontmost) { layout(animated: true) }
+            if adopt(element, pid: pid, focus: frontmost) {
+                layout(animated: true)
+            } else {
+                centerDialog(element, pid: pid)
+            }
 
         case kAXFocusedWindowChangedNotification:
             focusDidChange(to: element, pid: pid)
@@ -1392,9 +1451,14 @@ final class Engine {
         let windowElement = element.role == kAXWindowRole ? element : AXUIElement.application(pid).focusedWindow
         guard let windowElement, let id = windowElement.windowID else { return }
         if windows[id] == nil {
-            if adopt(windowElement, pid: pid, focus: true) { layout(animated: true) }
+            if adopt(windowElement, pid: pid, focus: true) {
+                layout(animated: true)
+            } else {
+                centerDialog(windowElement, pid: pid)
+            }
             return
         }
+        if windows[id]?.key != nil { lastTiledFocus = id }
         guard swipeDisplay == nil, let window = windows[id], let key = window.key, var strip = strips[key],
             let display = display(for: key)
         else {

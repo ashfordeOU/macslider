@@ -4,6 +4,11 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.5] - 2026-10-30
+
+### Fixed
+- File pickers, save panels and other dialogs are no longer tiled into slides. They float, centred over the window that opened them, and the strip doesn't scroll away when one opens.
+
 ## [0.2.4] - 2026-10-30
 
 ### Added
