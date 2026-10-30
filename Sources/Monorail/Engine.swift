@@ -186,7 +186,7 @@ final class Engine {
         {
             for (key, var strip) in strips {
                 if let display = display(for: key) {
-                    strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+                    strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
                 }
                 strips[key] = strip
             }
@@ -278,7 +278,7 @@ final class Engine {
 
         guard let (display, key) = activeContext(), var strip = strips[key], !strip.isEmpty else { return }
         strip.pairingArrangement = settings.slideArrangement
-        let config = settings.layout
+        let config = layoutConfig(for: display)
         let columnBefore = strip.focusedColumn
         let width = viewport(of: display).width
         if let focused = focusedWindowID(), strip.contains(focused) { strip.focus(focused) }
@@ -357,7 +357,7 @@ final class Engine {
         if let key = window.key { showWorkspace(of: key) }
         if let key = window.key, var strip = strips[key], let display = display(for: key) {
             strip.focus(id)
-            strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+            strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
             strips[key] = strip
             layout(animated: true)
         }
@@ -417,7 +417,7 @@ final class Engine {
             let visible = memory.key == key
             strip.restore(window.id, to: memory.slot, focus: focus && visible)
             if focus && visible {
-                strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+                strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
             }
             strips[memory.key] = strip
             window.key = memory.key
@@ -470,7 +470,7 @@ final class Engine {
                 window.id, width: width ?? rule?.width ?? settings.layout.defaultWidth,
                 position: position, focus: focus)
         }
-        if focus { strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width) }
+        if focus { strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width) }
         strips[key] = strip
         window.key = key
         scheduleSave()
@@ -510,7 +510,7 @@ final class Engine {
                 || paired.columns.contains(where: \.isCustom) != strip.columns.contains(where: \.isCustom)
             if key == displays.first.map(currentKey) { slides = paired.columns.count }
             if let display = display(for: key) {
-                paired.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+                paired.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
             }
             strips[key] = paired
         }
@@ -532,7 +532,7 @@ final class Engine {
         activeWorkspace[key.screen] = base + index
         let newKey = currentKey(display)
         if var strip = strips[newKey] {
-            strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+            strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
             strips[newKey] = strip
         }
         layout(animated: true)
@@ -583,7 +583,7 @@ final class Engine {
         for display in displays {
             let key = currentKey(display)
             if var strip = strips[key] {
-                strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+                strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
                 strips[key] = strip
             }
         }
@@ -871,13 +871,14 @@ final class Engine {
             let key = currentKey(display)
             let strip = strips[key] ?? Strip()
             let width = viewport(of: display).width
-            let offsets = strip.columnOffsets(config: settings.layout, viewportWidth: width)
+            let config = layoutConfig(for: display)
+            let offsets = strip.columnOffsets(config: config, viewportWidth: width)
             let tiles = strip.columns.indices.filter { strip.columns[$0].pin == nil }.map { index in
                 let column = strip.columns[index]
                 return MiniTile(
                     id: index,
                     x: offsets[index],
-                    width: strip.width(ofColumn: index, config: settings.layout, viewportWidth: width),
+                    width: strip.width(ofColumn: index, config: config, viewportWidth: width),
                     windows: column.windows.compactMap { id in
                         windows[id].map {
                             MiniWindow(
@@ -900,9 +901,9 @@ final class Engine {
                 workspaceCount: visibleWorkspaceCount(on: key.screen),
                 workspaceNames: (0..<visibleWorkspaceCount(on: key.screen)).map(settings.workspaceName),
                 tiles: tiles,
-                totalWidth: strip.totalWidth(config: settings.layout, viewportWidth: width),
+                totalWidth: strip.totalWidth(config: config, viewportWidth: width),
                 viewportX: strip.scroll,
-                viewportWidth: strip.scrollArea(config: settings.layout, viewportWidth: width).width,
+                viewportWidth: strip.scrollArea(config: config, viewportWidth: width).width,
                 isRightToLeft: settings.layout.direction == .rightToLeft
             )
         }
@@ -917,7 +918,7 @@ final class Engine {
         animator.cancel()
         overlays.hideTransient()
         let width = viewport(of: display).width
-        strip.scroll(by: stripX - strip.scroll, config: settings.layout, viewportWidth: width)
+        strip.scroll(by: stripX - strip.scroll, config: layoutConfig(for: display), viewportWidth: width)
         strips[key] = strip
         layout(animated: false, updateOverlays: false)
     }
@@ -962,7 +963,7 @@ final class Engine {
         let factor = settings.swipeSensitivity * (settings.invertSwipe != mirrored ? -1 : 1)
         animator.cancel()
         overlays.hideTransient()
-        strip.scroll(by: delta * factor, config: settings.layout, viewportWidth: viewport(of: display).width)
+        strip.scroll(by: delta * factor, config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
         strips[key] = strip
         layout(animated: false, updateOverlays: false)
     }
@@ -973,7 +974,7 @@ final class Engine {
         swipeDisplay = nil
         let key = currentKey(display)
         guard var strip = strips[key], !strip.isEmpty else { return }
-        strip.settle(config: settings.layout, viewportWidth: viewport(of: display).width)
+        strip.settle(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
         strips[key] = strip
         haptic()
         layout(animated: true)
@@ -998,7 +999,7 @@ final class Engine {
         let before = strip.focusedColumn
         strip.moveFocus(next ? .right : .left)
         if strip.focusedColumn != before { haptic() }
-        strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+        strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
         strips[key] = strip
         layout(animated: true)
         if let target = strip.focusedWindow, target != focusedWindowID() {
@@ -1116,7 +1117,7 @@ final class Engine {
         for display in displays {
             let key = currentKey(display)
             let strip = strips[key] ?? Strip()
-            for placement in strip.layout(config: settings.layout, viewport: viewport(of: display)) {
+            for placement in strip.layout(config: layoutConfig(for: display), viewport: viewport(of: display)) {
                 guard let window = windows[placement.window] else { continue }
                 var frame = placement.frame
                 if settings.keepHeights, let (c, _) = strip.locate(placement.window),
@@ -1204,7 +1205,7 @@ final class Engine {
         for display in displays {
             let key = currentKey(display)
             guard let strip = strips[key], !strip.isEmpty else { continue }
-            for placement in strip.layout(config: settings.layout, viewport: viewport(of: display))
+            for placement in strip.layout(config: layoutConfig(for: display), viewport: viewport(of: display))
             where !placement.isParked && !placement.isHiddenTab {
                 guard let frame = windows[placement.window]?.lastApplied else { continue }
                 if placement.window == focusedID {
@@ -1213,7 +1214,7 @@ final class Engine {
                     inactive.append((placement.window, CGRect(frame)))
                 }
             }
-            for bar in strip.tabBars(config: settings.layout, viewport: viewport(of: display)) {
+            for bar in strip.tabBars(config: layoutConfig(for: display), viewport: viewport(of: display)) {
                 let tabs = bar.windows.map { id in
                     Overlays.Tab(id: id, title: windows[id].map { window in
                         let title = displayTitle(window)
@@ -1254,7 +1255,7 @@ final class Engine {
 
     private func targetFrame(of id: WindowID) -> Rect? {
         guard let key = windows[id]?.key, let strip = strips[key], let display = display(for: key) else { return nil }
-        return strip.layout(config: settings.layout, viewport: viewport(of: display)).first { $0.window == id }?.frame
+        return strip.layout(config: layoutConfig(for: display), viewport: viewport(of: display)).first { $0.window == id }?.frame
     }
 
     /// The display and strip keyboard actions apply to: the focused window's
@@ -1275,11 +1276,16 @@ final class Engine {
     /// room for the slider bar when it is always shown.
     private func viewport(of display: Display) -> Rect {
         var area = display.viewport
-        guard settings.sliderBar == .always else { return area }
+        guard settings.sliderBar(for: display.uuid) == .always else { return area }
         let reserved = AppSettings.sliderBarHeight
         area.height -= reserved
         if settings.sliderBarEdge == .top { area.y += reserved }
         return area
+    }
+
+    /// Gaps and widths for a display, with its own overrides from Settings.
+    private func layoutConfig(for display: Display) -> LayoutConfig {
+        settings.layout(for: display.uuid)
     }
 
     private func currentKey(_ display: Display) -> StripKey {
@@ -1342,8 +1348,8 @@ final class Engine {
         for display in displays {
             let key = currentKey(display)
             guard var strip = strips[key] else { continue }
-            strip.clampScroll(config: settings.layout, viewportWidth: viewport(of: display).width)
-            strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+            strip.clampScroll(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
+            strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
             strips[key] = strip
         }
         layout(animated: false)
@@ -1446,8 +1452,8 @@ final class Engine {
         guard let key = window.key, var strip = strips[key] else { return }
         strip.remove(window.id)
         if let display = display(for: key) {
-            strip.clampScroll(config: settings.layout, viewportWidth: viewport(of: display).width)
-            strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+            strip.clampScroll(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
+            strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
         }
         strips[key] = strip
         window.key = nil
@@ -1681,7 +1687,7 @@ final class Engine {
             snapBack(window)
         }
         strip.focus(id)
-        strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+        strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
         let changed = switchedWorkspace || strip != strips[key]
         strips[key] = strip
         if changed {
@@ -1724,7 +1730,7 @@ final class Engine {
                 liveResize(window, to: actual, key: key, display: display)
                 return
             }
-            let fraction = settings.layout.fraction(forColumnWidth: actual.width, viewportWidth: viewport(of: display).width)
+            let fraction = layoutConfig(for: display).fraction(forColumnWidth: actual.width, viewportWidth: viewport(of: display).width)
             strips[key]?.setWidth(fraction, of: window.id)
         } else {
             guard abs(actual.x - applied.x) > 8 || abs(actual.y - applied.y) > 8 else { return }
@@ -1746,7 +1752,7 @@ final class Engine {
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         let point = CGPoint(x: mouse.x, y: primaryHeight - mouse.y)
         let mates = Set(strip.columns[c].windows).subtracting([window.id])
-        guard let target = strip.layout(config: settings.layout, viewport: viewport(of: display))
+        guard let target = strip.layout(config: layoutConfig(for: display), viewport: viewport(of: display))
             .first(where: { mates.contains($0.window) && CGRect($0.frame).contains(point) })?.window
         else { return }
         if dragRecorded != window.id {
@@ -1769,7 +1775,7 @@ final class Engine {
             resizing = window.id
         }
         if var strip = strips[key], let (c, _) = strip.locate(window.id) {
-            let column = strip.columnFrames(config: settings.layout, viewport: viewport(of: display))[c].frame
+            let column = strip.columnFrames(config: layoutConfig(for: display), viewport: viewport(of: display))[c].frame
             let fraction = (width: actual.width / max(column.width, 1), height: actual.height / max(column.height, 1))
             if strip.resizeTile(window.id, toFraction: fraction) {
                 strips[key] = strip
@@ -1814,7 +1820,7 @@ final class Engine {
     private func commit(_ strip: Strip, _ key: StripKey) {
         var strip = strip
         if let display = display(for: key) {
-            strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+            strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
         }
         strips[key] = strip
         layout(animated: true)
@@ -1898,7 +1904,7 @@ final class Engine {
         if dragRecorded != window.id { recordHistory() }
         dragRecorded = nil
         if !resized, let frame = window.element.frame, let source = strip.locate(window.id)?.column {
-            let frames = strip.columnFrames(config: settings.layout, viewport: viewport(of: display))
+            let frames = strip.columnFrames(config: layoutConfig(for: display), viewport: viewport(of: display))
             let dropX = frame.midX
             if let target = frames.indices.first(where: { frames[$0].frame.minX <= dropX && dropX < frames[$0].frame.maxX }),
                 target != source, strip.columns[target].pin == nil
@@ -1910,7 +1916,7 @@ final class Engine {
         }
         window.lastApplied = nil
         strip.focus(window.id)
-        strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+        strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
         strips[key] = strip
         layout(animated: true)
         scheduleSave()
@@ -2021,7 +2027,9 @@ final class Engine {
         var profileWorkspaces: [Int: [ScreenKey: Int]]?
         var marks: [String: WindowID]?
         var scratchpad: WindowID?
-        var roomyApps: [String]?
+        /// Apps that need a whole slide (stored under a new name: 0.5.0 also
+        /// listed apps that only needed a little more room).
+        var wholeSlideApps: [String]?
     }
 
     struct SessionStrip: Codable {
@@ -2049,7 +2057,7 @@ final class Engine {
             strips: strips.filter { !$0.value.isEmpty }, activeWorkspace: activeWorkspace,
             names: names.filter { windows[$0.key] != nil }, session: session,
             activeProfile: activeProfile, profileWorkspaces: profileWorkspaces, marks: marks, scratchpad: scratchpad,
-            roomyApps: roomyApps.sorted())
+            wholeSlideApps: roomyApps.sorted())
         do {
             try FileManager.default.createDirectory(at: SettingsStore.directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(state).write(to: Self.stateURL, options: .atomic)
@@ -2069,7 +2077,7 @@ final class Engine {
         profileWorkspaces = state.profileWorkspaces ?? [:]
         marks = state.marks ?? [:]
         scratchpad = state.scratchpad
-        roomyApps = Set(state.roomyApps ?? [])
+        roomyApps = Set(state.wholeSlideApps ?? [])
         lastSession = state.session ?? []
         lastSessionLoaded = Date()
         savedLayouts = (try? Data(contentsOf: Self.layoutsURL))
@@ -2175,7 +2183,7 @@ final class Engine {
                 return column.windows.isEmpty ? nil : column
             }
             strip.replaceColumns((placed[workspace] ?? []) + leftover, keepingFocusOn: focused)
-            strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+            strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
             strips[key] = strip
             for id in strip.allWindows { windows[id]?.key = key }
         }
@@ -2431,6 +2439,8 @@ final class Engine {
     /// settings windows): they always get a slide of their own.
     private var roomyApps: Set<String> = []
     private var fitChecks: [WindowID: Timer] = [:]
+    /// When each window was last given the room it insisted on.
+    private var fittedAt: [WindowID: CFTimeInterval] = [:]
 
     /// After Monorail sizes a window, check the app accepted the size.
     private func scheduleFitCheck(_ id: WindowID) {
@@ -2443,24 +2453,41 @@ final class Engine {
     }
 
     /// A window bigger than its tile in a shared slide overlaps its
-    /// neighbours or spills off screen: move it to a slide of its own.
+    /// neighbours or spills off screen. Its slide-mates make room for it, down
+    /// to what it needs; only a window that needs nearly the whole slide gets
+    /// a slide of its own.
     private func checkFit(_ id: WindowID) {
         guard isRunning, !isPaused, !animator.isRunning, NSEvent.pressedMouseButtons == 0, resizing == nil,
-            let window = windows[id], let key = window.key, var strip = strips[key],
+            let window = windows[id], let key = window.key, var strip = strips[key], let display = display(for: key),
             let (c, _) = strip.locate(id), strip.columns[c].windows.count > 1, !strip.columns[c].isTabbed,
             let target = window.lastApplied, let frame = window.element.frame
         else { return }
         let tooWide = Double(frame.width) > target.width + 24
         let tooTall = Double(frame.height) > target.height + 24
         guard tooWide || tooTall else { return }
-        roomyApps.insert(Self.appKey(window))
+        let column = strip.columnFrames(config: layoutConfig(for: display), viewport: viewport(of: display))[c].frame
+        let fraction = (
+            width: min(Double(frame.width), column.width) / max(column.width, 1),
+            height: min(Double(frame.height), column.height) / max(column.height, 1))
+        let needsWholeSlide = (tooWide && fraction.width > 0.8) || (tooTall && fraction.height > 0.8)
         let focused = strip.focusedWindow
+        // If a slide-mate was just made room for too, the two can't both fit.
+        let now = CACurrentMediaTime()
+        let mateJustFitted = strip.columns[c].windows.contains { $0 != id && now - (fittedAt[$0] ?? 0) < 3 }
+        if !needsWholeSlide, !mateJustFitted, strip.resizeTile(id, toFraction: fraction) {
+            fittedAt[id] = now
+            // Shrink the others instead, keeping this window at the size it insists on.
+            if let focused { strip.focus(focused) }
+            for mate in strip.columns[c].windows { windows[mate]?.lastApplied = nil }
+            commit(strip, key)
+            return
+        }
+        roomyApps.insert(Self.appKey(window))
         strip.moveWindow(id, toNewColumnAt: c + 1, width: 1)
         if let focused { strip.focus(focused) }
         window.lastApplied = nil
         commit(strip, key)
-        scheduleSave()
-        onNotice("\(window.appName) can’t get that small, so it has a slide of its own")
+        onNotice("\(window.appName) needs the whole screen, so it has a slide of its own")
     }
 
     // MARK: - Haptics
@@ -2506,7 +2533,7 @@ final class Engine {
             window.lastApplied = nil
             layout(animated: true)
         }
-        let target = position.frame(in: display.viewport, gap: settings.layout.gap)
+        let target = position.frame(in: display.viewport, gap: layoutConfig(for: display).gap)
         element.setFrame(CGRect(target))
     }
 

@@ -17,8 +17,21 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     public var arrangement: Arrangement?
     /// Workspace (0-based) this app's new windows open in.
     public var workspace: Int?
+    /// Only windows whose title contains this (any case), e.g. "Meet" in a
+    /// browser. Empty or nil applies to every window of the app.
+    public var titleContains: String?
+    /// Windows matching this rule get a slide to themselves.
+    public var ownSlide: Bool?
 
-    public var id: String { bundleID }
+    public var id: String { titleContains.map { "\(bundleID)|\($0)" } ?? bundleID }
+
+    /// True for a rule that only applies to some window titles.
+    public var isTitleRule: Bool { !(titleContains ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+
+    public func matches(title: String) -> Bool {
+        guard isTitleRule, let text = titleContains?.trimmingCharacters(in: .whitespaces) else { return true }
+        return title.localizedCaseInsensitiveContains(text)
+    }
 
     public init(
         bundleID: String,
@@ -28,7 +41,9 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         position: Strip.InsertPosition? = nil,
         tiles: Int? = nil,
         arrangement: Arrangement? = nil,
-        workspace: Int? = nil
+        workspace: Int? = nil,
+        titleContains: String? = nil,
+        ownSlide: Bool? = nil
     ) {
         self.bundleID = bundleID
         self.name = name
@@ -38,6 +53,42 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
         self.tiles = tiles
         self.arrangement = arrangement
         self.workspace = workspace
+        self.titleContains = titleContains
+        self.ownSlide = ownSlide
+    }
+}
+
+/// Settings that differ on one display (a laptop screen versus a big monitor).
+public struct DisplayOverride: Equatable, Hashable, Codable, Sendable {
+    /// The display's name when it was set up, for Settings.
+    public var name: String
+    public var gap: Double?
+    public var edgeGap: Double?
+    public var defaultWidth: Double?
+    public var sliderBar: SliderBarMode?
+
+    public init(name: String, gap: Double? = nil, edgeGap: Double? = nil, defaultWidth: Double? = nil,
+                sliderBar: SliderBarMode? = nil) {
+        self.name = name
+        self.gap = gap
+        self.edgeGap = edgeGap
+        self.defaultWidth = defaultWidth
+        self.sliderBar = sliderBar
+    }
+}
+
+/// Colours for the overview, the slider bar and workspace dots.
+public enum Theme: String, Codable, CaseIterable, Sendable {
+    case vivid, ocean, sunset, forest, mono
+
+    public var title: String {
+        switch self {
+        case .vivid: return "Vivid"
+        case .ocean: return "Ocean"
+        case .sunset: return "Sunset"
+        case .forest: return "Forest"
+        case .mono: return "Monochrome"
+        }
     }
 }
 
@@ -174,6 +225,20 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var attentionMarkers = true
     /// Dragging a window to the top of the screen shows layouts to drop it into.
     public var snapPicker = true
+    /// Focus mode: how long it lasts (0 = until turned off) and how dark the rest gets.
+    public var focusMinutes = 25
+    public var focusDim = 0.6
+    /// Overrides per display, by display UUID.
+    public var displayOverrides: [String: DisplayOverride] = [:]
+    public var theme: Theme = .vivid
+    /// Keep settings, layouts and app pairs in iCloud Drive, shared by your Macs.
+    public var syncThroughICloud = false
+    /// A three-finger tap on the trackpad opens the overview.
+    public var threeFingerTapOverview = false
+    /// Hold ⌥ while hovering a slide in the slider to peek at it full size.
+    public var peekWithOption = true
+    /// Count switches and pairings on this Mac, for Insights and suggestions.
+    public var collectStats = true
     /// Snap windows back when an app moves or resizes one by itself.
     public var keepWindowsInPlace = true
     /// After resizing a window in a slide, offer to rearrange the slide.
@@ -213,9 +278,32 @@ public struct AppSettings: Equatable, Codable, Sendable {
 
     public init() {}
 
+    /// The rule for every window of an app (not a title rule).
     public func rule(for bundleID: String?) -> AppRule? {
         guard let bundleID else { return nil }
-        return appRules.first { $0.bundleID == bundleID }
+        return appRules.first { $0.bundleID == bundleID && !$0.isTitleRule }
+    }
+
+    /// The rule for one window: a title rule that matches it, else the app's rule.
+    public func rule(for bundleID: String?, title: String) -> AppRule? {
+        guard let bundleID else { return nil }
+        return appRules.first { $0.bundleID == bundleID && $0.isTitleRule && $0.matches(title: title) }
+            ?? rule(for: bundleID)
+    }
+
+    /// Gaps and widths on one display, with its overrides applied.
+    public func layout(for displayUUID: String) -> LayoutConfig {
+        guard let override = displayOverrides[displayUUID] else { return layout }
+        var config = layout
+        if let gap = override.gap { config.gap = gap }
+        if let edgeGap = override.edgeGap { config.edgeGap = edgeGap }
+        if let width = override.defaultWidth { config.defaultWidth = width }
+        return config
+    }
+
+    /// Whether the slider bar shows on one display.
+    public func sliderBar(for displayUUID: String) -> SliderBarMode {
+        displayOverrides[displayUUID]?.sliderBar ?? sliderBar
     }
 
     /// Windows per slide for an app when grouping by app.
@@ -250,6 +338,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
         case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically, resizeAssist, workspaceNames, hotEdges, customLayouts, appPairs, profiles, dynamicWorkspaces
         case hapticFeedback, pinchForOverview, attentionMarkers, snapPicker
+        case focusMinutes, focusDim, displayOverrides, theme, syncThroughICloud, threeFingerTapOverview
+        case peekWithOption, collectStats
     }
 
     public init(from decoder: Decoder) throws {
@@ -281,6 +371,11 @@ public struct AppSettings: Equatable, Codable, Sendable {
         newWindowPosition = value(.newWindowPosition, d.newWindowPosition)
         appRules = value(.appRules, d.appRules)
         keymap = value(.keymap, d.keymap)
+        // Actions added in an update get their default keys, unless those keys
+        // are already taken.
+        for (action, shortcuts) in Keymap.default.bindings where keymap.bindings[action] == nil {
+            keymap.bindings[action] = shortcuts.filter { keymap.action(for: $0) == nil }
+        }
         hasCompletedOnboarding = value(.hasCompletedOnboarding, d.hasCompletedOnboarding)
         groupByApp = value(.groupByApp, d.groupByApp)
         tilesPerSlide = min(max(value(.tilesPerSlide, d.tilesPerSlide), 1), Column.maximumWindows)
@@ -304,6 +399,14 @@ public struct AppSettings: Equatable, Codable, Sendable {
         pinchForOverview = value(.pinchForOverview, d.pinchForOverview)
         attentionMarkers = value(.attentionMarkers, d.attentionMarkers)
         snapPicker = value(.snapPicker, d.snapPicker)
+        focusMinutes = value(.focusMinutes, d.focusMinutes)
+        focusDim = value(.focusDim, d.focusDim)
+        displayOverrides = value(.displayOverrides, d.displayOverrides)
+        theme = value(.theme, d.theme)
+        syncThroughICloud = value(.syncThroughICloud, d.syncThroughICloud)
+        threeFingerTapOverview = value(.threeFingerTapOverview, d.threeFingerTapOverview)
+        peekWithOption = value(.peekWithOption, d.peekWithOption)
+        collectStats = value(.collectStats, d.collectStats)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

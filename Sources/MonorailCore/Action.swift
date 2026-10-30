@@ -82,6 +82,9 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case toggleScratchpad = "scratchpad"
     case makeScratchpad = "make-scratchpad"
     case nextProfile = "next-profile"
+    case toggleFocusMode = "focus-mode"
+    case commandPalette = "command-palette"
+    case takeSnapshot = "snapshot"
     case retile
     case undo
     case togglePause = "toggle-pause"
@@ -142,6 +145,9 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .toggleScratchpad: return "Show / hide scratchpad"
         case .makeScratchpad: return "Make this window the scratchpad"
         case .nextProfile: return "Next profile"
+        case .toggleFocusMode: return "Focus mode on / off"
+        case .commandPalette: return "Command palette"
+        case .takeSnapshot: return "Take a session snapshot"
         case .retile: return "Retile everything"
         case .undo: return "Undo last layout change"
         case .togglePause: return "Pause / resume"

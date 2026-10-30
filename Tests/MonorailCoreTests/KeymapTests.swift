@@ -121,7 +121,8 @@ final class KeymapTests: XCTestCase {
         XCTAssertFalse(decoded.animate)
         XCTAssertEqual(decoded.layout.gap, 2)
         XCTAssertEqual(decoded.layout.edgeGap, LayoutConfig().edgeGap)
-        XCTAssertTrue(decoded.keymap.bindings.isEmpty)
+        // Actions missing from a saved keymap get their default keys.
+        XCTAssertEqual(decoded.keymap, Keymap.default)
         XCTAssertEqual(decoded.tiles(for: "com.apple.Terminal"), 4, "old settings gain the terminal rules")
 
         let custom = #"{"appRules": [{"bundleID": "x", "name": "X", "float": true}], "rulesVersion": 2}"#

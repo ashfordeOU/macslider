@@ -179,3 +179,47 @@ final class SwapTilesTests: XCTestCase {
         XCTAssertEqual(strip.columns[0].unitFrames[0], Rect(x: 0, y: 0, width: 0.5, height: 1))
     }
 }
+
+final class SettingsV6Tests: XCTestCase {
+    func testTitleRuleWinsOverAppRule() {
+        var settings = AppSettings()
+        settings.appRules = [
+            AppRule(bundleID: "com.google.Chrome", name: "Chrome", width: 0.5),
+            AppRule(bundleID: "com.google.Chrome", name: "Chrome", float: true, titleContains: "Meet"),
+        ]
+        XCTAssertEqual(settings.rule(for: "com.google.Chrome", title: "Google Meet - call")?.float, true)
+        XCTAssertEqual(settings.rule(for: "com.google.Chrome", title: "Inbox")?.width, 0.5)
+        XCTAssertEqual(settings.rule(for: "com.google.Chrome")?.float, false)
+        XCTAssertNotEqual(settings.appRules[0].id, settings.appRules[1].id)
+    }
+
+    func testDisplayOverride() {
+        var settings = AppSettings()
+        settings.layout.gap = 10
+        settings.displayOverrides["A"] = DisplayOverride(name: "Studio", gap: 24, sliderBar: .off)
+        XCTAssertEqual(settings.layout(for: "A").gap, 24)
+        XCTAssertEqual(settings.layout(for: "B").gap, 10)
+        XCTAssertEqual(settings.sliderBar(for: "A"), .off)
+        XCTAssertEqual(settings.sliderBar(for: "B"), settings.sliderBar)
+    }
+
+    func testNewActionsGetDefaultKeysAfterUpdate() throws {
+        var old = AppSettings()
+        old.keymap.bindings[.commandPalette] = nil
+        old.keymap.bindings[.toggleFocusMode] = nil
+        let data = try JSONEncoder().encode(old)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        XCTAssertEqual(decoded.keymap.shortcuts(for: .commandPalette), Keymap.default.shortcuts(for: .commandPalette))
+        XCTAssertFalse(decoded.keymap.shortcuts(for: .toggleFocusMode).isEmpty)
+    }
+
+    func testDefaultKeymapHasNoClashes() {
+        var seen: [Shortcut: Action] = [:]
+        for (action, shortcuts) in Keymap.default.bindings {
+            for shortcut in shortcuts {
+                XCTAssertNil(seen[shortcut], "\(action) clashes with \(seen[shortcut].map { "\($0)" } ?? "")")
+                seen[shortcut] = action
+            }
+        }
+    }
+}

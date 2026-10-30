@@ -1,3 +1,5 @@
+import Foundation
+
 /// Identifies a window across restarts, when its `WindowID` changes: the app
 /// it belongs to and its title.
 public struct WindowFingerprint: Hashable, Codable, Sendable {
@@ -34,12 +36,21 @@ public struct SavedLayout: Equatable, Codable, Sendable, Identifiable {
     public var name: String
     /// Saved columns per workspace index.
     public var workspaces: [Int: [SavedColumn]]
+    /// A snapshot covers every profile (workspaces numbered profile × 100 +
+    /// workspace) and lists the apps to relaunch when it is restored.
+    public var apps: [String]?
+    public var isSnapshot: Bool?
+    public var savedAt: Date?
 
     public var id: String { name }
 
-    public init(name: String, workspaces: [Int: [SavedColumn]]) {
+    public init(name: String, workspaces: [Int: [SavedColumn]], apps: [String]? = nil, isSnapshot: Bool? = nil,
+                savedAt: Date? = nil) {
         self.name = name
         self.workspaces = workspaces
+        self.apps = apps
+        self.isSnapshot = isSnapshot
+        self.savedAt = savedAt
     }
 
     public var windowCount: Int { workspaces.values.reduce(0) { $0 + $1.reduce(0) { $0 + $1.windows.count } } }
