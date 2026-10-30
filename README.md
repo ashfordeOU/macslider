@@ -391,6 +391,41 @@ When an app shows a badge on its Dock icon (unread mail, a new message), its
 windows get a small red dot on the slider bar, in the overview and in window
 search, so you can see which slide wants you.
 
+### Focus mode
+
+<kbd>⌃⌥B</kbd> fades everything except the slide you're working in, for 25
+minutes by default (choose 15–90 minutes, or until you turn it off, in
+**Settings → Appearance**). The menu bar shows ◉ while it's on.
+
+### Snapshots
+
+<kbd>⌃⌥⇧S</kbd> (or **Snapshots → Take Snapshot…**) saves every workspace of
+every profile, and which apps are open. Restore it from **Snapshots**, even
+days later or after a restart: Monorail reopens the apps and puts each window
+back on its slide.
+
+### Command palette
+
+<kbd>⌃⌥/</kbd> opens a search box for everything: type "safari" to jump to a
+window, "chat" to go to that workspace, "pair" for your app pairs, "park",
+"snapshot", "profile", or any action by name, and press return.
+
+### More ways to work
+
+- **Peek**: hold <kbd>⌥</kbd> over a slide in the slider and the strip slides to show it; let go to slide back, or click to stay.
+- **On every workspace**: <kbd>⌃⌥S</kbd> (or right-click ▸ Show on Every Workspace) keeps a window, say a chat or music app, with you as you switch.
+- **Picture in picture**: <kbd>⌃⌥I</kbd> floats a small live view of the focused window in a screen corner. Click it to go there; drag it anywhere.
+- **Zoom**: <kbd>⌃⌥X</kbd> lets one tile fill its slide for a moment; press again or click elsewhere to put it back.
+- **Back and forth**: <kbd>⌃⌥⌫</kbd> goes back to the window you were on before.
+- **Quick launch**: give apps a letter in **Settings → Apps**, then <kbd>⌃⌥U</kbd> and the letter goes to the app's window, or opens it.
+- **Title rules**: a rule in **Settings → Apps** can match window titles, so a browser window titled "Meet" floats or gets its own slide.
+- **Auto rules**: in **Settings → Automation**, switch profile or apply a layout at 9:00 on weekdays, or when you join the office Wi-Fi.
+- **Per display**: in **Settings → Layout → Displays**, give a big monitor wider gaps and no slider bar. **Smart gaps** drop the gaps around a lone window.
+- **Themes**: Vivid, Ocean, Sunset, Forest or Monochrome, in **Settings → Appearance**.
+- **Your Macs**: sync settings, layouts and app pairs through iCloud Drive, or export them to one file.
+- **Insights**: **Settings → Insights** shows how you move around today and this week, and suggests app pairs for apps you keep side by side. It all stays on your Mac.
+- **Gestures**: tap with three fingers for the overview (turn it on in **Settings → Motion & Input**); swipe up on the slider bar to park the workspace, down to bring it back.
+
 ### With the mouse
 
 - Hold <kbd>⌥</kbd> and **scroll**. With a mouse wheel each notch moves one window; on a trackpad the strip follows your fingers.
@@ -439,6 +474,14 @@ AZERTY, QWERTZ, Dvorak and other layouts.
 | Show / hide scratchpad | <kbd>⌃⌥`</kbd> |
 | Make window the scratchpad | <kbd>⌃⌥⇧`</kbd> |
 | Next profile | <kbd>⌃⌥0</kbd> |
+| Focus mode | <kbd>⌃⌥B</kbd> |
+| Command palette | <kbd>⌃⌥/</kbd> |
+| Take a snapshot | <kbd>⌃⌥⇧S</kbd> |
+| Show window on every workspace | <kbd>⌃⌥S</kbd> |
+| Picture in picture | <kbd>⌃⌥I</kbd> |
+| Zoom tile | <kbd>⌃⌥X</kbd> |
+| Back to the last window | <kbd>⌃⌥⌫</kbd> |
+| Quick launch | <kbd>⌃⌥U</kbd> then a letter |
 | Undo last layout change | <kbd>⌃⌥Z</kbd> |
 | Retile everything | <kbd>⌃⌥Esc</kbd> |
 | Pause / resume | <kbd>⌃⌥Q</kbd> |
@@ -466,11 +509,13 @@ Everything is set in a standard Settings window, and changes apply immediately.
 
 | Pane | What you can change |
 | --- | --- |
-| General | Launch at login, pause, what clicking the menu bar icon does, workspaces per display, update checks, menu bar position indicator, where new windows open, Mac setup checks |
-| Layout | Strip direction, grouping into slides by app, windows per slide, slide layout, gaps between windows and at screen edges (down to zero), default width, width presets, centring behaviour, keep each window's own height, tab bar height |
-| Motion & Input | Slide mode key, scroll modifier, menu bar scrolling, ‹ › buttons, three/four-finger swipe, sensitivity, direction, animation speed, focus follows mouse, mouse follows focus |
-| Appearance | Slider bar (while sliding, always or never; top or bottom), focus border with colour and width, dimming of inactive windows |
-| Apps | Per-app rules: always float, windows per slide, slide layout, default width, open at the start, next to focus or at the end |
+| General | Launch at login, pause, what clicking the menu bar icon does, workspaces and their names, profiles, iCloud Drive sync, export and import, update checks, menu bar indicator, where new windows open, Mac setup checks |
+| Layout | Strip direction, grouping into slides by app, windows per slide, slide layout, custom layouts, snap picker, gaps (with smart gaps), per-display settings, default width, width presets, centring, window heights, tab bar height |
+| Motion & Input | Slide mode key, scroll modifier, menu bar scrolling, ‹ › buttons, swipes, pinch, three-finger tap, peek, haptics, hot edges, sensitivity, animation speed, focus follows mouse |
+| Appearance | Slider bar on or off (always or while sliding; top or bottom), theme, focus mode, focus border, dimming |
+| Apps | Rules per app and per window title, quick launch letters, app pairs |
+| Automation | Auto rules by time or Wi-Fi, URLs for the Shortcuts app and scripts |
+| Insights | Today's counts, the week, your most-used pairs and suggestions (all kept on your Mac) |
 | Shortcuts | Modifier prefix, every binding, extra bindings, restore defaults |
 
 Settings are saved to `~/Library/Application Support/Monorail/settings.json`,
@@ -489,6 +534,22 @@ Raycast, Alfred, Shortcuts, Keyboard Maestro or a shell script:
 ```bash
 open -g monorail://focus-right
 ```
+
+A few take a name or number:
+
+| URL | Does |
+| --- | --- |
+| `monorail://layout/Coding` | Apply a saved layout |
+| `monorail://pair/Safari + Notes` | Open an app pair |
+| `monorail://snapshot/Friday` · `monorail://save-snapshot/Friday` | Restore or take a snapshot |
+| `monorail://profile/Work` | Switch profile |
+| `monorail://workspace/2` | Go to a workspace |
+| `monorail://focus-mode/on` | Focus mode on or off |
+| `monorail://launch/t` | Quick launch |
+| `monorail://palette` | Command palette |
+
+In the **Shortcuts** app, use the **Open URLs** action with any of these, so
+Monorail fits into your automations, Focus filters and Stream Deck buttons.
 
 The app also includes a small command-line tool. Link it onto your `PATH`:
 

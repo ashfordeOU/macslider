@@ -4,14 +4,37 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.6.0] - 2026-10-31
 
 ### Added
-- The welcome tour asks how you want to see your slides, with a picture of each: the slider bar plus the menu bar icon, or the menu bar icon only (windows then reach right down to the Dock).
+- Focus mode (⌃⌥B): everything but the slide you're in fades away, for 15–90 minutes or until you turn it off.
+- Per-display settings: each display can have its own gaps, new-window width and slider bar.
+- Smart gaps: no gaps around a lone window, wider gaps on big displays.
+- Session snapshots (⌃⌥⇧S): every workspace of every profile and the apps that are open; restoring reopens the apps and puts their windows back.
+- Rules by window title, like a browser window titled "Meet" floating or getting its own slide, applied even when the title changes after the window opens.
+- Peek: hold ⌥ over a slide in the slider and the strip slides to show it; let go to slide back, or click to stay.
+- Three-finger tap for the overview; swipe up on the slider bar to park the workspace, down to bring it back.
+- Themes: Vivid, Ocean, Sunset, Forest and Monochrome for the overview, slider and workspace dots.
+- Export and import settings as one file, or sync them between Macs through iCloud Drive.
+- Command palette (⌃⌥/): type to go to windows and workspaces, open app pairs, park, restore snapshots, switch profiles or run any action.
+- Insights: counts of switches, windows and pairings, kept on your Mac, and suggestions for app pairs you use often.
+- Show a window on every workspace (⌃⌥S), like a chat or music app.
+- Auto rules: switch profile or apply a layout at a time of day or when you join a Wi-Fi network.
+- Picture in picture (⌃⌥I): a small live view of a window in a screen corner.
+- Zoom a tile to fill its slide (⌃⌥X), and go back to the last window (⌃⌥⌫).
+- Quick launch: ⌃⌥U then a letter opens an app or goes to its window.
+- The menu bar can show the focused app's name.
+- Automation URLs for the Shortcuts app and scripts: layouts, pairs, snapshots, profiles, workspaces, focus mode.
+- Drag a slide onto another display's or workspace's strip in the overview.
+- The welcome tour asks how you want to see your slides: slider bar plus menu bar icon, or the menu bar icon only.
 
 ### Changed
-- The slider bar is a simple on/off switch in Settings → Appearance; when on, choose always or only while sliding, and top or bottom.
-- The slider from the menu bar icon now hangs right under the icon, like Control Center, and closes when you click anywhere else.
+- The slider bar is a simple on/off switch in Settings → Appearance, with its options under it.
+- The menu bar slider hangs right under its icon and closes when you click anywhere else.
+- Windows that can't shrink as far as their tile get the room they need from their slide-mates; only one that needs nearly the whole slide gets a slide of its own.
+
+### Fixed
+- Shortcuts for actions added in an update now work for people upgrading, not only for new installs.
 
 ## [0.5.0] - 2026-10-30
 

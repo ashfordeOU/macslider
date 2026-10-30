@@ -14,6 +14,7 @@ final class OverviewModel: ObservableObject {
     @Published var editing: StripKey?
     /// Room for the menu bar above the overview's content.
     @Published var topInset: CGFloat = 0
+    @Published var theme: Theme = .vivid
 
     func loadThumbnails() {
         previewsAllowed = WindowThumbnails.isAllowed
@@ -75,7 +76,8 @@ struct OverviewActions {
 /// The overview's backdrop: a deep, colourful gradient with soft glows and a
 /// fine dot pattern, over a blur of the desktop.
 private struct OverviewBackground: View {
-    private let backdrop = WorkspaceColor.backdrop(WorkspaceColor.theme)
+    let theme: Theme
+    private var backdrop: (gradient: [Color], glows: [Color]) { WorkspaceColor.backdrop(theme) }
 
     var body: some View {
         ZStack {
@@ -119,7 +121,7 @@ struct OverviewView: View {
 
     var body: some View {
         ZStack {
-            OverviewBackground()
+            OverviewBackground(theme: model.theme)
                 .contentShape(Rectangle())
                 .onTapGesture { actions.close() }
             VStack(alignment: .leading, spacing: 22) {
@@ -575,6 +577,7 @@ final class OverviewController {
 
     func show() {
         guard let engine else { return }
+        model.theme = WorkspaceColor.theme
         model.strips = engine.overview()
         model.selection = nil
         model.editing = nil
