@@ -62,7 +62,8 @@ public enum Grouping {
         strip: Strip,
         app: (WindowID) -> String?,
         capacity: (String) -> Int,
-        pairSize: Int = 2
+        pairSize: Int = 2,
+        pairLoneWindows: Bool = true
     ) -> Decision {
         var counts: [String: Int] = [:]
         for window in strip.allWindows {
@@ -73,6 +74,7 @@ public enum Grouping {
 
         let existing = counts[newApp] ?? 0
         if existing == 0 {
+            guard pairLoneWindows else { return .newSlide }
             // A lone window: share a slide with other lone windows if one has room.
             let candidates = scrolling.filter { index in
                 let column = strip.columns[index]

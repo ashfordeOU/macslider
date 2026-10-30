@@ -339,15 +339,30 @@ final class Engine {
         guard let frame = window.element.frame, let display = display(containing: frame) ?? displays.first else {
             return
         }
-        place(window, in: currentKey(display), display: display, focus: true)
+        place(window, in: currentKey(display), display: display, focus: true, restoring: false)
         layout(animated: true)
     }
 
     /// Adds a window to a strip: grouped into a slide by app when grouping is
     /// on, otherwise as a column of its own.
     private func place(
-        _ window: ManagedWindow, in key: StripKey, display: Display, focus: Bool, width: Double? = nil
+        _ window: ManagedWindow, in key: StripKey, display: Display, focus: Bool, width: Double? = nil,
+        restoring: Bool = true
     ) {
+        // A window coming back (unhidden, unminimised, reopened from the Dock,
+        // or its app relaunched) returns to exactly where it was.
+        if restoring, let memory = memory(for: window), memory.key.screen == key.screen {
+            var strip = strips[memory.key] ?? Strip()
+            let visible = memory.key == key
+            strip.restore(window.id, to: memory.slot, focus: focus && visible)
+            if focus && visible {
+                strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+            }
+            strips[memory.key] = strip
+            window.key = memory.key
+            scheduleSave()
+            return
+        }
         var strip = strips[key] ?? Strip()
         let rule = settings.rule(for: window.bundleID)
         let position = rule?.position ?? settings.newWindowPosition
@@ -357,7 +372,8 @@ final class Engine {
                 strip: strip,
                 app: { [weak self] id in self?.windows[id].map(Self.appKey) },
                 capacity: { [weak self] app in self?.settings.tiles(for: app) ?? 2 },
-                pairSize: settings.tilesPerSlide
+                pairSize: settings.tilesPerSlide,
+                pairLoneWindows: settings.pairLoneWindowsOnOpen
             )
             switch decision {
             case .join(let column):
@@ -422,7 +438,7 @@ final class Engine {
         removeFromStrip(window)
         var target = key
         target.workspace = index
-        place(window, in: target, display: display, focus: true, width: width)
+        place(window, in: target, display: display, focus: true, width: width, restoring: false)
         layout(animated: true)
         if let next = strips[key]?.focusedWindow { focus(next, warpMouse: false) }
         onStateChange()
@@ -636,7 +652,7 @@ final class Engine {
         let width = strips[key].flatMap { strip in strip.locate(id).map { strip.columns[$0.column].width } }
         removeFromStrip(window)
         let next = displays[(index + 1) % displays.count]
-        place(window, in: currentKey(next), display: next, focus: true, width: width)
+        place(window, in: currentKey(next), display: next, focus: true, width: width, restoring: false)
         window.lastApplied = nil
         layout(animated: false)
         focus(id, warpMouse: true)
@@ -1128,8 +1144,42 @@ final class Engine {
 
     private func forget(_ id: WindowID) {
         guard let window = windows[id] else { return }
+        remember(window)
         removeFromStrip(window)
         windows[id] = nil
+    }
+
+    /// A place on a strip that a window (or an app's next window) goes back to.
+    private struct Memory {
+        var key: StripKey
+        var slot: Strip.Slot
+    }
+
+    /// Hidden, minimised and closed windows, by window ID.
+    private var windowMemory: [WindowID: Memory] = [:]
+    /// Where each app's most recently removed window was, for when the app
+    /// opens a window again (a Dock click after closing it, or a relaunch).
+    private var appMemory: [String: Memory] = [:]
+
+    private func remember(_ window: ManagedWindow) {
+        guard let key = window.key, let slot = strips[key]?.slot(of: window.id) else { return }
+        let memory = Memory(key: key, slot: slot)
+        windowMemory[window.id] = memory
+        appMemory[Self.appKey(window)] = memory
+    }
+
+    /// Where a returning window belongs, if MacSlider remembers. The app's
+    /// slot is only used when none of its windows are on that strip, so a
+    /// genuinely new second window still opens normally.
+    private func memory(for window: ManagedWindow) -> Memory? {
+        if let memory = windowMemory.removeValue(forKey: window.id) { return memory }
+        let app = Self.appKey(window)
+        guard let memory = appMemory[app] else { return nil }
+        let strip = strips[memory.key] ?? Strip()
+        let appOnStrip = strip.allWindows.contains { windows[$0].map(Self.appKey) == app }
+        guard !appOnStrip else { return nil }
+        appMemory[app] = nil
+        return memory
     }
 
     private func window(for element: AXUIElement) -> ManagedWindow? {

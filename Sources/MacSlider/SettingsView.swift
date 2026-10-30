@@ -147,6 +147,8 @@ private struct LayoutPane: View {
                     ForEach(StripDirection.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 Toggle("Group windows into slides by app", isOn: $store.settings.groupByApp)
+                Toggle("Pair lone windows of different apps as they open", isOn: $store.settings.pairLoneWindowsOnOpen)
+                    .disabled(!store.settings.groupByApp)
                 Stepper(value: $store.settings.tilesPerSlide, in: 1...9) {
                     Text("Windows per slide: \(store.settings.tilesPerSlide)")
                 }
@@ -159,7 +161,7 @@ private struct LayoutPane: View {
             } header: {
                 Text("Slides")
             } footer: {
-                Text("Windows of the same app share a full-screen slide; apps with one window pair up with another. Terminals get four tiles per slide — change tiles and layout per app under Apps. ⌃⌥A regroups everything; ⌃⌥G cycles a slide through Grid, Columns, Main + side, Main + bottom and Rows; ⌃⌥. and ⌃⌥, resize the main window; ⌃⌥M makes a window the main one. Right to left mirrors the whole strip.")
+                Text("Windows of the same app share a full-screen slide. Lone windows of different apps pair up when you regroup, or as they open if you turn that on. Windows that come back — unhidden, unminimised, reopened from the Dock or after a relaunch — return to exactly where they were. Terminals get four tiles per slide — change tiles and layout per app under Apps. ⌃⌥A regroups everything; ⌃⌥G cycles a slide through Grid, Columns, Main + side, Main + bottom and Rows; ⌃⌥. and ⌃⌥, resize the main window; ⌃⌥M makes a window the main one. Right to left mirrors the whole strip.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Section("Spacing") {

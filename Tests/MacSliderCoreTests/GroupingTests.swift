@@ -60,4 +60,37 @@ final class GroupingTests: XCTestCase {
         strip.insertSlide([1, 2], width: 1)
         XCTAssertEqual(Grouping.decide(newApp: "safari", strip: strip, app: app, capacity: capacity), .newSlide)
     }
+
+    func testLoneWindowsStayApartUnlessAsked() {
+        var strip = Strip()
+        strip.insertSlide([4], width: 1)
+        XCTAssertEqual(
+            Grouping.decide(newApp: "mail", strip: strip, app: app, capacity: capacity, pairLoneWindows: false),
+            .newSlide)
+    }
+
+    func testRestoreIntoOldColumn() {
+        var strip = Strip()
+        strip.insertSlide([1, 2], width: 1)
+        strip.insertSlide([4], width: 1)
+        let slot = strip.slot(of: 1)!
+        strip.remove(1)
+        strip.restore(1, to: slot)
+        XCTAssertEqual(strip.columns.map(\.windows), [[1, 2], [4]])
+        XCTAssertEqual(strip.focusedWindow, 1)
+    }
+
+    func testRestoreAsColumnAtOldIndex() {
+        var strip = Strip()
+        strip.insertSlide([4], width: 1)
+        strip.insertSlide([1], width: 1, arrangement: .mainLeft)
+        strip.insertSlide([5], width: 1)
+        let slot = strip.slot(of: 1)!
+        strip.remove(1)
+        strip.focus(4)
+        strip.restore(1, to: slot, focus: false)
+        XCTAssertEqual(strip.columns.map(\.windows), [[4], [1], [5]])
+        XCTAssertEqual(strip.columns[1].arrangement, .mainLeft)
+        XCTAssertEqual(strip.focusedWindow, 4)
+    }
 }

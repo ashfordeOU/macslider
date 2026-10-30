@@ -113,6 +113,9 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var groupByApp = true
     /// Windows per slide when grouping, unless an app rule says otherwise.
     public var tilesPerSlide = 2
+    /// Put a newly opened lone window into a slide with another app's lone
+    /// window. When off, that only happens when regrouping (⌃⌥A).
+    public var pairLoneWindowsOnOpen = false
     /// Layout of new slides, unless an app rule says otherwise.
     public var slideArrangement: Arrangement = .grid
     /// Workspaces per display (1...9). Each has its own strip.
@@ -162,7 +165,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen
     }
 
     public init(from decoder: Decoder) throws {
@@ -203,6 +206,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         slideArrangement = value(.slideArrangement, d.slideArrangement)
         sliderBarEdge = value(.sliderBarEdge, d.sliderBarEdge)
         iconOpensSlider = value(.iconOpensSlider, d.iconOpensSlider)
+        pairLoneWindowsOnOpen = value(.pairLoneWindowsOnOpen, d.pairLoneWindowsOnOpen)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {
             // Version 2 added the terminal rules (four tiles per slide).

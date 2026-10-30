@@ -456,6 +456,50 @@ public struct Strip: Equatable, Codable, Sendable {
         if let focused { focus(focused) }
     }
 
+    // MARK: - Remembering places
+
+    /// Where a window sits, so it can go back there after being hidden,
+    /// minimised, closed and reopened, or its app relaunched.
+    public struct Slot: Equatable, Codable, Sendable {
+        public var columnIndex: Int
+        public var row: Int
+        /// The other windows that shared its column.
+        public var mates: [WindowID]
+        public var width: Double
+        public var arrangement: Arrangement
+    }
+
+    public func slot(of window: WindowID) -> Slot? {
+        guard let (c, r) = locate(window) else { return nil }
+        let column = columns[c]
+        return Slot(
+            columnIndex: c, row: r, mates: column.windows.filter { $0 != window },
+            width: column.width, arrangement: column.arrangement)
+    }
+
+    /// Puts `window` back where `slot` says: into its old column if any of its
+    /// column mates are still there, otherwise as a column at its old index.
+    public mutating func restore(_ window: WindowID, to slot: Slot, focus: Bool = true) {
+        guard !contains(window) else { return }
+        if let mate = slot.mates.first(where: contains), let (c, _) = locate(mate) {
+            let row = min(slot.row, columns[c].windows.count)
+            columns[c].windows.insert(window, at: row)
+            if columns[c].active >= row && columns[c].windows.count > 1 { columns[c].active += 1 }
+            if focus {
+                focusedColumn = c
+                columns[c].active = row
+            }
+            return
+        }
+        let index = min(max(slot.columnIndex, 0), columns.count)
+        columns.insert(Column(windows: [window], width: slot.width, arrangement: slot.arrangement), at: index)
+        if focus || columns.count == 1 {
+            focusedColumn = index
+        } else if index <= focusedColumn {
+            focusedColumn += 1
+        }
+    }
+
     // MARK: - Widths
 
     /// Steps the focused column to the next (or previous) width preset, wrapping around.

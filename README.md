@@ -105,8 +105,9 @@ With **Group windows into slides by app** on (the default), MacSlider fills
 the strip with full-screen slides:
 
 - Windows of the same app share a slide: two side by side, or four in a 2×2 grid for terminals (Terminal, iTerm, Ghostty, Warp, kitty, Alacritty, WezTerm).
-- An app with a single window shares a slide with another single-window app, or has the slide to itself.
+- A new window of an app that's not on the strip yet gets a slide of its own. Pressing <kbd>⌃⌥A</kbd> pairs lone windows of different apps (or turn on pairing as they open in **Settings → Layout**).
 - Open a second window of an app that is sharing a slide, and the two windows move to a slide of their own.
+- Windows that come back return to exactly where they were: unhidden, unminimised, reopened from the Dock after closing, or after quitting and relaunching the app.
 
 Press <kbd>⌃⌥A</kbd> to regroup everything. Change the tiles per slide (up to
 nine) and the layout for any app under **Settings → Apps**.
