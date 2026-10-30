@@ -1,0 +1,172 @@
+#if os(macOS)
+import AppKit
+import Combine
+import MacSliderCore
+import ServiceManagement
+
+/// Loads and saves `Settings`, and publishes changes to the UI and engine.
+/// Changes apply immediately; there is no Save button.
+final class SettingsStore: ObservableObject {
+    @Published var settings: Settings {
+        didSet {
+            guard settings != oldValue else { return }
+            save()
+            onChange(settings)
+        }
+    }
+
+    /// True while the Settings window is capturing a new shortcut.
+    @Published var isRecordingShortcut = false {
+        didSet { onRecordingChange(isRecordingShortcut) }
+    }
+
+    var onChange: (Settings) -> Void = { _ in }
+    var onRecordingChange: (Bool) -> Void = { _ in }
+
+    static var directory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        return base.appendingPathComponent("MacSlider", isDirectory: true)
+    }
+
+    static var fileURL: URL { directory.appendingPathComponent("settings.json") }
+
+    init() {
+        if let data = try? Data(contentsOf: Self.fileURL),
+            let decoded = try? JSONDecoder().decode(Settings.self, from: data)
+        {
+            settings = decoded
+        } else {
+            settings = Settings()
+        }
+    }
+
+    private func save() {
+        do {
+            try FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(settings).write(to: Self.fileURL, options: .atomic)
+        } catch {
+            log.error("Saving settings failed: \(error.localizedDescription)")
+        }
+    }
+}
+
+/// Launch at login through `SMAppService` (macOS 13+).
+enum LoginItem {
+    static var isEnabled: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    static func setEnabled(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            log.error("Launch at login change failed: \(error.localizedDescription)")
+        }
+    }
+}
+
+/// Mac setup checks shown in Settings and the welcome window.
+struct SetupCheck: Identifiable {
+    enum State { case ok, warning }
+
+    var id: String
+    var title: String
+    var detail: String
+    var state: State
+    var fixURL: URL?
+
+    static func run(settings: Settings) -> [SetupCheck] {
+        var checks: [SetupCheck] = []
+        let accessibilityURL = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+
+        let trusted = Accessibility.isTrusted(prompt: false)
+        checks.append(
+            SetupCheck(
+                id: "accessibility",
+                title: "Accessibility permission",
+                detail: trusted
+                    ? "Granted. MacSlider can arrange windows."
+                    : "Required to move and resize windows. Turn MacSlider on in Privacy & Security → Accessibility.",
+                state: trusted ? .ok : .warning,
+                fixURL: trusted ? nil : accessibilityURL
+            ))
+
+        let conflicting: [String: String] = [
+            "com.knollsoft.Rectangle": "Rectangle",
+            "com.knollsoft.Hookshot": "Hookshot",
+            "com.crowdcafe.windowmagnet": "Magnet",
+            "com.amethyst.Amethyst": "Amethyst",
+            "bobko.aerospace": "AeroSpace",
+            "com.koekeishiya.yabai": "yabai",
+            "com.hegenberg.BetterTouchTool": "BetterTouchTool",
+            "com.manytricks.Moom": "Moom",
+            "com.sadopc.Spectacle": "Spectacle",
+        ]
+        let running = NSWorkspace.shared.runningApplications.compactMap { app in
+            app.bundleIdentifier.flatMap { conflicting[$0] }
+        }
+        checks.append(
+            SetupCheck(
+                id: "conflicts",
+                title: "Other window managers",
+                detail: running.isEmpty
+                    ? "None running."
+                    : "\(running.joined(separator: ", ")) may move windows too. Quit it or turn off its window snapping.",
+                state: running.isEmpty ? .ok : .warning
+            ))
+
+        let stageManager = UserDefaults(suiteName: "com.apple.WindowManager")?.bool(forKey: "GloballyEnabled") ?? false
+        checks.append(
+            SetupCheck(
+                id: "stage-manager",
+                title: "Stage Manager",
+                detail: stageManager
+                    ? "Stage Manager is on and rearranges windows. Turn it off in Control Centre."
+                    : "Off.",
+                state: stageManager ? .warning : .ok,
+                fixURL: stageManager ? URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension") : nil
+            ))
+
+        if NSScreen.screens.count > 1 {
+            let separate = !(UserDefaults(suiteName: "com.apple.spaces")?.bool(forKey: "spans-displays") ?? false)
+            checks.append(
+                SetupCheck(
+                    id: "spaces",
+                    title: "Displays have separate Spaces",
+                    detail: separate
+                        ? "On. Each display scrolls on its own."
+                        : "Off. Turn on “Displays have separate Spaces” in Desktop & Dock for one strip per display.",
+                    state: separate ? .ok : .warning,
+                    fixURL: separate ? nil : URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")
+                ))
+        }
+
+        if settings.swipeFingers != .off {
+            let domains = ["com.apple.AppleMultitouchTrackpad", "com.apple.driver.AppleBluetoothMultitouch.trackpad"]
+            let key = settings.swipeFingers == .three
+                ? "TrackpadThreeFingerHorizSwipeGesture" : "TrackpadFourFingerHorizSwipeGesture"
+            let conflict = domains.contains { (UserDefaults(suiteName: $0)?.integer(forKey: key) ?? 0) != 0 }
+            let fingers = settings.swipeFingers == .three ? "three" : "four"
+            checks.append(
+                SetupCheck(
+                    id: "trackpad",
+                    title: "Trackpad swipe",
+                    detail: conflict
+                        ? "macOS also uses \(fingers)-finger horizontal swipes to switch Spaces. Set “Swipe between full-screen applications” to a different finger count in Trackpad → More Gestures."
+                        : "No conflict with macOS gestures.",
+                    state: conflict ? .warning : .ok,
+                    fixURL: conflict ? URL(string: "x-apple.systempreferences:com.apple.Trackpad-Settings.extension") : nil
+                ))
+        }
+        return checks
+    }
+}
+#endif

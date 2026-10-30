@@ -1,0 +1,1048 @@
+#if os(macOS)
+import AppKit
+import MacSliderCore
+import os
+
+let log = Logger(subsystem: "org.ashforde.macslider", category: "engine")
+
+/// A strip lives on one display and one Mission Control Space.
+struct StripKey: Hashable, Codable {
+    var display: String
+    var space: UInt64
+}
+
+/// A window MacSlider knows about: tiled on a strip (`key` set) or floating.
+final class ManagedWindow {
+    let id: WindowID
+    let pid: pid_t
+    let element: AXUIElement
+    let bundleID: String?
+    let appName: String
+    /// The frame the window had before MacSlider first touched it.
+    let home: CGRect
+    /// The last frame MacSlider applied, to skip redundant moves and to tell
+    /// the user's own moves apart from ours.
+    var lastApplied: Rect?
+    /// The strip the window is tiled on, or nil when it floats.
+    var key: StripKey?
+
+    init(id: WindowID, pid: pid_t, element: AXUIElement, bundleID: String?, appName: String, home: CGRect) {
+        self.id = id
+        self.pid = pid
+        self.element = element
+        self.bundleID = bundleID
+        self.appName = appName
+        self.home = home
+    }
+
+    var title: String { element.title ?? "" }
+}
+
+/// Owns the strips and keeps real windows in line with them.
+///
+/// Everything runs on the main thread. Accessibility calls are bounded by a
+/// global messaging timeout so an unresponsive app cannot stall the engine
+/// for long.
+final class Engine {
+    var settings: Settings {
+        didSet { settingsDidChange(from: oldValue) }
+    }
+
+    private(set) var isPaused = false
+    private(set) var isRunning = false
+
+    /// Called whenever something the menu bar shows may have changed.
+    var onStateChange: () -> Void = {}
+    /// Called for the "Search windows" action.
+    var onShowSwitcher: () -> Void = {}
+
+    private var windows: [WindowID: ManagedWindow] = [:]
+    private var strips: [StripKey: Strip] = [:]
+    private var observers: [pid_t: AXObserver] = [:]
+    private var displays: [Display] = []
+    private let animator = Animator()
+    private let overlays = Overlays()
+    private var lastApplyTime: CFTimeInterval = 0
+    private var enhancedUIRestore: Set<pid_t> = []
+    private var workspaceTokens: [NSObjectProtocol] = []
+    private var mouseUpTimer: Timer?
+    private var saveTimer: Timer?
+    private var syncTimer: Timer?
+    private var swipeDisplay: Display?
+    private var lastFocusFollowsMouse: CFTimeInterval = 0
+    private let ownPID = ProcessInfo.processInfo.processIdentifier
+
+    init(settings: Settings) {
+        self.settings = settings
+        animator.apply = { [weak self] id, rect, sizeChanged in
+            self?.apply(rect, to: id, sizeChanged: sizeChanged)
+        }
+        animator.onFinish = { [weak self] in
+            self?.restoreEnhancedUI()
+            self?.updateOverlays()
+        }
+        overlays.onSelectWindow = { [weak self] id in self?.focusAndReveal(id) }
+    }
+
+    // MARK: - Lifecycle
+
+    func start() {
+        guard !isRunning else { return }
+        isRunning = true
+        loadState()
+        registerWorkspaceNotifications()
+        sync()
+        log.info("Engine started with \(self.windows.count) windows")
+    }
+
+    /// Puts every window back on screen and saves the layout. Called on quit.
+    func shutdown() {
+        guard isRunning else { return }
+        animator.finishNow()
+        saveState()
+        restoreAll()
+        overlays.hideAll()
+    }
+
+    func togglePause() {
+        setPaused(!isPaused)
+    }
+
+    func setPaused(_ paused: Bool) {
+        guard paused != isPaused else { return }
+        isPaused = paused
+        if paused {
+            animator.finishNow()
+            restoreAll()
+            overlays.hideAll()
+        } else {
+            for window in windows.values { window.lastApplied = nil }
+            sync()
+        }
+        onStateChange()
+    }
+
+    /// Forgets cached frames and re-applies the layout from scratch.
+    func retile() {
+        guard !isPaused else { return }
+        for window in windows.values { window.lastApplied = nil }
+        sync()
+    }
+
+    private func settingsDidChange(from old: Settings) {
+        guard isRunning, !isPaused else { return }
+        if settings.layout != old.layout || settings.keepHeights != old.keepHeights {
+            for (key, var strip) in strips {
+                if let display = display(for: key) {
+                    strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+                }
+                strips[key] = strip
+            }
+            layout(animated: true)
+        } else {
+            updateOverlays()
+        }
+        onStateChange()
+    }
+
+    // MARK: - Actions
+
+    func perform(_ action: Action) {
+        switch action {
+        case .togglePause:
+            togglePause()
+            return
+        case .retile:
+            retile()
+            return
+        case .windowSwitcher:
+            onShowSwitcher()
+            return
+        default:
+            break
+        }
+        guard isRunning, !isPaused else { return }
+        animator.finishNow()
+
+        switch action {
+        case .toggleFloat:
+            toggleFloat()
+            return
+        case .sendToNextDisplay:
+            sendToNextDisplay()
+            return
+        case .toggleNativeFullScreen:
+            if let id = focusedWindowID(), let window = windows[id] ?? adoptFocused(id) {
+                window.element.set("AXFullScreen", (window.element.isFullScreen ? kCFBooleanFalse : kCFBooleanTrue)!)
+            }
+            return
+        default:
+            break
+        }
+
+        guard let (display, key) = activeContext(), var strip = strips[key], !strip.isEmpty else { return }
+        let config = settings.layout
+        let width = display.viewport.width
+        if let focused = focusedWindowID(), strip.contains(focused) { strip.focus(focused) }
+
+        var reveal = true
+        switch action {
+        case .focusLeft: strip.moveFocus(.left)
+        case .focusRight: strip.moveFocus(.right)
+        case .focusUp: strip.moveFocus(.up)
+        case .focusDown: strip.moveFocus(.down)
+        case .focusFirst: strip.focusColumn(at: 0)
+        case .focusLast: strip.focusColumn(at: strip.columns.count - 1)
+        case .moveLeft: strip.moveFocused(.left)
+        case .moveRight: strip.moveFocused(.right)
+        case .moveUp: strip.moveFocused(.up)
+        case .moveDown: strip.moveFocused(.down)
+        case .cycleWidth: strip.cycleWidth(presets: config.sanitizedPresets, forward: true)
+        case .cycleWidthBackward: strip.cycleWidth(presets: config.sanitizedPresets, forward: false)
+        case .narrower: strip.adjustWidth(by: -0.1)
+        case .wider: strip.adjustWidth(by: 0.1)
+        case .toggleFullWidth: strip.toggleFullWidth()
+        case .center:
+            strip.centerFocused(config: config, viewportWidth: width)
+            reveal = false
+        case .consumeIntoLeft: strip.consumeIntoLeft()
+        case .expel: strip.expel()
+        case .pinLeft: strip.togglePin(.left)
+        case .pinRight: strip.togglePin(.right)
+        case .toggleTabbed: strip.toggleTabbed()
+        default:
+            if let number = action.columnNumber { strip.focusColumn(at: number - 1) }
+        }
+        if reveal { strip.revealFocused(config: config, viewportWidth: width) }
+        strips[key] = strip
+        layout(animated: true)
+        if let target = strip.focusedWindow, target != focusedWindowID() {
+            focus(target, warpMouse: true)
+        }
+        scheduleSave()
+    }
+
+    /// Focuses any managed window, scrolling its strip to show it.
+    func focusAndReveal(_ id: WindowID) {
+        guard let window = windows[id] else { return }
+        if let key = window.key, var strip = strips[key], let display = display(for: key) {
+            strip.focus(id)
+            strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+            strips[key] = strip
+            layout(animated: true)
+        }
+        focus(id, warpMouse: true)
+    }
+
+    private func toggleFloat() {
+        guard let id = focusedWindowID() else { return }
+        guard let window = windows[id] else {
+            // An unmanaged (e.g. ignored) window: tile it.
+            if let window = adoptFocused(id), window.key == nil { tile(window) }
+            return
+        }
+        if let key = window.key {
+            let display = self.display(for: key)
+            removeFromStrip(window)
+            if let display {
+                let visible = display.visibleFrame
+                let size = CGSize(
+                    width: min(window.home.width, visible.width * 0.8),
+                    height: min(window.home.height, visible.height * 0.8))
+                let frame = CGRect(
+                    x: visible.midX - size.width / 2, y: visible.midY - size.height / 2,
+                    width: size.width, height: size.height)
+                window.element.setFrame(frame)
+            }
+            window.lastApplied = nil
+            layout(animated: true)
+        } else {
+            tile(window)
+        }
+        focus(id, warpMouse: false)
+    }
+
+    private func tile(_ window: ManagedWindow) {
+        guard let frame = window.element.frame, let display = display(containing: frame) ?? displays.first else {
+            return
+        }
+        let key = currentKey(display)
+        var strip = strips[key] ?? Strip()
+        let rule = settings.rule(for: window.bundleID)
+        strip.insert(window.id, width: rule?.width ?? settings.layout.defaultWidth, position: .afterFocused, focus: true)
+        strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+        strips[key] = strip
+        window.key = key
+        layout(animated: true)
+    }
+
+    private func sendToNextDisplay() {
+        guard displays.count > 1, let id = focusedWindowID(), let window = windows[id], let key = window.key,
+            let index = displays.firstIndex(where: { $0.uuid == key.display })
+        else { return }
+        let width = strips[key].flatMap { strip in strip.locate(id).map { strip.columns[$0.column].width } }
+        removeFromStrip(window)
+        let next = displays[(index + 1) % displays.count]
+        let nextKey = currentKey(next)
+        var strip = strips[nextKey] ?? Strip()
+        strip.insert(id, width: width ?? settings.layout.defaultWidth, position: .afterFocused, focus: true)
+        strip.revealFocused(config: settings.layout, viewportWidth: next.viewport.width)
+        strips[nextKey] = strip
+        window.key = nextKey
+        window.lastApplied = nil
+        layout(animated: false)
+        focus(id, warpMouse: true)
+        scheduleSave()
+    }
+
+    // MARK: - Trackpad scrolling
+
+    /// Scrolls the strip under the mouse pointer by `delta` points.
+    func swipe(by delta: Double) {
+        guard isRunning, !isPaused else { return }
+        let display = swipeDisplay ?? displayUnderMouse()
+        guard let display else { return }
+        swipeDisplay = display
+        let key = currentKey(display)
+        guard var strip = strips[key], !strip.isEmpty else { return }
+        let factor = settings.swipeSensitivity * (settings.invertSwipe ? -1 : 1)
+        animator.cancel()
+        overlays.hideTransient()
+        strip.scroll(by: delta * factor, config: settings.layout, viewportWidth: display.viewport.width)
+        strips[key] = strip
+        layout(animated: false, updateOverlays: false)
+    }
+
+    /// Ends a swipe: settles on a column edge and focuses the centred column.
+    func endSwipe() {
+        guard let display = swipeDisplay else { return }
+        swipeDisplay = nil
+        let key = currentKey(display)
+        guard var strip = strips[key], !strip.isEmpty else { return }
+        strip.settle(config: settings.layout, viewportWidth: display.viewport.width)
+        strips[key] = strip
+        layout(animated: true)
+        if let target = strip.focusedWindow, target != focusedWindowID() {
+            focus(target, warpMouse: false)
+        }
+        scheduleSave()
+    }
+
+    // MARK: - Focus follows mouse
+
+    func mouseMoved(to point: CGPoint) {
+        guard settings.focusFollowsMouse, isRunning, !isPaused, swipeDisplay == nil,
+            NSEvent.pressedMouseButtons == 0
+        else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastFocusFollowsMouse > 0.15 else { return }
+        lastFocusFollowsMouse = now
+        guard let id = topWindow(at: point), let window = windows[id], window.key != nil,
+            id != focusedWindowID()
+        else { return }
+        focus(id, warpMouse: false)
+    }
+
+    /// The front-most normal window under `point` (Accessibility coordinates).
+    private func topWindow(at point: CGPoint) -> WindowID? {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let info = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+        for entry in info {
+            guard (entry[kCGWindowLayer as String] as? Int) == 0,
+                let boundsDict = entry[kCGWindowBounds as String] as? NSDictionary,
+                let bounds = CGRect(dictionaryRepresentation: boundsDict),
+                bounds.contains(point),
+                let number = entry[kCGWindowNumber as String] as? NSNumber
+            else { continue }
+            if (entry[kCGWindowOwnerPID as String] as? pid_t) == ownPID { continue }
+            return WindowID(number.uint32Value)
+        }
+        return nil
+    }
+
+    // MARK: - Queries for the UI
+
+    struct Status {
+        var focusedColumn: Int
+        var columnCount: Int
+    }
+
+    func status() -> Status? {
+        guard isRunning, let (_, key) = activeContext(), let strip = strips[key], !strip.isEmpty else { return nil }
+        return Status(focusedColumn: strip.focusedColumn + 1, columnCount: strip.columns.count)
+    }
+
+    struct WindowSummary: Identifiable {
+        var id: WindowID
+        var appName: String
+        var title: String
+        var isTiled: Bool
+        var isFocused: Bool
+        var icon: NSImage?
+    }
+
+    /// Windows of the active strip, left to right.
+    func activeStripWindows() -> [WindowSummary] {
+        guard let (_, key) = activeContext(), let strip = strips[key] else { return [] }
+        let focused = strip.focusedWindow
+        return strip.allWindows.compactMap { id in
+            windows[id].map { summary($0, focused: id == focused) }
+        }
+    }
+
+    /// Every managed window on the current Spaces, tiled ones first.
+    func allWindowSummaries() -> [WindowSummary] {
+        let focused = focusedWindowID()
+        var result: [WindowSummary] = []
+        for display in displays {
+            guard let strip = strips[currentKey(display)] else { continue }
+            for id in strip.allWindows {
+                if let window = windows[id] { result.append(summary(window, focused: id == focused)) }
+            }
+        }
+        for window in windows.values where window.key == nil {
+            result.append(summary(window, focused: window.id == focused))
+        }
+        return result
+    }
+
+    private func summary(_ window: ManagedWindow, focused: Bool) -> WindowSummary {
+        WindowSummary(
+            id: window.id,
+            appName: window.appName,
+            title: window.title,
+            isTiled: window.key != nil,
+            isFocused: focused,
+            icon: NSRunningApplication(processIdentifier: window.pid)?.icon
+        )
+    }
+
+    // MARK: - Layout
+
+    private func layout(animated: Bool, updateOverlays shouldUpdateOverlays: Bool = true) {
+        guard isRunning, !isPaused else { return }
+        var targets: [WindowID: (from: Rect, to: Rect)] = [:]
+        for display in displays {
+            let key = currentKey(display)
+            guard let strip = strips[key], !strip.isEmpty else { continue }
+            for placement in strip.layout(config: settings.layout, viewport: display.viewport) {
+                guard let window = windows[placement.window] else { continue }
+                var frame = placement.frame
+                if settings.keepHeights, let (c, _) = strip.locate(placement.window),
+                    strip.columns[c].windows.count == 1, !strip.columns[c].isTabbed
+                {
+                    frame.height = min(frame.height, window.home.height.rounded())
+                }
+                let from = window.lastApplied ?? window.element.frame.map(Rect.init) ?? frame
+                targets[placement.window] = (from, frame)
+            }
+        }
+
+        if animated && settings.animate {
+            disableEnhancedUI(for: Set(targets.keys.compactMap { windows[$0]?.pid }))
+            overlays.hideTransient()
+            animator.animate(targets, duration: settings.animationDuration)
+        } else {
+            animator.cancel()
+            for (id, target) in targets {
+                guard let window = windows[id] else { continue }
+                if let last = window.lastApplied, last.isClose(to: target.to, tolerance: 0.5) { continue }
+                let sizeChanged =
+                    window.lastApplied.map {
+                        abs($0.width - target.to.width) > 0.5 || abs($0.height - target.to.height) > 0.5
+                    } ?? true
+                apply(target.to, to: id, sizeChanged: sizeChanged)
+            }
+            if shouldUpdateOverlays { updateOverlays() }
+        }
+        onStateChange()
+    }
+
+    private func apply(_ rect: Rect, to id: WindowID, sizeChanged: Bool) {
+        guard let window = windows[id] else { return }
+        window.element.setFrame(CGRect(rect), sizeChanged: sizeChanged)
+        window.lastApplied = rect
+        lastApplyTime = CACurrentMediaTime()
+    }
+
+    /// Apps with enhanced accessibility UI turned on animate every frame change
+    /// themselves, which fights the animator. Turn it off while windows move.
+    private func disableEnhancedUI(for pids: Set<pid_t>) {
+        for pid in pids where !enhancedUIRestore.contains(pid) {
+            let app = AXUIElement.application(pid)
+            if app.bool("AXEnhancedUserInterface") == true {
+                app.set("AXEnhancedUserInterface", kCFBooleanFalse)
+                enhancedUIRestore.insert(pid)
+            }
+        }
+    }
+
+    private func restoreEnhancedUI() {
+        for pid in enhancedUIRestore {
+            AXUIElement.application(pid).set("AXEnhancedUserInterface", kCFBooleanTrue)
+        }
+        enhancedUIRestore.removeAll()
+    }
+
+    private func updateOverlays() {
+        guard isRunning, !isPaused else {
+            overlays.hideAll()
+            return
+        }
+        let focusedID = focusedWindowID()
+        var focused: (WindowID, CGRect)?
+        var inactive: [(WindowID, CGRect)] = []
+        var bars: [Overlays.TabBarModel] = []
+
+        for display in displays {
+            let key = currentKey(display)
+            guard let strip = strips[key], !strip.isEmpty else { continue }
+            for placement in strip.layout(config: settings.layout, viewport: display.viewport)
+            where !placement.isParked && !placement.isHiddenTab {
+                guard let frame = windows[placement.window]?.lastApplied else { continue }
+                if placement.window == focusedID {
+                    focused = (placement.window, CGRect(frame))
+                } else {
+                    inactive.append((placement.window, CGRect(frame)))
+                }
+            }
+            for bar in strip.tabBars(config: settings.layout, viewport: display.viewport) {
+                let tabs = bar.windows.map { id in
+                    Overlays.Tab(id: id, title: windows[id].map { $0.title.isEmpty ? $0.appName : $0.title } ?? "")
+                }
+                bars.append(Overlays.TabBarModel(frame: CGRect(bar.frame), tabs: tabs, active: bar.active))
+            }
+        }
+        overlays.update(focused: focused, inactive: inactive, tabBars: bars, settings: settings)
+    }
+
+    // MARK: - Focus helpers
+
+    func focusedWindowID() -> WindowID? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        return AXUIElement.application(app.processIdentifier).focusedWindow?.windowID
+    }
+
+    private func adoptFocused(_ id: WindowID) -> ManagedWindow? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+            let element = AXUIElement.application(app.processIdentifier).focusedWindow
+        else { return nil }
+        adopt(element, pid: app.processIdentifier, focus: true, force: true)
+        return windows[id]
+    }
+
+    private func focus(_ id: WindowID, warpMouse: Bool) {
+        guard let window = windows[id] else { return }
+        window.element.set(kAXMainAttribute, kCFBooleanTrue)
+        window.element.raise()
+        AXUIElement.application(window.pid).set(kAXFrontmostAttribute, kCFBooleanTrue)
+        NSRunningApplication(processIdentifier: window.pid)?.activate(options: [])
+        if warpMouse && settings.mouseFollowsFocus, let target = targetFrame(of: id) {
+            CGWarpMouseCursorPosition(CGPoint(x: target.midX, y: target.midY))
+        }
+    }
+
+    private func targetFrame(of id: WindowID) -> Rect? {
+        guard let key = windows[id]?.key, let strip = strips[key], let display = display(for: key) else { return nil }
+        return strip.layout(config: settings.layout, viewport: display.viewport).first { $0.window == id }?.frame
+    }
+
+    /// The display and strip keyboard actions apply to: the focused window's
+    /// strip, or else the display under the mouse pointer.
+    private func activeContext() -> (Display, StripKey)? {
+        if let id = focusedWindowID(), let key = windows[id]?.key, let display = display(for: key),
+            currentKey(display) == key
+        {
+            return (display, key)
+        }
+        guard let display = displayUnderMouse() ?? displays.first else { return nil }
+        return (display, currentKey(display))
+    }
+
+    // MARK: - Displays
+
+    private func currentKey(_ display: Display) -> StripKey {
+        StripKey(display: display.uuid, space: Spaces.current(displayUUID: display.uuid))
+    }
+
+    private func display(for key: StripKey) -> Display? {
+        displays.first { $0.uuid == key.display }
+    }
+
+    private func display(containing frame: CGRect) -> Display? {
+        let centre = CGPoint(x: frame.midX, y: frame.midY)
+        return displays.first { $0.frame.contains(centre) }
+            ?? displays.max { $0.frame.intersection(frame).area < $1.frame.intersection(frame).area }
+    }
+
+    private func displayUnderMouse() -> Display? {
+        let location = NSEvent.mouseLocation
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let point = CGPoint(x: location.x, y: primaryHeight - location.y)
+        return displays.first { $0.frame.contains(point) }
+    }
+
+    // MARK: - Window discovery
+
+    /// Re-reads displays, apps and windows and re-applies the layout.
+    func sync() {
+        guard isRunning, !isPaused else { return }
+        animator.finishNow()
+        refreshDisplays()
+
+        let hiddenPIDs = Set(NSWorkspace.shared.runningApplications.filter(\.isHidden).map(\.processIdentifier))
+        for (id, window) in windows {
+            if !window.element.isAlive || window.element.isMinimized || window.element.isFullScreen
+                || hiddenPIDs.contains(window.pid)
+            {
+                forget(id)
+            }
+        }
+
+        for app in NSWorkspace.shared.runningApplications
+        where app.activationPolicy == .regular && !app.isHidden && app.processIdentifier != ownPID {
+            syncApp(app.processIdentifier, layoutAfter: false)
+        }
+
+        // Drop restored or stale entries for windows that no longer exist on the current Spaces.
+        let current = Set(displays.map(currentKey))
+        for key in strips.keys where current.contains(key) {
+            for id in strips[key]!.allWindows where windows[id]?.key != key {
+                strips[key]!.remove(id)
+            }
+        }
+
+        if let focused = focusedWindowID(), let key = windows[focused]?.key {
+            strips[key]?.focus(focused)
+        }
+        for display in displays {
+            let key = currentKey(display)
+            guard var strip = strips[key] else { continue }
+            strip.clampScroll(config: settings.layout, viewportWidth: display.viewport.width)
+            strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+            strips[key] = strip
+        }
+        layout(animated: false)
+        scheduleSave()
+    }
+
+    private func syncApp(_ pid: pid_t, layoutAfter: Bool) {
+        guard pid != ownPID else { return }
+        observe(pid)
+        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+        let focusedID = frontmost ? AXUIElement.application(pid).focusedWindow?.windowID : nil
+        var changed = false
+        for element in AXUIElement.application(pid).windows {
+            let id = element.windowID
+            changed = adopt(element, pid: pid, focus: id != nil && id == focusedID) || changed
+        }
+        if changed && layoutAfter { layout(animated: true) }
+    }
+
+    private func refreshDisplays() {
+        let fresh = Display.all()
+        guard fresh != displays else { return }
+        displays = fresh
+        // Windows on displays that went away join the strip of the first display.
+        let uuids = Set(displays.map(\.uuid))
+        guard let fallback = displays.first else { return }
+        let fallbackKey = currentKey(fallback)
+        for key in Array(strips.keys) where !uuids.contains(key.display) {
+            guard let orphan = strips.removeValue(forKey: key) else { continue }
+            var target = strips[fallbackKey] ?? Strip()
+            for column in orphan.columns {
+                for id in column.windows {
+                    target.insert(id, width: column.width, position: .end, focus: false)
+                    windows[id]?.key = fallbackKey
+                    windows[id]?.lastApplied = nil
+                }
+            }
+            strips[fallbackKey] = target
+        }
+    }
+
+    /// Starts managing `element` if it is a normal window. Returns true if a
+    /// strip changed.
+    @discardableResult
+    private func adopt(_ element: AXUIElement, pid: pid_t, focus: Bool, force: Bool = false) -> Bool {
+        guard pid != ownPID, let id = element.windowID else { return false }
+        if let existing = windows[id] {
+            // Known window: just follow focus.
+            if focus, let key = existing.key { strips[key]?.focus(id) }
+            return false
+        }
+        guard element.role == kAXWindowRole,
+            element.subrole == kAXStandardWindowSubrole,
+            !element.isMinimized, !element.isFullScreen,
+            element.isSettable(kAXPositionAttribute),
+            let frame = element.frame, frame.width >= 80, frame.height >= 60
+        else { return false }
+        let app = NSRunningApplication(processIdentifier: pid)
+        guard app?.activationPolicy == .regular, app?.isHidden == false else { return false }
+
+        if displays.isEmpty { refreshDisplays() }
+        guard let display = display(containing: frame) ?? displays.first else { return false }
+        let key = currentKey(display)
+        let spaces = Spaces.spaces(of: id)
+        if !spaces.isEmpty && key.space != 0 && !spaces.contains(key.space) { return false }
+
+        let window = ManagedWindow(
+            id: id, pid: pid, element: element,
+            bundleID: app?.bundleIdentifier,
+            appName: app?.localizedName ?? "App",
+            home: frame
+        )
+        windows[id] = window
+        observeWindow(element)
+
+        // A window restored from the saved layout keeps its place.
+        if let restored = strips.first(where: { $0.value.contains(id) })?.key {
+            window.key = restored
+            if focus { strips[restored]?.focus(id) }
+            return true
+        }
+
+        let rule = settings.rule(for: window.bundleID)
+        let floats = rule?.float == true || element.hasFixedSize || !element.isSettable(kAXSizeAttribute)
+        if floats && !force { return false }
+
+        var strip = strips[key] ?? Strip()
+        strip.insert(
+            id,
+            width: rule?.width ?? settings.layout.defaultWidth,
+            position: rule?.position ?? settings.newWindowPosition,
+            focus: focus
+        )
+        if focus { strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width) }
+        strips[key] = strip
+        window.key = key
+        scheduleSave()
+        return true
+    }
+
+    private func removeFromStrip(_ window: ManagedWindow) {
+        guard let key = window.key, var strip = strips[key] else { return }
+        strip.remove(window.id)
+        if let display = display(for: key) {
+            strip.clampScroll(config: settings.layout, viewportWidth: display.viewport.width)
+            strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+        }
+        strips[key] = strip
+        window.key = nil
+        scheduleSave()
+    }
+
+    private func forget(_ id: WindowID) {
+        guard let window = windows[id] else { return }
+        removeFromStrip(window)
+        windows[id] = nil
+    }
+
+    private func window(for element: AXUIElement) -> ManagedWindow? {
+        if let id = element.windowID, let window = windows[id] { return window }
+        return windows.values.first { CFEqual($0.element, element) }
+    }
+
+    // MARK: - Accessibility notifications
+
+    private static let appNotifications = [
+        kAXWindowCreatedNotification,
+        kAXFocusedWindowChangedNotification,
+        kAXApplicationHiddenNotification,
+        kAXApplicationShownNotification,
+    ]
+
+    private static let windowNotifications = [
+        kAXUIElementDestroyedNotification,
+        kAXWindowMiniaturizedNotification,
+        kAXWindowDeminiaturizedNotification,
+        kAXWindowMovedNotification,
+        kAXWindowResizedNotification,
+        kAXTitleChangedNotification,
+    ]
+
+    private var refcon: UnsafeMutableRawPointer { Unmanaged.passUnretained(self).toOpaque() }
+
+    private func observe(_ pid: pid_t) {
+        guard observers[pid] == nil else { return }
+        var created: AXObserver?
+        guard AXObserverCreate(pid, axObserverCallback, &created) == .success, let observer = created else { return }
+        let app = AXUIElement.application(pid)
+        var ok = false
+        for name in Self.appNotifications {
+            let error = AXObserverAddNotification(observer, app, name as CFString, refcon)
+            ok = ok || error == .success || error == .notificationAlreadyRegistered
+        }
+        guard ok else {
+            // The app is probably still launching; `didLaunch` and `didActivate` retry.
+            return
+        }
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+        observers[pid] = observer
+    }
+
+    private func observeWindow(_ element: AXUIElement) {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success, let observer = observers[pid] else { return }
+        for name in Self.windowNotifications {
+            AXObserverAddNotification(observer, element, name as CFString, refcon)
+        }
+    }
+
+    private func stopObserving(_ pid: pid_t) {
+        if let observer = observers.removeValue(forKey: pid) {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode)
+        }
+        for (id, window) in windows where window.pid == pid { forget(id) }
+    }
+
+    fileprivate func handle(_ notification: String, element: AXUIElement) {
+        guard isRunning, !isPaused else { return }
+        var pid: pid_t = 0
+        AXUIElementGetPid(element, &pid)
+
+        switch notification {
+        case kAXWindowCreatedNotification:
+            let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+            if adopt(element, pid: pid, focus: frontmost) { layout(animated: true) }
+
+        case kAXFocusedWindowChangedNotification:
+            focusDidChange(to: element, pid: pid)
+
+        case kAXUIElementDestroyedNotification, kAXWindowMiniaturizedNotification:
+            if let window = window(for: element) {
+                forget(window.id)
+                layout(animated: true)
+            }
+
+        case kAXWindowDeminiaturizedNotification:
+            if adopt(element, pid: pid, focus: true) { layout(animated: true) }
+
+        case kAXApplicationHiddenNotification:
+            for (id, window) in windows where window.pid == pid { forget(id) }
+            layout(animated: true)
+
+        case kAXApplicationShownNotification:
+            syncApp(pid, layoutAfter: true)
+
+        case kAXWindowMovedNotification, kAXWindowResizedNotification:
+            userMovedOrResized(element, resized: notification == kAXWindowResizedNotification)
+
+        case kAXTitleChangedNotification:
+            updateOverlays()
+
+        default:
+            break
+        }
+    }
+
+    private func focusDidChange(to element: AXUIElement, pid: pid_t) {
+        // The notification's element is usually the window; fall back to asking the app.
+        let windowElement = element.role == kAXWindowRole ? element : AXUIElement.application(pid).focusedWindow
+        guard let windowElement, let id = windowElement.windowID else { return }
+        if windows[id] == nil {
+            if adopt(windowElement, pid: pid, focus: true) { layout(animated: true) }
+            return
+        }
+        guard swipeDisplay == nil, let window = windows[id], let key = window.key, var strip = strips[key],
+            let display = display(for: key)
+        else {
+            updateOverlays()
+            return
+        }
+        strip.focus(id)
+        strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+        let changed = strip != strips[key]
+        strips[key] = strip
+        if changed {
+            layout(animated: true)
+            scheduleSave()
+        } else {
+            updateOverlays()
+        }
+    }
+
+    /// The user dragged or resized a tiled window. Resizing changes the
+    /// column width; dropping a dragged window moves its column to where it
+    /// was dropped. Either way the layout is re-applied after mouse-up.
+    private func userMovedOrResized(_ element: AXUIElement, resized: Bool) {
+        guard !animator.isRunning, CACurrentMediaTime() - lastApplyTime > 0.3,
+            let window = window(for: element), let key = window.key, let applied = window.lastApplied,
+            let frame = element.frame
+        else { return }
+        let actual = Rect(frame)
+        if resized {
+            guard abs(actual.width - applied.width) > 4, let display = display(for: key) else { return }
+            let fraction = settings.layout.fraction(forColumnWidth: actual.width, viewportWidth: display.viewport.width)
+            strips[key]?.setWidth(fraction, of: window.id)
+        } else {
+            guard abs(actual.x - applied.x) > 8 || abs(actual.y - applied.y) > 8 else { return }
+        }
+        whenMouseIsUp { [weak self] in self?.finishUserMove(window, resized: resized) }
+    }
+
+    private func finishUserMove(_ window: ManagedWindow, resized: Bool) {
+        guard let key = window.key, var strip = strips[key], let display = display(for: key) else { return }
+        if !resized, let frame = window.element.frame, let source = strip.locate(window.id)?.column {
+            let frames = strip.columnFrames(config: settings.layout, viewport: display.viewport)
+            let dropX = frame.midX
+            if let target = frames.indices.first(where: { frames[$0].frame.minX <= dropX && dropX < frames[$0].frame.maxX }),
+                target != source, strip.columns[target].pin == nil
+            {
+                strip.focus(window.id)
+                if strip.columns[source].windows.count > 1 { strip.expel() }
+                if let from = strip.locate(window.id)?.column { strip.moveColumn(from: from, to: target) }
+            }
+        }
+        window.lastApplied = nil
+        strip.focus(window.id)
+        strip.revealFocused(config: settings.layout, viewportWidth: display.viewport.width)
+        strips[key] = strip
+        layout(animated: true)
+        scheduleSave()
+    }
+
+    private func whenMouseIsUp(_ action: @escaping () -> Void) {
+        mouseUpTimer?.invalidate()
+        mouseUpTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] timer in
+            guard NSEvent.pressedMouseButtons == 0 else { return }
+            timer.invalidate()
+            self?.mouseUpTimer = nil
+            action()
+        }
+    }
+
+    // MARK: - Workspace notifications
+
+    private func registerWorkspaceNotifications() {
+        let center = NSWorkspace.shared.notificationCenter
+        func on(_ name: Notification.Name, center: NotificationCenter = center, _ block: @escaping (Notification) -> Void) {
+            workspaceTokens.append(center.addObserver(forName: name, object: nil, queue: .main, using: block))
+        }
+        func app(_ note: Notification) -> NSRunningApplication? {
+            note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        }
+
+        on(NSWorkspace.didLaunchApplicationNotification) { [weak self] note in
+            guard let pid = app(note)?.processIdentifier else { return }
+            for delay in [0.3, 1.0, 2.5] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    guard let self, self.isRunning, !self.isPaused else { return }
+                    self.syncApp(pid, layoutAfter: true)
+                }
+            }
+        }
+        on(NSWorkspace.didTerminateApplicationNotification) { [weak self] note in
+            guard let self, let pid = app(note)?.processIdentifier else { return }
+            self.stopObserving(pid)
+            self.layout(animated: true)
+        }
+        on(NSWorkspace.didActivateApplicationNotification) { [weak self] note in
+            guard let self, self.isRunning, !self.isPaused, let pid = app(note)?.processIdentifier else { return }
+            self.syncApp(pid, layoutAfter: true)
+            if let element = AXUIElement.application(pid).focusedWindow {
+                self.focusDidChange(to: element, pid: pid)
+            }
+        }
+        on(NSWorkspace.didHideApplicationNotification) { [weak self] note in
+            guard let self, let pid = app(note)?.processIdentifier else { return }
+            for (id, window) in self.windows where window.pid == pid { self.forget(id) }
+            self.layout(animated: true)
+        }
+        on(NSWorkspace.didUnhideApplicationNotification) { [weak self] note in
+            guard let self, let pid = app(note)?.processIdentifier else { return }
+            self.syncApp(pid, layoutAfter: true)
+        }
+        on(NSWorkspace.activeSpaceDidChangeNotification) { [weak self] _ in self?.scheduleSync(after: 0.15) }
+        on(NSWorkspace.didWakeNotification) { [weak self] _ in self?.scheduleSync(after: 1.0) }
+        on(NSWorkspace.screensDidWakeNotification) { [weak self] _ in self?.scheduleSync(after: 1.0) }
+        on(NSWorkspace.sessionDidBecomeActiveNotification) { [weak self] _ in self?.scheduleSync(after: 1.0) }
+        on(NSWorkspace.willSleepNotification) { [weak self] _ in
+            self?.animator.finishNow()
+            self?.saveState()
+        }
+        on(NSApplication.didChangeScreenParametersNotification, center: .default) { [weak self] _ in
+            self?.scheduleSync(after: 0.5)
+        }
+    }
+
+    private func scheduleSync(after delay: TimeInterval) {
+        syncTimer?.invalidate()
+        syncTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in self?.sync() }
+    }
+
+    // MARK: - Restoring windows
+
+    /// Pulls parked windows fully back onto their display, leaving others where they are.
+    private func restoreAll() {
+        for window in windows.values where window.key != nil {
+            guard let frame = window.element.frame,
+                let display = window.key.flatMap(display(for:)) ?? display(containing: frame)
+            else { continue }
+            let visible = display.visibleFrame
+            var target = frame
+            target.size.width = min(target.width, visible.width)
+            target.size.height = min(target.height, visible.height)
+            target.origin.x = min(max(target.minX, visible.minX), visible.maxX - target.width)
+            target.origin.y = min(max(target.minY, visible.minY), visible.maxY - target.height)
+            if target != frame { window.element.setFrame(target) }
+            window.lastApplied = nil
+        }
+    }
+
+    // MARK: - Persistence
+
+    private struct SavedState: Codable {
+        var strips: [StripKey: Strip]
+    }
+
+    private static var stateURL: URL { SettingsStore.directory.appendingPathComponent("layout.json") }
+
+    private func scheduleSave() {
+        saveTimer?.invalidate()
+        saveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in self?.saveState() }
+    }
+
+    /// Window IDs survive a restart of MacSlider (not of the apps), so saving
+    /// the strips lets an update or relaunch pick up exactly where it left off.
+    private func saveState() {
+        let state = SavedState(strips: strips.filter { !$0.value.isEmpty })
+        do {
+            try FileManager.default.createDirectory(at: SettingsStore.directory, withIntermediateDirectories: true)
+            try JSONEncoder().encode(state).write(to: Self.stateURL, options: .atomic)
+        } catch {
+            log.error("Saving layout failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadState() {
+        guard let data = try? Data(contentsOf: Self.stateURL),
+            let state = try? JSONDecoder().decode(SavedState.self, from: data)
+        else { return }
+        strips = state.strips
+    }
+}
+
+private func axObserverCallback(
+    _ observer: AXObserver, _ element: AXUIElement, _ notification: CFString, _ refcon: UnsafeMutableRawPointer?
+) {
+    guard let refcon else { return }
+    Unmanaged<Engine>.fromOpaque(refcon).takeUnretainedValue().handle(notification as String, element: element)
+}
+
+extension Rect {
+    init(_ rect: CGRect) {
+        self.init(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+    }
+}
+
+extension CGRect {
+    init(_ rect: Rect) {
+        self.init(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
+    }
+
+    var area: CGFloat { isNull ? 0 : width * height }
+}
+#endif
