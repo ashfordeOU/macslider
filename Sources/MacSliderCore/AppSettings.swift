@@ -105,6 +105,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
     /// The slider bar: a mini-map of the strip you can drag to slide.
     public var sliderBar: SliderBarMode = .whileMoving
     public var sliderBarEdge: SliderBarEdge = .bottom
+    /// Clicking the menu bar icon shows the slider; right-click shows the menu.
+    public var iconOpensSlider = true
     /// Height reserved for the slider bar when it is always shown.
     public static let sliderBarHeight = 64.0
     /// Group windows into full-screen slides by app as they open.
@@ -160,7 +162,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider
     }
 
     public init(from decoder: Decoder) throws {
@@ -200,6 +202,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         sliderBar = value(.sliderBar, d.sliderBar)
         slideArrangement = value(.slideArrangement, d.slideArrangement)
         sliderBarEdge = value(.sliderBarEdge, d.sliderBarEdge)
+        iconOpensSlider = value(.iconOpensSlider, d.iconOpensSlider)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {
             // Version 2 added the terminal rules (four tiles per slide).

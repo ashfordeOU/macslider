@@ -88,6 +88,7 @@ private struct GeneralPane: View {
                 Toggle("Pause tiling", isOn: $paused)
                     .onChange(of: paused) { setPaused($0) }
                 Toggle("Show column position in the menu bar", isOn: $store.settings.showColumnIndicator)
+                Toggle("Clicking the menu bar icon shows the slider (right-click for the menu)", isOn: $store.settings.iconOpensSlider)
                 Stepper(value: $store.settings.workspaceCount, in: 1...9) {
                     Text("Workspaces per display: \(store.settings.workspaceCount)")
                 }

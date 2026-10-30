@@ -320,4 +320,177 @@ private struct TileOutlines: Shape {
         return path
     }
 }
+// MARK: - Menu bar popover
+
+/// What a left-click on the menu bar icon shows: the slider, the slides as
+/// cards you can click through, and quick controls.
+final class SliderPopover: NSObject, NSPopoverDelegate {
+    struct Controls {
+        var isPaused: () -> Bool
+        var togglePause: () -> Void
+        var openSettings: () -> Void
+    }
+
+    var mapProvider: () -> Engine.MiniMap? = { nil }
+    var actions = SliderBarController.Actions(
+        slide: { _, _ in }, endSlide: {}, focus: { _ in }, switchWorkspace: { _ in }, showOverview: {})
+    var controls = Controls(isPaused: { false }, togglePause: {}, openSettings: {})
+
+    private let popover = NSPopover()
+    private let model = SliderBarModel()
+    private let paused = PausedState()
+
+    var isShown: Bool { popover.isShown }
+
+    func toggle(relativeTo button: NSStatusBarButton) {
+        if popover.isShown {
+            popover.performClose(nil)
+            return
+        }
+        if popover.contentViewController == nil {
+            let close: () -> Void = { [weak self] in self?.popover.performClose(nil) }
+            var wrapped = actions
+            let focus = actions.focus
+            let overview = actions.showOverview
+            wrapped.focus = { id in
+                close()
+                focus(id)
+            }
+            wrapped.showOverview = {
+                close()
+                overview()
+            }
+            let controls = self.controls
+            let view = SliderPopoverView(
+                model: model, paused: paused, actions: wrapped,
+                togglePause: { [weak self] in
+                    controls.togglePause()
+                    self?.paused.value = controls.isPaused()
+                },
+                openSettings: {
+                    close()
+                    controls.openSettings()
+                })
+            popover.contentViewController = NSHostingController(rootView: view)
+            popover.behavior = .transient
+            popover.animates = true
+            popover.delegate = self
+        }
+        model.map = mapProvider()
+        paused.value = controls.isPaused()
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+
+    /// Keeps an open popover in step with the strip.
+    func refresh() {
+        guard popover.isShown else { return }
+        model.map = mapProvider()
+        paused.value = controls.isPaused()
+    }
+}
+
+final class PausedState: ObservableObject {
+    @Published var value = false
+}
+
+private struct SliderPopoverView: View {
+    @ObservedObject var model: SliderBarModel
+    @ObservedObject var paused: PausedState
+    let actions: SliderBarController.Actions
+    let togglePause: () -> Void
+    let openSettings: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text("MacSlider").font(.headline)
+                if let map = model.map {
+                    Text(map.workspaceCount > 1 ? "Workspace \(map.workspace + 1) · \(map.tiles.count) slides"
+                                                : "\(map.tiles.count) slides")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(action: togglePause) {
+                    Image(systemName: paused.value ? "play.fill" : "pause.fill")
+                }
+                .help(paused.value ? "Resume tiling" : "Pause tiling")
+                Button(action: actions.showOverview) { Image(systemName: "square.grid.3x2") }
+                    .help("Overview")
+                Button(action: openSettings) { Image(systemName: "gearshape") }
+                    .help("Settings")
+            }
+            .buttonStyle(.borderless)
+
+            SliderBarView(model: model, actions: actions) {}
+                .frame(height: 52)
+
+            if let map = model.map, !map.tiles.isEmpty {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(map.tiles.enumerated()), id: \.element.id) { number, tile in
+                                SlideCard(number: number + 1, tile: tile)
+                                    .id(tile.id)
+                                    .onTapGesture {
+                                        if let window = tile.windows.first { actions.focus(window.id) }
+                                    }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                        .environment(\.layoutDirection, map.isRightToLeft ? .rightToLeft : .leftToRight)
+                    }
+                    .onAppear {
+                        if let focused = map.tiles.first(where: \.isFocused) { proxy.scrollTo(focused.id, anchor: .center) }
+                    }
+                }
+            } else {
+                Text("No windows on this workspace yet.").font(.callout).foregroundStyle(.secondary)
+            }
+
+            Text("Drag the slider to move · click a slide to jump · right-click the icon for the full menu")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(width: 560)
+    }
+}
+
+/// A slide in the popover: its layout outline, app icons and first window's title.
+private struct SlideCard: View {
+    let number: Int
+    let tile: Engine.MiniTile
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(tile.isFocused ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.08))
+                if tile.windows.count > 1 {
+                    TileOutlines(frames: tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split))
+                        .stroke(Color.primary.opacity(0.25), lineWidth: 1)
+                        .padding(4)
+                }
+                HStack(spacing: 3) {
+                    ForEach(Array(Set(tile.windows.map(\.pid))).sorted().prefix(4), id: \.self) { pid in
+                        if let icon = AppIcons.icon(for: pid) {
+                            Image(nsImage: icon).resizable().frame(width: 24, height: 24)
+                        }
+                    }
+                }
+            }
+            .frame(width: 120, height: 70)
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .strokeBorder(tile.isFocused ? Color.accentColor : Color.clear, lineWidth: 2))
+            HStack(spacing: 4) {
+                Text("\(number)").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                Text(tile.windows.first.map { $0.title.isEmpty ? $0.appName : $0.title } ?? "")
+                    .font(.caption).lineLimit(1)
+            }
+            .frame(width: 120, alignment: .leading)
+        }
+        .contentShape(Rectangle())
+        .help(tile.windows.map { $0.title.isEmpty ? $0.appName : "\($0.appName) — \($0.title)" }.joined(separator: "\n"))
+    }
+}
 #endif

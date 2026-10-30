@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let updater = Updater()
     private let practice = PracticeTracker()
     private let sliderBar = SliderBarController()
+    private let popover = SliderPopover()
+    private let statusMenu = NSMenu()
     private let navigation = SettingsNavigation()
     private var statusItem: NSStatusItem!
     private var arrowItems: [NSStatusItem] = []
@@ -83,7 +85,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.onStateChange = { [weak self] in
             self?.updateStatusItem()
             self?.sliderBar.update()
+            self?.popover.refresh()
         }
+        popover.mapProvider = { [weak self] in
+            guard let maps = self?.engine.miniMaps(), !maps.isEmpty else { return nil }
+            let mouse = NSEvent.mouseLocation
+            return maps.first { map in
+                map.screenFrame.minX <= mouse.x && mouse.x < map.screenFrame.maxX
+            } ?? maps.first
+        }
+        popover.controls = SliderPopover.Controls(
+            isPaused: { [weak self] in self?.engine.isPaused ?? false },
+            togglePause: { [weak self] in self?.engine.togglePause() },
+            openSettings: { [weak self] in self?.showSettings() }
+        )
         sliderBar.mapsProvider = { [weak self] in self?.engine.miniMaps() ?? [] }
         sliderBar.actions = SliderBarController.Actions(
             slide: { [weak self] x, uuid in self?.engine.slide(to: x, displayUUID: uuid) },
@@ -92,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             switchWorkspace: { [weak self] index in self?.engine.switchWorkspace(to: index) },
             showOverview: { [weak self] in self?.overview.show() }
         )
+        popover.actions = sliderBar.actions
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
 
@@ -179,6 +195,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Menu bar
 
+    /// Left-click opens the slider popover; right-click or ⌃-click opens the menu.
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        let wantsMenu = event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true
+        if wantsMenu || !store.settings.iconOpensSlider || !engine.isRunning {
+            statusItem.menu = statusMenu
+            sender.performClick(nil)
+            statusItem.menu = nil
+        } else {
+            popover.toggle(relativeTo: sender)
+        }
+    }
+
     /// True for points (Accessibility coordinates) on any display's menu bar.
     private static func isOverMenuBar(_ point: CGPoint) -> Bool {
         guard let primaryHeight = NSScreen.screens.first?.frame.height else { return false }
@@ -220,9 +249,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setUpStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        let menu = NSMenu()
-        menu.delegate = self
-        statusItem.menu = menu
+        statusMenu.delegate = self
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusItemClicked(_:))
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         updateStatusItem()
     }
 
