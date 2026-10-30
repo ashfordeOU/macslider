@@ -189,11 +189,9 @@ final class Updater: ObservableObject {
         else { throw UpdateError.download }
 
         let name = release.archive.lastPathComponent
-        let expected = sums.split(separator: "\n")
-            .map { $0.split(separator: " ", omittingEmptySubsequences: true) }
-            .first { $0.count == 2 && $0[1] == Substring(name) }?[0]
-        let actual = SHA256.hash(data: archive).map { String(format: "%02x", $0) }.joined()
-        guard let expected, expected.lowercased() == actual else { throw UpdateError.checksum }
+        let digest = SHA256.hash(data: archive)
+        let actual = digest.map { String(format: "%02x", $0) }.joined()
+        guard let expected = checksum(for: name, in: sums), expected == actual else { throw UpdateError.checksum }
 
         let zip = work.appendingPathComponent(name)
         try archive.write(to: zip)
@@ -208,6 +206,15 @@ final class Updater: ObservableObject {
         }
         guard signatureMatchesRunningApp(app) else { throw UpdateError.signature }
         return app
+    }
+
+    /// The checksum listed for `file` in a `shasum -a 256` output.
+    private static func checksum(for file: String, in sums: String) -> String? {
+        for line in sums.split(separator: "\n") {
+            let fields = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+            if fields.count == 2, fields[1] == file { return fields[0].lowercased() }
+        }
+        return nil
     }
 
     /// The new app must carry a valid signature that satisfies this app's own
