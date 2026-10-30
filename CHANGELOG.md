@@ -4,6 +4,12 @@ All notable changes to MacSlider are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.3] - 2026-10-30
+
+### Fixed
+- Live previews now use ScreenCaptureKit on macOS 14 and later, so window images show on current macOS versions.
+- After allowing Screen Recording, MacSlider offers to relaunch itself, which macOS needs before the permission applies.
+
 ## [0.2.2] - 2026-10-30
 
 ### Added

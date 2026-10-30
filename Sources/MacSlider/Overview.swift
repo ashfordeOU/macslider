@@ -4,34 +4,6 @@ import MacSliderCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Window previews for the overview. Needs Screen Recording permission;
-/// without it the overview shows app icons and titles instead.
-enum WindowThumbnails {
-    private typealias CreateImageFn = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
-
-    // Looked up at runtime: the call is deprecated in newer SDKs but still works.
-    private static let createImage: CreateImageFn? = {
-        guard let handle = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_LAZY),
-            let symbol = dlsym(handle, "CGWindowListCreateImage")
-        else { return nil }
-        return unsafeBitCast(symbol, to: CreateImageFn.self)
-    }()
-
-    static var isAllowed: Bool { CGPreflightScreenCaptureAccess() }
-
-    static func requestAccess() { _ = CGRequestScreenCaptureAccess() }
-
-    static func capture(_ id: WindowID) -> NSImage? {
-        guard isAllowed, let createImage else { return nil }
-        let includingWindow: UInt32 = 1 << 3
-        let boundsIgnoreFramingAndNominal: UInt32 = (1 << 0) | (1 << 4)
-        guard let image = createImage(.null, includingWindow, id, boundsIgnoreFramingAndNominal)?.takeRetainedValue(),
-            image.width > 1, image.height > 1
-        else { return nil }
-        return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
-    }
-}
-
 final class OverviewModel: ObservableObject {
     @Published var strips: [Engine.OverviewStrip] = []
     @Published var thumbnails: [WindowID: NSImage] = [:]
@@ -41,11 +13,7 @@ final class OverviewModel: ObservableObject {
         previewsAllowed = WindowThumbnails.isAllowed
         guard previewsAllowed else { return }
         let ids = strips.flatMap { $0.columns.flatMap { $0.windows.map(\.id) } }
-        DispatchQueue.global(qos: .userInitiated).async {
-            var images: [WindowID: NSImage] = [:]
-            for id in ids { images[id] = WindowThumbnails.capture(id) }
-            DispatchQueue.main.async { self.thumbnails = images }
-        }
+        WindowThumbnails.capture(ids) { [weak self] images in self?.thumbnails = images }
     }
 }
 
@@ -133,11 +101,7 @@ struct OverviewView: View {
             }
             .help("Put windows of the same app back together, undoing your own pairings")
             if !model.previewsAllowed {
-                Button("Show live previews…") {
-                    WindowThumbnails.requestAccess()
-                    model.loadThumbnails()
-                }
-                .help("Needs Screen Recording permission. Previews never leave your Mac.")
+                LivePreviewsButton { model.loadThumbnails() }
             }
         }
     }

@@ -423,11 +423,8 @@ final class SlidePreview {
     private func refresh() {
         model.previewsAllowed = WindowThumbnails.isAllowed
         guard model.previewsAllowed, let tile = model.tile else { return }
-        let ids = tile.windows.map(\.id)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            var images: [WindowID: NSImage] = [:]
-            for id in ids { images[id] = WindowThumbnails.capture(id) }
-            DispatchQueue.main.async { self?.model.images.merge(images) { _, new in new } }
+        WindowThumbnails.capture(tile.windows.map(\.id)) { [weak self] images in
+            self?.model.images.merge(images) { _, new in new }
         }
     }
 
@@ -479,12 +476,7 @@ private struct PreviewView: View {
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                     Spacer()
                     if !model.previewsAllowed {
-                        Button("Show live previews") {
-                            WindowThumbnails.requestAccess()
-                        }
-                        .buttonStyle(.link)
-                        .font(.system(size: 11))
-                        .help("Needs Screen Recording permission. Previews stay on your Mac.")
+                        LivePreviewsButton(style: .link) {}
                     }
                 }
                 GeometryReader { geometry in
