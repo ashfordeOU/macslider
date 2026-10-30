@@ -84,6 +84,7 @@ public enum SlideMode {
         case KeyCode.w: return .action(.toggleTabbed)
         case KeyCode.p: return .action(shift ? .pinRight : .pinLeft)
         case KeyCode.d: return .action(.sendToNextDisplay)
+        case KeyCode.z: return .action(.undo)
         case KeyCode.escape, KeyCode.returnKey, KeyCode.space: return .exit
         default:
             if let index = KeyCode.digits.firstIndex(of: keyCode) {

@@ -120,6 +120,16 @@ the strip with full-screen slides:
 - Open a second window of an app that is sharing a slide, and the two windows move to a slide of their own.
 - Windows that come back return to exactly where they were: unhidden, unminimised, reopened from the Dock after closing, or after quitting and relaunching the app.
 
+**Resize by hand, and the slide follows.** Drag the edge of a window in a
+slide and the windows next to it resize live to fill the space. When you let
+go, a small popup offers **Keep**, **Own slide** (move this window to a slide
+of its own), **Move others out** (keep it here, move the rest to a new slide)
+or **Undo**. Ignore it and it fades away.
+
+**Undo anything.** <kbd>⌃⌥Z</kbd> (or <kbd>Z</kbd> in slide mode, or **Undo
+Layout Change** in the menu) steps back through your recent layout changes:
+moves, resizes, pairings, layouts and resets.
+
 **Layouts stay put.** Some apps (Firefox, for one) occasionally resize or
 move their own windows. MacSlider notices that it wasn't you — no mouse button
 was down — and snaps the window straight back. Dragging and resizing by hand
@@ -234,6 +244,7 @@ AZERTY, QWERTZ, Dvorak and other layouts.
 | Tabbed column on / off | <kbd>⌃⌥W</kbd> · <kbd>⌃⌥⇧T</kbd> |
 | Pin column to left / right edge | <kbd>⌃⌥P</kbd> <kbd>⌃⌥⇧P</kbd> |
 | Float / tile window | <kbd>⌃⌥T</kbd> |
+| Undo last layout change | <kbd>⌃⌥Z</kbd> |
 | Retile everything | <kbd>⌃⌥Esc</kbd> |
 | Pause / resume | <kbd>⌃⌥Q</kbd> |
 

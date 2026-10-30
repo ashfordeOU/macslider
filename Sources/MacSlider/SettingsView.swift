@@ -149,6 +149,7 @@ private struct LayoutPane: View {
                     ForEach(StripDirection.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 Toggle("Keep windows in place when an app resizes or moves them itself", isOn: $store.settings.keepWindowsInPlace)
+                Toggle("After resizing a window in a slide, offer to rearrange it", isOn: $store.settings.resizeAssist)
                 Toggle("Group windows into slides by app", isOn: $store.settings.groupByApp)
                 Toggle("Pair lone windows of different apps as they open", isOn: $store.settings.pairLoneWindowsOnOpen)
                     .disabled(!store.settings.groupByApp)
@@ -445,7 +446,7 @@ private struct ShortcutsPane: View {
         ("Workspaces", Action.allCases.filter { $0.workspaceNumber != nil || $0.moveToWorkspaceNumber != nil }),
         ("Jump", [.focusColumn1, .focusColumn2, .focusColumn3, .focusColumn4, .focusColumn5,
                   .focusColumn6, .focusColumn7, .focusColumn8, .focusColumn9]),
-        ("MacSlider", [.togglePause, .retile]),
+        ("MacSlider", [.undo, .togglePause, .retile]),
     ]
 
     var body: some View {

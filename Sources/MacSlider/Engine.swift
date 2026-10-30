@@ -46,6 +46,8 @@ final class ManagedWindow {
     /// The last frame MacSlider applied, to skip redundant moves and to tell
     /// the user's own moves apart from ours.
     var lastApplied: Rect?
+    /// When MacSlider last moved this window, to tell our moves from the user's.
+    var appliedAt: CFTimeInterval = 0
     /// The strip the window is tiled on, or nil when it floats.
     var key: StripKey?
 
@@ -191,10 +193,14 @@ final class Engine {
         case .overview:
             onShowOverview()
             return
+        case .undo:
+            undo()
+            return
         default:
             break
         }
         guard isRunning, !isPaused else { return }
+        if Self.undoable.contains(action) || action.moveToWorkspaceNumber != nil { recordHistory() }
         if let n = action.workspaceNumber {
             switchWorkspace(to: n - 1)
             return
@@ -274,6 +280,14 @@ final class Engine {
         }
         scheduleSave()
     }
+
+    /// Actions that change the arrangement (not just focus or scrolling).
+    private static let undoable: Set<Action> = [
+        .moveLeft, .moveRight, .moveUp, .moveDown, .cycleWidth, .cycleWidthBackward, .narrower, .wider,
+        .toggleFullWidth, .consumeIntoLeft, .consumeIntoRight, .expelLeft, .expel, .pinLeft, .pinRight,
+        .toggleTabbed, .cycleLayout, .mainLarger, .mainSmaller, .makeMain, .regroup, .toggleFloat,
+        .sendToNextDisplay,
+    ]
 
     /// Keys name what you see: with a right-to-left strip, "left" is the
     /// strip's next column, so left and right actions swap.
@@ -535,6 +549,7 @@ final class Engine {
     /// strip `target`, or into a new column at `newColumnAt`.
     func overviewMove(_ id: WindowID, to target: StripKey, column: Int? = nil, newColumnAt: Int? = nil) {
         guard let window = windows[id], let source = window.key else { return }
+        recordHistory()
         let width = strips[source].flatMap { strip in strip.locate(id).map { strip.columns[$0.column].width } }
             ?? settings.layout.defaultWidth
         if source == target {
@@ -566,6 +581,7 @@ final class Engine {
     /// Reorders whole columns in the overview.
     func overviewMoveColumn(from: Int, to: Int, in key: StripKey) {
         guard var strip = strips[key] else { return }
+        recordHistory()
         strip.moveColumn(from: from, to: to > from ? to - 1 : to)
         strips[key] = strip
         layout(animated: true)
@@ -842,7 +858,7 @@ final class Engine {
 
     // MARK: - Layout
 
-    private func layout(animated: Bool, updateOverlays shouldUpdateOverlays: Bool = true) {
+    private func layout(animated: Bool, updateOverlays shouldUpdateOverlays: Bool = true, skip: Set<WindowID> = []) {
         guard isRunning, !isPaused else { return }
         var targets: [WindowID: (from: Rect, to: Rect)] = [:]
         for display in displays {
@@ -874,6 +890,8 @@ final class Engine {
             }
         }
 
+        for id in skip { targets[id] = nil }
+
         if animated && settings.animate {
             disableEnhancedUI(for: Set(targets.keys.compactMap { windows[$0]?.pid }))
             overlays.hideTransient()
@@ -898,7 +916,8 @@ final class Engine {
         guard let window = windows[id] else { return }
         window.element.setFrame(CGRect(rect), sizeChanged: sizeChanged)
         window.lastApplied = rect
-        lastApplyTime = CACurrentMediaTime()
+        window.appliedAt = CACurrentMediaTime()
+        lastApplyTime = window.appliedAt
     }
 
     /// Apps with enhanced accessibility UI turned on animate every frame change
@@ -1350,8 +1369,8 @@ final class Engine {
     /// column width; dropping a dragged window moves its column to where it
     /// was dropped. Either way the layout is re-applied after mouse-up.
     private func userMovedOrResized(_ element: AXUIElement, resized: Bool) {
-        guard !animator.isRunning, CACurrentMediaTime() - lastApplyTime > 0.3,
-            let window = window(for: element), let key = window.key, let applied = window.lastApplied,
+        guard !animator.isRunning, let window = window(for: element),
+            CACurrentMediaTime() - window.appliedAt > 0.3, let key = window.key, let applied = window.lastApplied,
             let frame = element.frame
         else { return }
         let actual = Rect(frame)
@@ -1366,11 +1385,11 @@ final class Engine {
 
         if resized {
             guard abs(actual.width - applied.width) > 4, let display = display(for: key) else { return }
-            // A tile in a slide doesn't own the column's width; snap it back after the resize.
+            // Resizing a tile in a slide: the others follow live, then MacSlider offers options.
             if let strip = strips[key], let (c, _) = strip.locate(window.id), strip.columns[c].windows.count > 1,
                 strip.columns[c].isTiled || strip.columns[c].isTabbed
             {
-                whenMouseIsUp { [weak self] in self?.finishUserMove(window, resized: true) }
+                liveResize(window, to: actual, key: key, display: display)
                 return
             }
             let fraction = settings.layout.fraction(forColumnWidth: actual.width, viewportWidth: viewport(of: display).width)
@@ -1379,6 +1398,113 @@ final class Engine {
             guard abs(actual.x - applied.x) > 8 || abs(actual.y - applied.y) > 8 else { return }
         }
         whenMouseIsUp { [weak self] in self?.finishUserMove(window, resized: resized) }
+    }
+
+    /// The window being resized by hand, if any.
+    private var resizing: WindowID?
+
+    private func liveResize(_ window: ManagedWindow, to actual: Rect, key: StripKey, display: Display) {
+        if resizing != window.id {
+            recordHistory()
+            resizing = window.id
+        }
+        if var strip = strips[key], let (c, _) = strip.locate(window.id) {
+            let column = strip.columnFrames(config: settings.layout, viewport: viewport(of: display))[c].frame
+            let fraction = (width: actual.width / max(column.width, 1), height: actual.height / max(column.height, 1))
+            if strip.resizeTile(window.id, toFraction: fraction) {
+                strips[key] = strip
+                // Move the others now; the window under the pointer is the user's.
+                layout(animated: false, updateOverlays: false, skip: [window.id])
+            }
+        }
+        whenMouseIsUp { [weak self] in self?.finishResize(window) }
+    }
+
+    private func finishResize(_ window: ManagedWindow) {
+        resizing = nil
+        window.lastApplied = nil
+        layout(animated: true)
+        scheduleSave()
+        guard settings.resizeAssist, let key = window.key, let strip = strips[key],
+            let (c, _) = strip.locate(window.id), let frame = window.element.frame
+        else { return }
+        onResized(window.id, frame, window.appName, strip.columns[c].windows.count > 1)
+    }
+
+    /// Called after the user resizes a window in a slide, to offer options.
+    var onResized: (WindowID, CGRect, String, Bool) -> Void = { _, _, _, _ in }
+
+    /// Resize assist: give the window a slide of its own.
+    func giveOwnSlide(_ id: WindowID) {
+        guard let key = windows[id]?.key, var strip = strips[key] else { return }
+        recordHistory()
+        strip.focus(id)
+        strip.expel()
+        commit(strip, key)
+    }
+
+    /// Resize assist: keep the window and move its slide-mates to a new slide.
+    func moveOthersOut(keeping id: WindowID) {
+        guard let key = windows[id]?.key, var strip = strips[key] else { return }
+        recordHistory()
+        strip.moveOthersOut(keeping: id)
+        commit(strip, key)
+    }
+
+    private func commit(_ strip: Strip, _ key: StripKey) {
+        var strip = strip
+        if let display = display(for: key) {
+            strip.revealFocused(config: settings.layout, viewportWidth: viewport(of: display).width)
+        }
+        strips[key] = strip
+        layout(animated: true)
+        scheduleSave()
+    }
+
+    // MARK: - Undo
+
+    private struct Snapshot {
+        var strips: [StripKey: Strip]
+        var activeWorkspace: [ScreenKey: Int]
+    }
+
+    private var history: [Snapshot] = []
+
+    /// Saves the layout before a change, so it can be undone.
+    private func recordHistory() {
+        history.append(Snapshot(strips: strips, activeWorkspace: activeWorkspace))
+        if history.count > 40 { history.removeFirst(history.count - 40) }
+    }
+
+    var canUndo: Bool { !history.isEmpty }
+
+    /// Puts the layout back the way it was before the last change. Windows
+    /// that closed since are dropped; windows opened since are placed anew.
+    func undo() {
+        guard isRunning, !isPaused, let snapshot = history.popLast() else {
+            NSSound.beep()
+            return
+        }
+        strips = snapshot.strips
+        activeWorkspace = snapshot.activeWorkspace
+        var placed = Set<WindowID>()
+        for (key, var strip) in strips {
+            for id in strip.allWindows where windows[id] == nil { strip.remove(id) }
+            strips[key] = strip
+            for id in strip.allWindows {
+                windows[id]?.key = key
+                placed.insert(id)
+            }
+        }
+        for window in windows.values where window.key != nil && !placed.contains(window.id) {
+            window.key = nil
+            if let frame = window.element.frame, let display = display(containing: frame) ?? displays.first {
+                place(window, in: currentKey(display), display: display, focus: false, restoring: false)
+            }
+        }
+        layout(animated: true)
+        scheduleSave()
+        onStateChange()
     }
 
     /// Recent snap-backs per window, so MacSlider never fights an app that
@@ -1408,6 +1534,7 @@ final class Engine {
 
     private func finishUserMove(_ window: ManagedWindow, resized: Bool) {
         guard let key = window.key, var strip = strips[key], let display = display(for: key) else { return }
+        recordHistory()
         if !resized, let frame = window.element.frame, let source = strip.locate(window.id)?.column {
             let frames = strip.columnFrames(config: settings.layout, viewport: viewport(of: display))
             let dropX = frame.midX

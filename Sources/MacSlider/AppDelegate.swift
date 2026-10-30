@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let updater = Updater()
     private let practice = PracticeTracker()
     private let sliderBar = SliderBarController()
+    private let resizeAssist = ResizeAssist()
     private let popover = SliderPopover()
     private let statusMenu = NSMenu()
     private let navigation = SettingsNavigation()
@@ -112,6 +113,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         popover.updater = updater
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
+        engine.onResized = { [weak self] id, frame, name, hasOthers in
+            self?.resizeAssist.show(for: id, frame: frame, appName: name, hasOthers: hasOthers)
+        }
+        resizeAssist.actions = ResizeAssist.Actions(
+            ownSlide: { [weak self] id in self?.engine.giveOwnSlide(id) },
+            othersOut: { [weak self] id in self?.engine.moveOthersOut(keeping: id) },
+            undo: { [weak self] in self?.engine.undo() }
+        )
 
         input.isPaused = { [weak self] in self?.engine.isPaused ?? false }
         input.onAction = { [weak self] action in
@@ -258,6 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setUpStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusMenu.delegate = self
+        statusMenu.autoenablesItems = false
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked(_:))
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -312,6 +322,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Overview", #selector(showOverview), action: .overview))
         menu.addItem(item("Search Windows…", #selector(showSwitcher), action: .windowSwitcher))
         menu.addItem(item("Reset to Smart Pairs", #selector(regroup), action: .regroup))
+        let undoItem = item("Undo Layout Change", #selector(undoLayout), action: .undo)
+        undoItem.isEnabled = engine.canUndo
+        menu.addItem(undoItem)
         menu.addItem(item("Retile Windows", #selector(retile), action: .retile))
 
         if store.settings.workspaceCount > 1 {
@@ -377,6 +390,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func showOverview() { overview.show() }
     @objc private func regroup() { engine.perform(.regroup) }
+    @objc private func undoLayout() { engine.undo() }
     @objc private func checkForUpdates() { updater.check(userInitiated: true) }
 
     private func headerTitle(trusted: Bool) -> String {

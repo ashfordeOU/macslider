@@ -482,6 +482,56 @@ public struct Strip: Equatable, Codable, Sendable {
         if let focused { focus(focused) }
     }
 
+    // MARK: - Resizing inside a slide
+
+    /// The user resized `window` to `fraction` of its slide (width, height).
+    /// Adjusts the slide so the other windows fill the rest: main layouts move
+    /// their split; a side-by-side or stacked pair becomes main + side or main
+    /// + bottom. Returns false if this slide can't follow a resize.
+    @discardableResult
+    public mutating func resizeTile(_ window: WindowID, toFraction fraction: (width: Double, height: Double)) -> Bool {
+        guard let (c, r) = locate(window), !columns[c].isTabbed, columns[c].windows.count >= 2 else { return false }
+        var column = columns[c]
+        let count = column.windows.count
+        let share: Double
+        switch column.arrangement {
+        case .mainLeft:
+            share = r == 0 ? fraction.width : 1 - fraction.width
+        case .mainTop:
+            share = r == 0 ? fraction.height : 1 - fraction.height
+        case .columns where count == 2, .grid where count == 2:
+            column.arrangement = .mainLeft
+            share = r == 0 ? fraction.width : 1 - fraction.width
+        case .stack where count == 2:
+            column.arrangement = .mainTop
+            share = r == 0 ? fraction.height : 1 - fraction.height
+        default:
+            return false
+        }
+        let range = Arrangement.splitRange
+        column.split = min(max(share, range.lowerBound), range.upperBound)
+        column.isCustom = true
+        columns[c] = column
+        return true
+    }
+
+    /// Leaves `window` alone in its slide and moves the slide's other windows
+    /// into a new slide right after it.
+    @discardableResult
+    public mutating func moveOthersOut(keeping window: WindowID) -> Bool {
+        guard let (c, _) = locate(window), columns[c].windows.count > 1 else { return false }
+        var column = columns[c]
+        let others = column.windows.filter { $0 != window }
+        column.windows = [window]
+        column.active = 0
+        column.isCustom = true
+        columns[c] = column
+        columns.insert(
+            Column(windows: others, width: column.width, arrangement: column.arrangement, isCustom: true), at: c + 1)
+        focusedColumn = c
+        return true
+    }
+
     // MARK: - Remembering places
 
     /// Where a window sits, so it can go back there after being hidden,

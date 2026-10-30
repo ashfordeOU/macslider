@@ -115,6 +115,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var tilesPerSlide = 2
     /// Snap windows back when an app moves or resizes one by itself.
     public var keepWindowsInPlace = true
+    /// After resizing a window in a slide, offer to rearrange the slide.
+    public var resizeAssist = true
     /// Put a newly opened lone window into a slide with another app's lone
     /// window. When off, that only happens when regrouping (⌃⌥A).
     public var pairLoneWindowsOnOpen = false
@@ -169,7 +171,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically, resizeAssist
     }
 
     public init(from decoder: Decoder) throws {
@@ -212,6 +214,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         iconOpensSlider = value(.iconOpensSlider, d.iconOpensSlider)
         pairLoneWindowsOnOpen = value(.pairLoneWindowsOnOpen, d.pairLoneWindowsOnOpen)
         keepWindowsInPlace = value(.keepWindowsInPlace, d.keepWindowsInPlace)
+        resizeAssist = value(.resizeAssist, d.resizeAssist)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

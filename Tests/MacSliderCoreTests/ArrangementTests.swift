@@ -105,4 +105,27 @@ final class ArrangementTests: XCTestCase {
         let tiles = main.layout(config: config, viewport: viewport).map(\.frame)
         XCTAssertEqual(tiles[0].x, 480, "the main tile is mirrored to the right")
     }
+
+    func testResizingATileMovesTheSplit() {
+        var pair = slide([1, 2], .columns)
+        XCTAssertTrue(pair.resizeTile(2, toFraction: (0.3, 1)))
+        XCTAssertEqual(pair.columns[0].arrangement, .mainLeft)
+        XCTAssertEqual(pair.columns[0].split, 0.7, accuracy: 0.0001)
+        XCTAssertTrue(pair.columns[0].isCustom)
+
+        var main = slide([1, 2, 3], .mainTop)
+        XCTAssertTrue(main.resizeTile(1, toFraction: (1, 0.9)))
+        XCTAssertEqual(main.columns[0].split, Arrangement.splitRange.upperBound, "clamped")
+
+        var grid = slide([1, 2, 3, 4], .grid)
+        XCTAssertFalse(grid.resizeTile(1, toFraction: (0.4, 0.5)), "a 2×2 grid has no single split")
+    }
+
+    func testMoveOthersOut() {
+        var strip = slide([1, 2, 3], .mainLeft)
+        XCTAssertTrue(strip.moveOthersOut(keeping: 2))
+        XCTAssertEqual(strip.columns.map(\.windows), [[2], [1, 3]])
+        XCTAssertEqual(strip.focusedWindow, 2)
+        XCTAssertFalse(strip.moveOthersOut(keeping: 2))
+    }
 }

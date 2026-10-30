@@ -62,6 +62,7 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case moveToWorkspace8 = "move-to-workspace-8"
     case moveToWorkspace9 = "move-to-workspace-9"
     case retile
+    case undo
     case togglePause = "toggle-pause"
 
     public var title: String {
@@ -100,6 +101,7 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .windowSwitcher: return "Search windows"
         case .sendToNextDisplay: return "Send to next display"
         case .retile: return "Retile everything"
+        case .undo: return "Undo last layout change"
         case .togglePause: return "Pause / resume"
         default:
             if let n = columnNumber { return "Focus column \(n)" }

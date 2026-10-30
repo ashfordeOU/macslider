@@ -180,6 +180,7 @@ public struct Keymap: Equatable, Codable, Sendable {
             .windowSwitcher: [s(KeyCode.space, co)],
             .sendToNextDisplay: [s(KeyCode.d, co), s(KeyCode.n, co)],
             .retile: [s(KeyCode.escape, co)],
+            .undo: [s(KeyCode.z, co)],
             .togglePause: [s(KeyCode.q, co)],
         ]
         // Digits switch workspaces (add Shift to take the window along).
