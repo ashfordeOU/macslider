@@ -39,6 +39,19 @@ public enum SwipeFingers: Int, Codable, CaseIterable, Sendable {
     case four = 4
 }
 
+/// When the slider bar (the mini-map of the strip) is on screen.
+public enum SliderBarMode: String, Codable, CaseIterable, Sendable {
+    case off
+    /// Appears while the strip moves, then fades away.
+    case whileMoving
+    /// Always visible; windows leave room for it.
+    case always
+}
+
+public enum SliderBarEdge: String, Codable, CaseIterable, Sendable {
+    case top, bottom
+}
+
 /// User settings, persisted as JSON. Every field has a default and missing
 /// fields decode to it, so older or hand-edited files keep working.
 public struct AppSettings: Equatable, Codable, Sendable {
@@ -85,6 +98,11 @@ public struct AppSettings: Equatable, Codable, Sendable {
     /// Per-app rules.
     public var appRules: [AppRule] = AppSettings.defaultAppRules
     public var keymap: Keymap = .default
+    /// The slider bar: a mini-map of the strip you can drag to slide.
+    public var sliderBar: SliderBarMode = .whileMoving
+    public var sliderBarEdge: SliderBarEdge = .bottom
+    /// Height reserved for the slider bar when it is always shown.
+    public static let sliderBarHeight = 64.0
     /// Group windows into full-screen slides by app as they open.
     public var groupByApp = true
     /// Windows per slide when grouping, unless an app rule says otherwise.
@@ -131,7 +149,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge
     }
 
     public init(from decoder: Decoder) throws {
@@ -168,6 +186,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
         tilesPerSlide = value(.tilesPerSlide, d.tilesPerSlide)
         workspaceCount = min(max(value(.workspaceCount, d.workspaceCount), 1), 9)
         checkForUpdates = value(.checkForUpdates, d.checkForUpdates)
+        sliderBar = value(.sliderBar, d.sliderBar)
+        sliderBarEdge = value(.sliderBarEdge, d.sliderBarEdge)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {
             // Version 2 added the terminal rules (four tiles per slide).

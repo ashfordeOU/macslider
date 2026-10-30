@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var overview = OverviewController(engine: engine)
     private let updater = Updater()
     private let practice = PracticeTracker()
+    private let sliderBar = SliderBarController()
     private let navigation = SettingsNavigation()
     private var statusItem: NSStatusItem!
     private var arrowItems: [NSStatusItem] = []
@@ -49,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        sliderBar.hideAll(animated: false)
         input.stop()
         trackpad.stop()
         engine.shutdown()
@@ -78,7 +80,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.onChange = { [weak self] settings in self?.apply(settings) }
         store.onRecordingChange = { [weak self] recording in self?.input.isSuspended = recording }
 
-        engine.onStateChange = { [weak self] in self?.updateStatusItem() }
+        engine.onStateChange = { [weak self] in
+            self?.updateStatusItem()
+            self?.sliderBar.update()
+        }
+        sliderBar.mapsProvider = { [weak self] in self?.engine.miniMaps() ?? [] }
+        sliderBar.actions = SliderBarController.Actions(
+            slide: { [weak self] x, uuid in self?.engine.slide(to: x, displayUUID: uuid) },
+            endSlide: { [weak self] in self?.engine.endSlide() },
+            focus: { [weak self] id in self?.engine.focusAndReveal(id) },
+            switchWorkspace: { [weak self] index in self?.engine.switchWorkspace(to: index) },
+            showOverview: { [weak self] in self?.overview.show() }
+        )
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
 
@@ -133,6 +146,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         input.slideTrigger = settings.slideTrigger
         updateArrowItems(visible: settings.showNavigationArrows)
         updater.setAutomatic(settings.checkForUpdates)
+        sliderBar.mode = settings.sliderBar
+        sliderBar.edge = settings.sliderBarEdge
+        sliderBar.update()
 
         trackpad.fingers = settings.swipeFingers.rawValue
         if settings.swipeFingers == .off { trackpad.stop() } else if engine.isRunning { trackpad.start() }

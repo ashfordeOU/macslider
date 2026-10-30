@@ -289,6 +289,23 @@ private struct AppearancePane: View {
 
     var body: some View {
         Form {
+            Section {
+                Picker("Show the slider bar", selection: $store.settings.sliderBar) {
+                    Text("While sliding").tag(SliderBarMode.whileMoving)
+                    Text("Always").tag(SliderBarMode.always)
+                    Text("Never").tag(SliderBarMode.off)
+                }
+                Picker("Position", selection: $store.settings.sliderBarEdge) {
+                    Text("Bottom of the screen").tag(SliderBarEdge.bottom)
+                    Text("Top of the screen").tag(SliderBarEdge.top)
+                }
+                .disabled(store.settings.sliderBar == .off)
+            } header: {
+                Text("Slider bar")
+            } footer: {
+                Text("A mini-map of every slide in the workspace. The highlighted frame is what's on screen: drag it, or anywhere on the bar, to slide your windows along, and click a slide to jump to it. When it's always shown, windows leave room for it.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             Section("Focus border") {
                 Toggle("Outline the focused window", isOn: $store.settings.focusBorder)
                 ColorPicker("Colour", selection: borderColor, supportsOpacity: false)
