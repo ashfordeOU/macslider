@@ -99,7 +99,9 @@ struct OverviewView: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.55)
+            // Sits on a behind-window blur (see OverviewController), so this
+            // tint only needs to darken it enough for text to read cleanly.
+            Color.black.opacity(0.62)
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture { actions.close() }
@@ -446,7 +448,22 @@ final class OverviewController {
             },
             close: { [weak self] in self?.close() }
         )
-        panel.contentView = NSHostingView(rootView: OverviewView(model: model, actions: actions))
+        // Frosted glass: blur whatever is behind the overview, then draw on top.
+        let blur = NSVisualEffectView()
+        blur.material = .hudWindow
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.appearance = NSAppearance(named: .darkAqua)
+        let host = NSHostingView(rootView: OverviewView(model: model, actions: actions))
+        host.translatesAutoresizingMaskIntoConstraints = false
+        blur.addSubview(host)
+        NSLayoutConstraint.activate([
+            host.leadingAnchor.constraint(equalTo: blur.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: blur.trailingAnchor),
+            host.topAnchor.constraint(equalTo: blur.topAnchor),
+            host.bottomAnchor.constraint(equalTo: blur.bottomAnchor),
+        ])
+        panel.contentView = blur
         return panel
     }
 }

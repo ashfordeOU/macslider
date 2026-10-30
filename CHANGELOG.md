@@ -6,6 +6,12 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [0.2.2] - 2026-10-30
 
+### Added
+- One-click updates: MacSlider downloads, verifies (checksum and code signature), installs and relaunches itself. Optional fully automatic installs, and an Update button in the menu bar slider.
+
+### Fixed
+- The overview now sits on a frosted, blurred backdrop, so windows behind it no longer show through the text.
+
 ### Changed
 - Releases are signed with MacSlider's own certificate, so macOS keeps the Accessibility permission across updates. Updating from an earlier version needs one last re-grant.
 

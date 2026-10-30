@@ -124,6 +124,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var workspaceCount = 4
     /// Look for new versions on GitHub once a day.
     public var checkForUpdates = true
+    /// Install new versions without asking (MacSlider relaunches itself).
+    public var installUpdatesAutomatically = false
     /// Bumped when new default app rules ship, so existing settings pick them up once.
     public var rulesVersion = AppSettings.currentRulesVersion
     public static let currentRulesVersion = 2
@@ -167,7 +169,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case mouseFollowsFocus, focusFollowsMouse, keepHeights, focusBorder, focusBorderWidth
         case focusBorderColor, dimInactive, dimAmount, showColumnIndicator, newWindowPosition
         case appRules, keymap, hasCompletedOnboarding, groupByApp, tilesPerSlide, workspaceCount
-        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace
+        case checkForUpdates, rulesVersion, sliderBar, sliderBarEdge, slideArrangement, iconOpensSlider, pairLoneWindowsOnOpen, keepWindowsInPlace, installUpdatesAutomatically
     }
 
     public init(from decoder: Decoder) throws {
@@ -210,6 +212,7 @@ public struct AppSettings: Equatable, Codable, Sendable {
         iconOpensSlider = value(.iconOpensSlider, d.iconOpensSlider)
         pairLoneWindowsOnOpen = value(.pairLoneWindowsOnOpen, d.pairLoneWindowsOnOpen)
         keepWindowsInPlace = value(.keepWindowsInPlace, d.keepWindowsInPlace)
+        installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {
             // Version 2 added the terminal rules (four tiles per slide).

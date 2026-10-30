@@ -337,6 +337,7 @@ final class SliderPopover: NSObject, NSPopoverDelegate {
     var actions = SliderBarController.Actions(
         slide: { _, _ in }, endSlide: {}, focus: { _ in }, switchWorkspace: { _ in }, showOverview: {})
     var controls = Controls(isPaused: { false }, resetPairs: {}, togglePause: {}, openSettings: {})
+    var updater: Updater?
 
     private let popover = NSPopover()
     private let model = SliderBarModel()
@@ -364,7 +365,7 @@ final class SliderPopover: NSObject, NSPopoverDelegate {
             }
             let controls = self.controls
             let view = SliderPopoverView(
-                model: model, paused: paused, actions: wrapped,
+                model: model, paused: paused, updater: updater ?? Updater(), actions: wrapped,
                 resetPairs: { [weak self] in
                     controls.resetPairs()
                     self?.refresh()
@@ -402,6 +403,7 @@ final class PausedState: ObservableObject {
 private struct SliderPopoverView: View {
     @ObservedObject var model: SliderBarModel
     @ObservedObject var paused: PausedState
+    @ObservedObject var updater: Updater
     let actions: SliderBarController.Actions
     let resetPairs: () -> Void
     let togglePause: () -> Void
@@ -417,6 +419,17 @@ private struct SliderPopoverView: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
+                if let release = updater.available {
+                    Button {
+                        updater.installAvailable()
+                    } label: {
+                        Label("Update to \(release.version)", systemImage: "arrow.down.circle.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(updater.isInstalling)
+                    .help("Download, install and relaunch — your windows stay where they are")
+                }
                 Button(action: resetPairs) { Image(systemName: "wand.and.stars") }
                     .help("Reset to smart pairs: windows of the same app together")
                 Button(action: togglePause) {

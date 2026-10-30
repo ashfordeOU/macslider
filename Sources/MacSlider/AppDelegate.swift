@@ -109,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             showOverview: { [weak self] in self?.overview.show() }
         )
         popover.actions = sliderBar.actions
+        popover.updater = updater
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
 
@@ -163,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         input.slideTrigger = settings.slideTrigger
         updateArrowItems(visible: settings.showNavigationArrows)
         updater.setAutomatic(settings.checkForUpdates)
+        updater.installAutomatically = settings.installUpdatesAutomatically
         sliderBar.mode = settings.sliderBar
         sliderBar.edge = settings.sliderBarEdge
         sliderBar.update()

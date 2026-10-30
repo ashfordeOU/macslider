@@ -67,6 +67,15 @@ curl -fsSL https://raw.githubusercontent.com/ashfordeOU/macslider/main/scripts/i
 
 This downloads the latest release, installs it in `/Applications` and opens it.
 
+### Updates
+
+MacSlider updates itself. When a new version is out it offers **Install and
+Relaunch** (or shows **Update** in the menu bar slider): it downloads the
+release from GitHub, checks it against the published SHA-256 checksum and
+MacSlider's code signature, swaps it in and reopens, with your windows where
+they were. Turn on **Install updates automatically** in **Settings → General**
+to skip the question, or use **Check for Updates…** in the menu any time.
+
 ### Requirements
 
 - macOS 13 Ventura or later
@@ -313,9 +322,9 @@ before any app can move other apps' windows. You can revoke it at any time in
 Live previews in the overview are optional and need **Screen Recording**
 permission. Previews are drawn on your Mac and never stored or sent anywhere.
 
-MacSlider has no account, analytics or telemetry. Its only network request is
-a daily check of this repository's latest release, which you can turn off in
-**Settings → General**.
+MacSlider has no account, analytics or telemetry. Its only network requests go
+to this repository's GitHub releases: a daily check for a new version and,
+when you accept one, its download. Both can be turned off in **Settings → General**.
 
 ## Build from source
 

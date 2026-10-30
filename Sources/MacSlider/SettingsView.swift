@@ -93,6 +93,8 @@ private struct GeneralPane: View {
                     Text("Workspaces per display: \(store.settings.workspaceCount)")
                 }
                 Toggle("Check for updates automatically", isOn: $store.settings.checkForUpdates)
+                Toggle("Install updates automatically", isOn: $store.settings.installUpdatesAutomatically)
+                    .disabled(!store.settings.checkForUpdates)
                 Picker("New windows open", selection: $store.settings.newWindowPosition) {
                     Text("Next to the focused window").tag(Strip.InsertPosition.afterFocused)
                     Text("At the end of the strip").tag(Strip.InsertPosition.end)
