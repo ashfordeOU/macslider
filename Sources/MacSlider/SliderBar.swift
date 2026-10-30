@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 import MacSliderCore
 import SwiftUI
 
@@ -23,6 +24,8 @@ final class SliderBarController {
 
     private var bars: [String: (panel: NSPanel, model: SliderBarModel)] = [:]
     private var hideTimer: Timer?
+    private let preview = SlidePreview()
+    private var subscriptions: [AnyCancellable] = []
     private static let height: CGFloat = 52
     private static let margin: CGFloat = 6
 
@@ -62,8 +65,15 @@ final class SliderBarController {
         }
     }
 
+    /// True if `point` (Cocoa coordinates) is over a visible slider bar, so
+    /// scrolling there can slide the strip.
+    func contains(_ point: CGPoint) -> Bool {
+        bars.values.contains { $0.panel.isVisible && $0.panel.alphaValue > 0.5 && $0.panel.frame.contains(point) }
+    }
+
     func hideAll(animated: Bool) {
         hideTimer?.invalidate()
+        preview.hide()
         for bar in bars.values {
             if animated {
                 NSAnimationContext.runAnimationGroup({ context in
@@ -80,8 +90,8 @@ final class SliderBarController {
         hideTimer?.invalidate()
         hideTimer = Timer.scheduledTimer(withTimeInterval: 1.6, repeats: false) { [weak self] _ in
             guard let self, self.mode == .whileMoving else { return }
-            // Stay while the pointer is on a bar or a drag is in progress.
-            if self.bars.values.contains(where: { $0.model.isHovering || $0.model.isDragging }) {
+            // Stay while the pointer is on a bar or its preview, or a drag is in progress.
+            if self.preview.isHovered || self.bars.values.contains(where: { $0.model.isHovering || $0.model.isDragging }) {
                 self.scheduleHide()
             } else {
                 self.hideAll(animated: true)
@@ -127,6 +137,16 @@ final class SliderBarController {
         panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         let view = SliderBarView(model: model, actions: actions) { [weak self] in self?.scheduleHide() }
+        model.$hoveredTile
+            .removeDuplicates { $0?.id == $1?.id && $0?.windows == $1?.windows }
+            .sink { [weak self, weak panel] tile in
+                guard let self, let panel else { return }
+                self.preview.focus = self.actions.focus
+                self.preview.hover(tile, over: panel, edge: self.edge, number: tile.flatMap { tile in
+                    model.map?.tiles.firstIndex { $0.id == tile.id }.map { $0 + 1 }
+                })
+            }
+            .store(in: &subscriptions)
         panel.contentView = NSHostingView(rootView: view)
         return (panel, model)
     }
@@ -134,6 +154,8 @@ final class SliderBarController {
 
 final class SliderBarModel: ObservableObject {
     @Published var map: Engine.MiniMap?
+    /// The tile under the pointer, for the live preview.
+    @Published var hoveredTile: Engine.MiniTile?
     @Published var isHovering = false
     @Published var isDragging = false
 }
@@ -222,8 +244,13 @@ private struct SliderBarView: View {
                         .onTapGesture {
                             if let window = tile.windows.first { actions.focus(window.id) }
                         }
-                        .help(tile.windows.map { $0.title.isEmpty ? $0.appName : "\($0.appName) — \($0.title)" }
-                            .joined(separator: "\n"))
+                        .onHover { hovering in
+                            if hovering {
+                                model.hoveredTile = tile
+                            } else if model.hoveredTile?.id == tile.id {
+                                model.hoveredTile = nil
+                            }
+                        }
                 }
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.accentColor.opacity(0.14))
@@ -321,6 +348,208 @@ private struct TileOutlines: Shape {
         return path
     }
 }
+// MARK: - Live preview
+
+/// The popup that appears above a slider-bar tile: that slide's windows,
+/// live, laid out as they are on screen. Click one to jump to it.
+final class SlidePreview {
+    var focus: (WindowID) -> Void = { _ in }
+    private(set) var isHovered = false
+
+    private let model = PreviewModel()
+    private var panel: NSPanel?
+    private var showTimer: Timer?
+    private var hideTimer: Timer?
+    private var refreshTimer: Timer?
+    private static let width: CGFloat = 440
+
+    func hover(_ tile: Engine.MiniTile?, over bar: NSPanel, edge: SliderBarEdge, number: Int?) {
+        showTimer?.invalidate()
+        guard let tile, !tile.windows.isEmpty else {
+            scheduleHide()
+            return
+        }
+        hideTimer?.invalidate()
+        let present = { [weak self] in
+            guard let self else { return }
+            self.model.tile = tile
+            self.model.number = number ?? 0
+            self.show(over: bar, edge: edge)
+        }
+        // Appear after a short pause; once open, follow the pointer instantly.
+        if panel?.isVisible == true {
+            present()
+        } else {
+            showTimer = Timer.scheduledTimer(withTimeInterval: 0.22, repeats: false) { _ in present() }
+        }
+    }
+
+    func hide() {
+        showTimer?.invalidate()
+        hideTimer?.invalidate()
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+        panel?.orderOut(nil)
+        isHovered = false
+    }
+
+    private func scheduleHide() {
+        hideTimer?.invalidate()
+        hideTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { [weak self] _ in
+            guard let self, !self.isHovered else { return }
+            self.hide()
+        }
+    }
+
+    private func show(over bar: NSPanel, edge: SliderBarEdge) {
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        let screen = bar.screen?.frame ?? NSScreen.main?.frame ?? .zero
+        model.aspect = Double(screen.width / max(screen.height, 1))
+        let height = Self.width / CGFloat(model.aspect) + 44
+        let mouseX = NSEvent.mouseLocation.x
+        var x = mouseX - Self.width / 2
+        x = min(max(x, screen.minX + 8), screen.maxX - Self.width - 8)
+        let y = edge == .bottom ? bar.frame.maxY + 8 : bar.frame.minY - height - 8
+        panel.setFrame(NSRect(x: x, y: y, width: Self.width, height: height), display: true)
+        panel.orderFrontRegardless()
+        refresh()
+        if refreshTimer == nil {
+            // Live: refresh the window images while the preview is open.
+            refreshTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in self?.refresh() }
+        }
+    }
+
+    private func refresh() {
+        model.previewsAllowed = WindowThumbnails.isAllowed
+        guard model.previewsAllowed, let tile = model.tile else { return }
+        let ids = tile.windows.map(\.id)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var images: [WindowID: NSImage] = [:]
+            for id in ids { images[id] = WindowThumbnails.capture(id) }
+            DispatchQueue.main.async { self?.model.images.merge(images) { _, new in new } }
+        }
+    }
+
+    private func makePanel() -> NSPanel {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 300),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .popUpMenu
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle, .fullScreenAuxiliary]
+        let view = PreviewView(
+            model: model,
+            focus: { [weak self] id in
+                self?.hide()
+                self?.focus(id)
+            },
+            hovering: { [weak self] inside in
+                guard let self else { return }
+                self.isHovered = inside
+                if inside { self.hideTimer?.invalidate() } else { self.scheduleHide() }
+            })
+        panel.contentView = NSHostingView(rootView: view)
+        return panel
+    }
+}
+
+private final class PreviewModel: ObservableObject {
+    @Published var tile: Engine.MiniTile?
+    @Published var number = 0
+    @Published var images: [WindowID: NSImage] = [:]
+    @Published var previewsAllowed = WindowThumbnails.isAllowed
+    var aspect = 16.0 / 10.0
+}
+
+private struct PreviewView: View {
+    @ObservedObject var model: PreviewModel
+    let focus: (WindowID) -> Void
+    let hovering: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let tile = model.tile {
+                HStack(spacing: 6) {
+                    Text("Slide \(model.number)").font(.system(size: 12, weight: .semibold))
+                    Text("\(tile.windows.count) \(tile.windows.count == 1 ? "window" : "windows") · \(tile.arrangement.title)")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    Spacer()
+                    if !model.previewsAllowed {
+                        Button("Show live previews") {
+                            WindowThumbnails.requestAccess()
+                        }
+                        .buttonStyle(.link)
+                        .font(.system(size: 11))
+                        .help("Needs Screen Recording permission. Previews stay on your Mac.")
+                    }
+                }
+                GeometryReader { geometry in
+                    let frames = tile.arrangement.unitFrames(count: tile.windows.count, split: tile.split)
+                    ZStack(alignment: .topLeading) {
+                        ForEach(Array(tile.windows.enumerated()), id: \.element.id) { index, window in
+                            let unit = frames[index]
+                            PreviewTile(window: window, image: model.images[window.id])
+                                .frame(
+                                    width: max(unit.width * geometry.size.width - 6, 10),
+                                    height: max(unit.height * geometry.size.height - 6, 10))
+                                .offset(x: unit.minX * geometry.size.width + 3, y: unit.minY * geometry.size.height + 3)
+                                .onTapGesture { focus(window.id) }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
+        .onHover(perform: hovering)
+    }
+}
+
+private struct PreviewTile: View {
+    let window: Engine.MiniWindow
+    let image: NSImage?
+    @State private var hovered = false
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08))
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else if let icon = AppIcons.icon(for: window.pid) {
+                Image(nsImage: icon).resizable().frame(width: 36, height: 36)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            HStack(spacing: 4) {
+                if image != nil, let icon = AppIcons.icon(for: window.pid) {
+                    Image(nsImage: icon).resizable().frame(width: 13, height: 13)
+                }
+                Text(window.title.isEmpty ? window.appName : window.title)
+                    .font(.system(size: 10, weight: .medium)).lineLimit(1)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6).padding(.vertical, 3)
+            .background(Capsule().fill(Color.black.opacity(0.6)))
+            .padding(4)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(hovered ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: hovered ? 2 : 1))
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+    }
+}
+
 // MARK: - Menu bar popover
 
 /// What a left-click on the menu bar icon shows: the slider, the slides as

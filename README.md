@@ -175,7 +175,8 @@ While the strip moves, a slider bar fades in at the bottom of the screen:
 every slide in the workspace as a small tile with its apps' icons, and a
 highlighted frame for the part that's on screen.
 
-- **Drag** the frame, or anywhere on the bar, and all your windows slide along with it.
+- **Hover** a tile for a live preview of that slide's windows, laid out as they are on screen; click one to jump straight to it.
+- **Drag** the frame, or anywhere on the bar, or just **scroll** over it, and all your windows slide along.
 - **Click** a tile to jump to that slide.
 - **Dots** on the left switch workspaces; the grid button on the right opens the overview.
 

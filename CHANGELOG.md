@@ -7,6 +7,7 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ## [0.2.2] - 2026-10-30
 
 ### Added
+- Live previews: hover a slide on the slider bar to see its windows live, and click one to jump to it. Scrolling over the bar slides the strip.
 - One-click updates: MacSlider downloads, verifies (checksum and code signature), installs and relaunches itself. Optional fully automatic installs, and an Update button in the menu bar slider.
 
 ### Fixed

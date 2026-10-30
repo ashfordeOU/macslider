@@ -121,7 +121,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         input.onScroll = { [weak self] delta in self?.engine.swipe(by: delta) }
         input.onScrollEnd = { [weak self] in self?.engine.endSwipe() }
         input.onStep = { [weak self] forward in self?.engine.step(forward: forward) }
-        input.isOverMenuBar = { point in Self.isOverMenuBar(point) }
+        input.isOverMenuBar = { [weak self] point in
+            // Scrolling over the menu bar or a visible slider bar slides the strip.
+            guard !Self.isOverMenuBar(point) else { return true }
+            let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+            return self?.sliderBar.contains(CGPoint(x: point.x, y: primaryHeight - point.y)) ?? false
+        }
         input.onSlideModeChange = { [weak self] on in
             if on { self?.slideHUD.show() } else { self?.slideHUD.hide() }
         }
