@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>bundleid</key>
+	<string>org.ashforde.monorail.alfred</string>
+	<key>connections</key>
+	<dict>
+		<key>7C1A0D3E-0000-4000-8000-000000000001</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>7C1A0D3E-0000-4000-8000-000000000002</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+	</dict>
+	<key>createdby</key>
+	<string>Ashforde</string>
+	<key>description</key>
+	<string>Monorail actions, layouts, app pairs and templates</string>
+	<key>name</key>
+	<string>Monorail by Ashforde®</string>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>alfredfiltersresults</key>
+				<false/>
+				<key>argumenttype</key>
+				<integer>1</integer>
+				<key>keyword</key>
+				<string>mr</string>
+				<key>queuemode</key>
+				<integer>1</integer>
+				<key>script</key>
+				<string>#!/bin/zsh
+# Lists Monorail actions and what's saved, filtered by the query.
+dir="$HOME/Library/Application Support/Monorail"
+port=$(cat "$dir/api-port" 2&gt;/dev/null)
+token=$(cat "$dir/api-token" 2&gt;/dev/null)
+if [[ -z "$port" ]]; then
+  echo '{"items":[{"title":"Turn on Monorail’s local API","subtitle":"Monorail ▸ Settings ▸ Automation ▸ Local API","valid":false}]}'
+  exit 0
+fi
+get() { curl -s -H "Authorization: Bearer $token" "http://127.0.0.1:$port/$1"; }
+/usr/bin/python3 - "$1" "$(get actions)" "$(get layouts)" "$(get pairs)" "$(get templates)" &lt;&lt;'PY'
+import json, sys, urllib.parse
+query = sys.argv[1].lower()
+actions, layouts, pairs, templates = (json.loads(a or "[]") for a in sys.argv[2:6])
+items = [{"title": a["title"], "subtitle": a["name"], "arg": "monorail://" + a["name"]} for a in actions]
+for kind, names, path in (("Layout", layouts, "layout"), ("App pair", pairs, "pair"), ("Template", templates, "template")):
+    items += [{"title": n, "subtitle": kind, "arg": f"monorail://{path}/" + urllib.parse.quote(n)} for n in names]
+items = [i for i in items if all(t in (i["title"] + " " + i["subtitle"]).lower() for t in query.split())]
+print(json.dumps({"items": items[:40]}))
+PY
+</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>subtext</key>
+				<string>Actions, layouts, pairs and templates</string>
+				<key>title</key>
+				<string>Monorail</string>
+				<key>type</key>
+				<integer>0</integer>
+				<key>withspace</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>7C1A0D3E-0000-4000-8000-000000000001</string>
+			<key>version</key>
+			<integer>3</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>url</key>
+				<string>{query}</string>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.openurl</string>
+			<key>uid</key>
+			<string>7C1A0D3E-0000-4000-8000-000000000002</string>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>readme</key>
+	<string>Type mr and part of an action, layout, app pair or template. Needs Monorail's local API (Settings → Automation).</string>
+	<key>uidata</key>
+	<dict>
+		<key>7C1A0D3E-0000-4000-8000-000000000001</key>
+		<dict>
+			<key>xpos</key>
+			<integer>50</integer>
+			<key>ypos</key>
+			<integer>50</integer>
+		</dict>
+		<key>7C1A0D3E-0000-4000-8000-000000000002</key>
+		<dict>
+			<key>xpos</key>
+			<integer>300</integer>
+			<key>ypos</key>
+			<integer>50</integer>
+		</dict>
+	</dict>
+	<key>webaddress</key>
+	<string>https://github.com/ashfordeOU/monorail</string>
+</dict>
+</plist>
