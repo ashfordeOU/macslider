@@ -4,6 +4,28 @@ All notable changes to Monorail by Ashforde® are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-10-31
+
+### Added
+- Window hints (⌃⌥V): a letter on every window on screen; type one to go there.
+- Resize mode (⌃⌥⇧E): arrows, 1–9 and 0 resize the focused slide without the mouse.
+- Zoom out on the strip with ⌥ + pinch (or ⌃⌥⇧Z), live under your fingers; click a slide to go there.
+- Vertical workspace swipes: workspaces slide up and down.
+- Recent slides in the menu bar and the command palette.
+- Remembered widths per app, a centred lone window, and the focused one of two windows growing a little.
+- Projects: windows whose titles name a project gather in its workspace.
+- App icons on tabs, and dragging a tab onto another slide.
+- Workspace templates: apps with their files and links, started together in one slide.
+- Meetings: video calls from your calendar open a minute early, optionally switching profile.
+- Presentation mode (⌃⌥⇧Y) and recording the slide (⌃⌥⇧V).
+- Time per workspace and app in Insights.
+- Share layouts, templates and app pairs as .monorail files.
+- A local API and an MCP server (`Monorail --mcp`) so AI assistants can arrange your windows.
+- JavaScript plugins in the Scripts folder.
+- A Raycast extension and an Alfred workflow.
+- Deutsch, Français, Español and 日本語 for the menu bar menu, Settings tabs and welcome tour.
+- Practice windows in the welcome tour.
+
 ## [0.7.0] - 2026-10-31
 
 ### Added

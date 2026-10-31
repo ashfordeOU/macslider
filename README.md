@@ -448,6 +448,66 @@ search, so you can see which slide wants you.
 - **Gradient border**: the focus border can fade into a second colour.
 - **Less motion**: animations step aside when macOS's Reduce Motion or Low Power Mode is on.
 
+### Get there faster
+
+- **Window hints** (<kbd>⌃⌥V</kbd>): a big letter appears on every window on screen; type one to go there.
+- **Resize mode** (<kbd>⌃⌥⇧E</kbd>): <kbd>←</kbd> <kbd>→</kbd> change the width, <kbd>↑</kbd> <kbd>↓</kbd> the main window's share, <kbd>1</kbd>–<kbd>9</kbd> set the width in tenths of the screen, <kbd>0</kbd> fills it, <kbd>Esc</kbd> when done.
+- **Zoom out on the strip** (<kbd>⌥</kbd> + pinch, or <kbd>⌃⌥⇧Z</kbd>): the whole strip shrinks under your fingers until it all fits; click a slide to go there.
+- **Workspaces up and down**: turn on vertical swipes in **Settings → Motion & Input** and swipe up or down (with the fingers you swipe sideways with) to slide to the next or previous workspace.
+- **Recent slides**: the menu bar and the command palette list the slides you were just on.
+
+### Made for how you work
+
+- **Remembered widths**: give an app's window a width once and its new windows open at that width.
+- **A centred lone window**: when a workspace has one window, it can sit centred at 50–80% of the screen instead of stretching edge to edge.
+- **The focused window grows**: in a slide of two, the one you're in can take 55–70%.
+- **Projects**: list your projects in **Settings → Layout**; windows whose titles name one (your editor, terminal and browser on "monorail") gather in that project's workspace.
+- **Tabs**: tabbed slides show each app's icon; drag a tab out onto another slide to move the window there.
+- **Workspace templates** (**Settings → Apps**): "Coding" opens Xcode with your project, Safari at your links and Terminal in your folder, side by side in a fresh workspace. Start one from the menu bar, the palette or `monorail://template/Coding`.
+- **Meetings** (**Settings → Automation**): a minute before a calendar event with a Zoom, Meet, Teams, Webex or FaceTime link, Monorail opens the call and can switch profile.
+- **Presentation mode** (<kbd>⌃⌥⇧Y</kbd>): the slider, focus border, dimming and notices step out of sight while you present or share your screen.
+- **Record the slide** (<kbd>⌃⌥⇧V</kbd>, again to stop): a movie of just the slide you're in, saved to the Desktop. The menu bar shows ● REC meanwhile.
+- **Time**: Insights shows where your time went, per workspace and app, today and this week.
+- **Share layouts**: **Saved Layouts → Share Layout…** makes a `.monorail` file; double-click one on any Mac to add and apply it. Templates and app pairs share the same way.
+- **In your language**: menus, Settings tabs and the welcome tour in English, Deutsch, Français, Español and 日本語 (**Settings → General → Language**).
+- **Practice windows**: the welcome tour can open three practice windows, so you learn the moves without touching your work.
+
+### AI assistants (MCP)
+
+Turn on **Local API** in **Settings → Automation**, click **Copy MCP Server Config** and add it to
+Claude Desktop (or any MCP client):
+
+```json
+"monorail": { "command": "/Applications/Monorail.app/Contents/MacOS/Monorail", "args": ["--mcp"] }
+```
+
+Then ask things like "put my editor and browser side by side" or "move Slack to workspace 3".
+The assistant can list windows and workspaces, focus, move and pair windows, switch
+workspace, apply layouts, open app pairs, start templates and run any action. The API only
+listens on this Mac and every request needs a token that only you can read.
+
+The same API serves the [Raycast extension](extensions/raycast) and the
+[Alfred workflow](extensions/alfred) in this repository, and your own scripts:
+
+```bash
+curl -H "Authorization: Bearer $(cat ~/Library/Application\ Support/Monorail/api-token)" http://127.0.0.1:4767/windows
+```
+
+### Scripts
+
+Turn on **Scripts** in **Settings → Automation** and drop `.js` files in the Scripts folder:
+
+```js
+monorail.on("windowOpened", w => {
+  if (w.app === "zoom.us") monorail.moveToWorkspace(w.id, 3)
+})
+monorail.on("workspaceChanged", ws => monorail.notify("Now in " + ws.name))
+```
+
+Events: `windowOpened`, `workspaceChanged`, `focusChanged`. Calls: `perform(action)`, `focus(id)`,
+`moveToWorkspace(id, n)`, `park(n)`, `openPair(name)`, `applyLayout(name)`, `notify(text)`,
+`windows()`, `state()`.
+
 ### For power users
 
 In **Settings → Automation**:
@@ -557,6 +617,11 @@ AZERTY, QWERTZ, Dvorak and other layouts.
 | Screenshot the slide | <kbd>⌃⌥⇧C</kbd> |
 | Overview of this app's windows | <kbd>⌃⌥⇧O</kbd> |
 | Move a window from anywhere inside it | Hold <kbd>⌃⌥</kbd> and drag (right-drag resizes) |
+| Window hints | <kbd>⌃⌥V</kbd> then a letter |
+| Resize mode | <kbd>⌃⌥⇧E</kbd> |
+| Zoom out on the strip | <kbd>⌃⌥⇧Z</kbd> · <kbd>⌥</kbd> + pinch |
+| Presentation mode | <kbd>⌃⌥⇧Y</kbd> |
+| Record the slide | <kbd>⌃⌥⇧V</kbd> |
 | Undo last layout change | <kbd>⌃⌥Z</kbd> |
 | Retile everything | <kbd>⌃⌥Esc</kbd> |
 | Pause / resume | <kbd>⌃⌥Q</kbd> |
@@ -622,6 +687,8 @@ A few take a name or number:
 | `monorail://focus-mode/on` | Focus mode on or off |
 | `monorail://launch/t` | Quick launch |
 | `monorail://palette` | Command palette |
+| `monorail://template/Coding` | Start a workspace template |
+| `monorail://presentation-mode/on` | Presentation mode on or off |
 
 In the **Shortcuts** app, use the **Open URLs** action with any of these, so
 Monorail fits into your automations, Focus filters and Stream Deck buttons.
