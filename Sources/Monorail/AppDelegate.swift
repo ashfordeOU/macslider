@@ -39,6 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var demoWindows: [NSWindow] = []
     private var statsTimer: Timer?
     private var apiStarted = false
+    private var capsLockOn = false
+    private let whatsNew = WhatsNew()
+    private let weekly = WeeklySummary()
     private var scriptsOn = false
     private let statusMenu = NSMenu()
     private let navigation = SettingsNavigation()
@@ -81,6 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         stats.save()
+        // Give Caps Lock back to macOS while Monorail isn't running.
+        if store.settings.capsLockKey { CapsLockKey.set(false) }
         sliderBar.hideAll(animated: false)
         input.stop()
         trackpad.stop()
@@ -186,6 +191,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overview.setWorkspaceName = { [weak self] index, name in
             self?.store.settings.setWorkspaceName(name, at: index)
         }
+        overview.setWorkspaceNote = { [weak self] index, note in
+            let trimmed = note.trimmingCharacters(in: .whitespaces)
+            self?.store.settings.workspaceNotes[String(index)] = trimmed.isEmpty ? nil : trimmed
+        }
+        overview.toggleFit = { [weak self] key in
+            guard let self else { return }
+            self.store.settings.setFit(!self.store.settings.isFit(key.workspace), for: key.workspace)
+        }
         popover.actions = sliderBar.actions
         updater.$available
             .receive(on: DispatchQueue.main)
@@ -206,7 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         engine.onWorkspaceShown = { [weak self] name, index, count in
             guard let self, self.store.settings.workspaceHUD, !self.engine.isPresenting else { return }
-            self.workspaceHUD.show(name: name, index: index, count: count)
+            self.workspaceHUD.show(name: name, note: self.engine.workspaceNote(index), index: index, count: count)
         }
         engine.onAskForSlideName = { [weak self] id, current in self?.askForSlideName(id, current: current) }
         engine.onCheatSheet = { [weak self] in self?.cheatSheet.toggle() }
@@ -348,6 +361,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.startCloudSync()
         store.watchFile()
         autoRules.start()
+        // After an update: what changed. (Not on a first install.)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        if store.settings.hasCompletedOnboarding, !version.isEmpty, store.settings.lastSeenVersion != version {
+            if !store.settings.lastSeenVersion.isEmpty || store.settings.hasCompletedOnboarding {
+                whatsNew.show(version: version)
+            }
+        }
+        if store.settings.lastSeenVersion != version { store.settings.lastSeenVersion = version }
+        weekly.stats = stats
+        weekly.workspaceTitle = { [weak self] index in self?.engine.workspaceTitle(index) ?? "" }
+        weekly.isEnabled = { [weak self] in self?.store.settings.weeklySummary ?? false }
+        weekly.start()
         // Once a minute, note which apps share slides (for Insights).
         statsTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             guard let self, self.engine.isRunning, !self.engine.isPaused else { return }
@@ -381,6 +406,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         input.slideTrigger = settings.slideTrigger
         input.pinchForOverview = settings.pinchForOverview
         input.modifierDrag = settings.modifierDrag
+        if settings.capsLockKey != capsLockOn {
+            capsLockOn = settings.capsLockKey
+            CapsLockKey.set(settings.capsLockKey)
+            input.capsLockKey = settings.capsLockKey
+        }
+        updater.betaChannel = settings.betaUpdates
         input.pinchZoomsStrip = settings.pinchZoomsStrip
         trackpad.detectsVertical = settings.verticalWorkspaceSwipes
         meetings.isEnabled = settings.meetingHelper
@@ -567,6 +598,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 0.8: hints, resize mode, templates, meetings, sharing, API, scripts, practice
 
     @objc private func redoLayout() { afterMenu { $0.engine.redo() } }
+    @objc private func undoToStep(_ sender: NSMenuItem) {
+        let steps = sender.tag
+        afterMenu { $0.engine.undo(steps: steps) }
+    }
+    @objc private func toggleFitFromMenu() { afterMenu { $0.engine.perform(.toggleFitMode) } }
     @objc private func rescueFromMenu() { afterMenu { $0.engine.rescueWindows() } }
 
     private func askForSlideName(_ id: WindowID, current: String) {
@@ -1161,6 +1197,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let redoItem = item("Redo Layout Change", #selector(redoLayout), action: .redo)
         redoItem.isEnabled = engine.canRedo
         menu.addItem(redoItem)
+        let changes = engine.undoHistory()
+        if !changes.isEmpty {
+            let timeline = NSMenu()
+            let time = DateFormatter()
+            time.timeStyle = .short
+            for (index, change) in changes.enumerated() {
+                let entry = item("\(change.label) · \(time.string(from: change.date))", #selector(undoToStep(_:)))
+                entry.tag = index + 1
+                entry.toolTip = index == 0 ? "Undo just this change" : "Undo this change and the \(index) after it"
+                timeline.addItem(entry)
+            }
+            let parent = NSMenuItem(title: "Undo History", action: nil, keyEquivalent: "")
+            parent.submenu = timeline
+            menu.addItem(parent)
+        }
+        let fitItem = item("Fit Every Slide on Screen", #selector(toggleFitFromMenu), action: .toggleFitMode)
+        if let status = engine.status() { fitItem.state = store.settings.isFit(status.workspace - 1 + engine.activeProfile * 100) ? .on : .off }
+        menu.addItem(fitItem)
         menu.addItem(item(L("Retile Windows"), #selector(retile), action: .retile))
         menu.addItem(item("Rescue Windows", #selector(rescueFromMenu), action: .rescueWindows))
 

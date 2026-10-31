@@ -372,3 +372,41 @@ final class V9Tests: XCTestCase {
         XCTAssertEqual(decision, .newSlide)
     }
 }
+
+final class V10Tests: XCTestCase {
+    func testVersionsOrderBetasBeforeFinals() {
+        XCTAssertTrue(Version.isNewer("1.0.0", than: "0.9.0"))
+        XCTAssertTrue(Version.isNewer("1.0.0", than: "1.0.0-beta.3"))
+        XCTAssertFalse(Version.isNewer("1.0.0-beta.3", than: "1.0.0"))
+        XCTAssertTrue(Version.isNewer("1.1.0-beta.10", than: "1.1.0-beta.9"))
+        XCTAssertTrue(Version.isNewer("v1.0.1", than: "1.0"))
+        XCTAssertFalse(Version.isNewer("1.0", than: "1.0.0"))
+    }
+
+    func testFitModePerWorkspace() {
+        var settings = AppSettings()
+        XCTAssertFalse(settings.isFit(0))
+        settings.setFit(true, for: 2)
+        XCTAssertTrue(settings.isFit(2))
+        XCTAssertFalse(settings.isFit(0))
+        settings.fitByDefault = true
+        XCTAssertTrue(settings.isFit(0))
+        XCTAssertFalse(settings.isFit(2), "an exception flips the default")
+        settings.setFit(true, for: 2)
+        XCTAssertTrue(settings.isFit(2))
+        XCTAssertTrue(settings.fitExceptions.isEmpty)
+    }
+
+    func testStartStyles() {
+        var settings = AppSettings()
+        settings.apply(.fit)
+        XCTAssertTrue(settings.isFit(5))
+        XCTAssertEqual(settings.sliderBar, .off)
+        settings.apply(.minimal)
+        XCTAssertFalse(settings.isFit(5))
+        XCTAssertTrue(settings.quietMode)
+        settings.apply(.scrolling)
+        XCTAssertFalse(settings.quietMode)
+        XCTAssertEqual(settings.sliderBar, .whileMoving)
+    }
+}

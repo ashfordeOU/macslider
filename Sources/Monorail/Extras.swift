@@ -127,8 +127,8 @@ final class WorkspaceHUD {
     private var panel: NSPanel?
     private var hideTimer: Timer?
 
-    func show(name: String, index: Int, count: Int) {
-        let host = NSHostingView(rootView: WorkspaceHUDView(name: name, index: index, count: count))
+    func show(name: String, note: String? = nil, index: Int, count: Int) {
+        let host = NSHostingView(rootView: WorkspaceHUDView(name: name, note: note, index: index, count: count))
         let size = host.fittingSize
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         let area = screen?.visibleFrame ?? .zero
@@ -159,12 +159,14 @@ final class WorkspaceHUD {
 
 private struct WorkspaceHUDView: View {
     let name: String
+    var note: String?
     let index: Int
     let count: Int
 
     var body: some View {
         VStack(spacing: 10) {
             Text(name).font(.system(size: 30, weight: .bold, design: .rounded))
+            if let note { Text(note).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420) }
             HStack(spacing: 7) {
                 ForEach(0..<max(count, 1), id: \.self) { i in
                     Circle().fill(i == index ? WorkspaceColor.color(i) : Color.primary.opacity(0.25)).frame(width: 9, height: 9)

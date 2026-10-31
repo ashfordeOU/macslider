@@ -22,6 +22,7 @@ cp "$BIN_DIR/Monorail" "$APP/Contents/MacOS/Monorail"
 cp scripts/monorail "$APP/Contents/Resources/monorail"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
 cp Resources/Monorail.sdef "$APP/Contents/Resources/Monorail.sdef"
+cp CHANGELOG.md "$APP/Contents/Resources/CHANGELOG.md"
 sed -e "s/__VERSION__/${VERSION}/" -e "s/__BUILD__/${BUILD}/" Resources/Info.plist > "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 

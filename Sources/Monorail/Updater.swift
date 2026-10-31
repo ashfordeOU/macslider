@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import CryptoKit
+import MonorailCore
 import Security
 import SwiftUI
 
@@ -11,6 +12,10 @@ import SwiftUI
 final class Updater: ObservableObject {
     static let releasesURL = URL(string: "https://github.com/ashfordeOU/monorail/releases/latest")!
     private static let apiURL = URL(string: "https://api.github.com/repos/ashfordeOU/monorail/releases/latest")!
+    /// With betas: the newest few releases, including pre-releases.
+    private static let allReleasesURL = URL(string: "https://api.github.com/repos/ashfordeOU/monorail/releases?per_page=10")!
+    /// Also offer beta (pre-release) versions.
+    var betaChannel = false
     private static let lastCheckKey = "lastUpdateCheck"
     private static let skippedKey = "skippedVersion"
 
@@ -55,7 +60,7 @@ final class Updater: ObservableObject {
 
     /// Looks up the latest release. User-initiated checks always report back.
     func check(userInitiated: Bool) {
-        var request = URLRequest(url: Self.apiURL, timeoutInterval: 15)
+        var request = URLRequest(url: betaChannel ? Self.allReleasesURL : Self.apiURL, timeoutInterval: 15)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
             DispatchQueue.main.async {
@@ -86,7 +91,10 @@ final class Updater: ObservableObject {
     }
 
     private static func parse(_ data: Data) -> Release? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let object = try? JSONSerialization.jsonObject(with: data)
+        // The beta channel gets a list: take the newest that isn't a draft.
+        let candidate = (object as? [[String: Any]])?.first { ($0["draft"] as? Bool) != true } ?? object as? [String: Any]
+        guard let json = candidate,
             let tag = json["tag_name"] as? String,
             let assets = json["assets"] as? [[String: Any]]
         else { return nil }
@@ -103,15 +111,9 @@ final class Updater: ObservableObject {
         return Release(version: version, archive: archive, checksums: checksums)
     }
 
+    /// Betas count as older than their final release (see `Version`).
     static func isNewer(_ a: String, than b: String) -> Bool {
-        let lhs = a.split(separator: ".").map { Int($0) ?? 0 }
-        let rhs = b.split(separator: ".").map { Int($0) ?? 0 }
-        for i in 0..<max(lhs.count, rhs.count) {
-            let x = i < lhs.count ? lhs[i] : 0
-            let y = i < rhs.count ? rhs[i] : 0
-            if x != y { return x > y }
-        }
-        return false
+        Version.isNewer(a, than: b)
     }
 
     /// Installs the release found by the last check.

@@ -50,6 +50,17 @@ struct WelcomeView: View {
     @State private var trusted = Accessibility.isTrusted(prompt: false)
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+    /// Scrolling strip or fit on screen, keeping the slider choice above.
+    private var styleBinding: Binding<StartStyle> {
+        Binding(
+            get: { store.settings.fitByDefault ? .fit : .scrolling },
+            set: { style in
+                let bar = store.settings.sliderBar
+                store.settings.apply(style)
+                store.settings.sliderBar = bar
+            })
+    }
+
     private func shortcut(_ action: Action) -> String {
         store.settings.keymap.shortcuts(for: action).first?.displayString ?? "—"
     }
@@ -127,6 +138,12 @@ struct WelcomeView: View {
                         ) { store.settings.sliderBar = .off }
                     }
                     Text("You can switch any time in Settings → Appearance.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Picker("Style", selection: styleBinding) {
+                        ForEach([StartStyle.scrolling, .fit], id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Text(store.settings.fitByDefault ? StartStyle.fit.detail : StartStyle.scrolling.detail)
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

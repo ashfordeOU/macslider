@@ -179,6 +179,55 @@ public enum ProjectMatcher {
     }
 }
 
+/// A starting point for how Monorail behaves, picked in the welcome tour.
+public enum StartStyle: String, Codable, CaseIterable, Sendable {
+    /// The endless strip: windows keep their size and the strip scrolls.
+    case scrolling
+    /// Every slide fits on screen, like classic tiling.
+    case fit
+    /// Quiet: no slider bar, no notices, just the menu bar icon and keys.
+    case minimal
+
+    public var title: String {
+        switch self {
+        case .scrolling: return "Scrolling strip"
+        case .fit: return "Fit on screen"
+        case .minimal: return "Minimal"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .scrolling: return "Windows keep their size on an endless strip that slides."
+        case .fit: return "Every slide shares the screen, like classic tiling. Nothing scrolls."
+        case .minimal: return "No slider bar or notices: the menu bar icon and your keys."
+        }
+    }
+}
+
+/// Compares versions like 1.0.0, 1.1.0-beta.2: a final release is newer
+/// than its own betas.
+public enum Version {
+    public static func isNewer(_ a: String, than b: String) -> Bool {
+        func parts(_ version: String) -> (numbers: [Int], prerelease: String?) {
+            let trimmed = version.hasPrefix("v") ? String(version.dropFirst()) : version
+            let pieces = trimmed.split(separator: "-", maxSplits: 1).map(String.init)
+            return (pieces[0].split(separator: ".").map { Int($0) ?? 0 }, pieces.count > 1 ? pieces[1] : nil)
+        }
+        let (lhs, lhsPre) = parts(a), (rhs, rhsPre) = parts(b)
+        for i in 0..<max(lhs.count, rhs.count) {
+            let x = i < lhs.count ? lhs[i] : 0, y = i < rhs.count ? rhs[i] : 0
+            if x != y { return x > y }
+        }
+        switch (lhsPre, rhsPre) {
+        case (nil, nil): return false
+        case (nil, _): return true
+        case (_, nil): return false
+        case let (l?, r?): return l.compare(r, options: .numeric) == .orderedDescending
+        }
+    }
+}
+
 /// What the menu bar item shows.
 public enum MenuBarStyle: String, Codable, CaseIterable, Sendable {
     /// The M glyph and the slide number.
@@ -441,6 +490,22 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var cheatSheetOnHold = true
     /// Focus follows mouse waits this long (seconds) before switching.
     public var focusFollowsMouseDelay = 0.15
+    /// Caps Lock becomes the Monorail key: hold it instead of ⌃⌥.
+    public var capsLockKey = false
+    /// Fit mode: every slide shares the screen. On for all workspaces, or
+    /// just some; `fitExceptions` lists workspaces (absolute numbers) that differ.
+    public var fitByDefault = false
+    public var fitExceptions: [Int] = []
+    /// A line of notes per workspace (by its number from 0).
+    public var workspaceNotes: [String: String] = [:]
+    /// Workspaces without a name take their apps' names.
+    public var autoNameWorkspaces = true
+    /// Get early (beta) versions as well as final ones.
+    public var betaUpdates = false
+    /// A notification on Monday mornings with last week's Insights.
+    public var weeklySummary = true
+    /// The version whose What's New was last shown.
+    public var lastSeenVersion = ""
     /// Snap windows back when an app moves or resizes one by itself.
     public var keepWindowsInPlace = true
     /// After resizing a window in a slide, offer to rearrange the slide.
@@ -514,6 +579,40 @@ public struct AppSettings: Equatable, Codable, Sendable {
         return config
     }
 
+    /// True if workspace `workspace` (absolute number) fits every slide on screen.
+    public func isFit(_ workspace: Int) -> Bool {
+        fitByDefault != fitExceptions.contains(workspace)
+    }
+
+    /// Turns fit mode on or off for one workspace.
+    public mutating func setFit(_ on: Bool, for workspace: Int) {
+        fitExceptions.removeAll { $0 == workspace }
+        if on != fitByDefault { fitExceptions.append(workspace) }
+    }
+
+    /// Applies a start-up style on top of the current settings.
+    public mutating func apply(_ style: StartStyle) {
+        switch style {
+        case .scrolling:
+            fitByDefault = false
+            fitExceptions = []
+            sliderBar = .whileMoving
+            quietMode = false
+        case .fit:
+            fitByDefault = true
+            fitExceptions = []
+            sliderBar = .off
+            quietMode = false
+        case .minimal:
+            fitByDefault = false
+            fitExceptions = []
+            sliderBar = .off
+            quietMode = true
+            showNavigationArrows = false
+            workspaceHUD = false
+        }
+    }
+
     /// Whether the slider bar shows on one display.
     public func sliderBar(for displayUUID: String) -> SliderBarMode {
         displayOverrides[displayUUID]?.sliderBar ?? sliderBar
@@ -560,6 +659,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case openNextToSameApp, openIntoFocusedSlide, workspaceHUD, sliderTitles, compactSlider, menuBarStyle, quietMode
         case slideSound, announceChanges, rememberFloatingPositions, autoSnapshot, dailyBackups, skipAnimationsOnBattery
         case cheatSheetOnHold, focusFollowsMouseDelay
+        case capsLockKey, fitByDefault, fitExceptions, workspaceNotes, autoNameWorkspaces, betaUpdates, weeklySummary
+        case lastSeenVersion
     }
 
     public init(from decoder: Decoder) throws {
@@ -669,6 +770,14 @@ public struct AppSettings: Equatable, Codable, Sendable {
         skipAnimationsOnBattery = value(.skipAnimationsOnBattery, d.skipAnimationsOnBattery)
         cheatSheetOnHold = value(.cheatSheetOnHold, d.cheatSheetOnHold)
         focusFollowsMouseDelay = value(.focusFollowsMouseDelay, d.focusFollowsMouseDelay)
+        capsLockKey = value(.capsLockKey, d.capsLockKey)
+        fitByDefault = value(.fitByDefault, d.fitByDefault)
+        fitExceptions = value(.fitExceptions, d.fitExceptions)
+        workspaceNotes = value(.workspaceNotes, d.workspaceNotes)
+        autoNameWorkspaces = value(.autoNameWorkspaces, d.autoNameWorkspaces)
+        betaUpdates = value(.betaUpdates, d.betaUpdates)
+        weeklySummary = value(.weeklySummary, d.weeklySummary)
+        lastSeenVersion = value(.lastSeenVersion, d.lastSeenVersion)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

@@ -96,6 +96,20 @@ private struct GeneralPane: View {
     var body: some View {
         Form {
             Section {
+                LabeledContent("Style") {
+                    HStack {
+                        ForEach(StartStyle.allCases, id: \.self) { style in
+                            Button(style.title) { store.settings.apply(style) }
+                                .help(style.detail)
+                        }
+                    }
+                }
+                Toggle("Every slide fits on screen in every workspace (fit mode)", isOn: $store.settings.fitByDefault)
+                    .help("Turn it on or off for one workspace from the overview or the menu bar")
+                Toggle("Workspaces without a name take their apps’ names", isOn: $store.settings.autoNameWorkspaces)
+                Toggle("Use Caps Lock as the Monorail key (hold it instead of ⌃⌥; tap for the palette)", isOn: $store.settings.capsLockKey)
+                    .help("Caps Lock goes back to normal when you quit Monorail or turn this off")
+                Toggle("A summary of your week on Monday mornings", isOn: $store.settings.weeklySummary)
                 Picker("Language", selection: $store.settings.language) {
                     ForEach(Localization.languages, id: \.code) { Text($0.name).tag($0.code) }
                 }
@@ -138,6 +152,8 @@ private struct GeneralPane: View {
                 Toggle("Red dots on windows whose apps have a badge in the Dock", isOn: $store.settings.attentionMarkers)
                 Toggle("Check for updates automatically", isOn: $store.settings.checkForUpdates)
                 Toggle("Install updates automatically", isOn: $store.settings.installUpdatesAutomatically)
+                    .disabled(!store.settings.checkForUpdates)
+                Toggle("Get beta versions too (early, may have rough edges)", isOn: $store.settings.betaUpdates)
                     .disabled(!store.settings.checkForUpdates)
                 Picker("New windows open", selection: $store.settings.newWindowPosition) {
                     Text("Next to the focused window").tag(Strip.InsertPosition.afterFocused)

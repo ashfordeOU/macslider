@@ -71,6 +71,11 @@ final class InputMonitor {
     var onFlagsChanged: (Modifiers) -> Void = { _ in }
     /// Any key press (the cheat sheet waits for a quiet ⌃⌥ hold).
     var onKeyActivity: () -> Void = {}
+    /// Caps Lock as the Monorail key: macOS turns it into F18 (see CapsLockKey);
+    /// while it's held, keys count as if ⌃⌥ were held.
+    var capsLockKey = false
+    private var capsHeld = false
+    private var capsUsed = false
 
     private(set) var isSlideMode = false
     private var tap: CFMachPort?
@@ -97,7 +102,7 @@ final class InputMonitor {
     func start() -> Bool {
         guard tap == nil else { return true }
         let types: [CGEventType] = [
-            .keyDown, .flagsChanged, .scrollWheel, .leftMouseDown, .leftMouseDragged, .leftMouseUp,
+            .keyDown, .keyUp, .flagsChanged, .scrollWheel, .leftMouseDown, .leftMouseDragged, .leftMouseUp,
             .rightMouseDown, .rightMouseDragged, .rightMouseUp,
         ]
         let mask = types.reduce(CGEventMask(1) << Self.magnifyType) { $0 | (CGEventMask(1) << $1.rawValue) }
@@ -197,11 +202,31 @@ final class InputMonitor {
             dragging = false
             onDragEnd()
             return nil
+        case .keyUp:
+            if capsLockKey, UInt16(event.getIntegerValueField(.keyboardEventKeycode)) == CapsLockKey.f18 {
+                capsHeld = false
+                let used = capsUsed
+                // A tap on its own (nothing pressed with it) opens the command palette.
+                if !used { DispatchQueue.main.async { self.onAction(.commandPalette) } }
+                return nil
+            }
+            return pass
         case .keyDown:
             if triggerDownAt != nil { triggerInterrupted = true }
             guard !isSuspended else { return pass }
             let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-            let modifiers = Modifiers(event.flags)
+            if capsLockKey, keyCode == CapsLockKey.f18 {
+                if !capsHeld {
+                    capsHeld = true
+                    capsUsed = false
+                }
+                return nil
+            }
+            var modifiers = Modifiers(event.flags)
+            if capsHeld {
+                capsUsed = true
+                modifiers.formUnion([.control, .option])
+            }
             DispatchQueue.main.async { self.onKeyActivity() }
             if let intercept = keyInterceptor, intercept(keyCode, modifiers) { return nil }
             if let capture = captureNextKey {

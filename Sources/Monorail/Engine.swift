@@ -407,9 +407,17 @@ final class Engine {
         case .lockSlide:
             if let id = focusedWindowID() { toggleLock(id) }
             return
+        case .toggleFitMode:
+            if let (_, key) = activeContext() {
+                let on = !settings.isFit(key.workspace)
+                onAdjustSettings { $0.setFit(on, for: key.workspace) }
+                onNotice(on ? "Fit mode · every slide on screen" : "Scrolling strip")
+            }
+            return
         default:
             break
         }
+        nextChangeLabel = action.title
         if Self.undoable.contains(action) || action.moveToWorkspaceNumber != nil { recordHistory() }
         if let n = action.workspaceNumber {
             switchWorkspace(to: n - 1)
@@ -750,7 +758,7 @@ final class Engine {
         if let target = strips[newKey]?.focusedWindow { focus(target, warpMouse: false) }
         scheduleSave()
         onStateChange()
-        let name = settings.workspaceName(index)
+        let name = workspaceTitle(index, screen: key.screen)
         onWorkspaceShown(name, index, visibleWorkspaceCount(on: key.screen))
         onAnnounce("\(name), \(strips[newKey]?.columns.count ?? 0) slides")
     }
@@ -955,6 +963,9 @@ final class Engine {
         var parkedCount: Int = 0
         /// The workspace's own name, without display or profile.
         var name: String = ""
+        var note: String?
+        /// Every slide shares the screen (no scrolling).
+        var isFit = false
     }
 
     /// Every workspace on the displays' current Spaces, for the overview.
@@ -993,7 +1004,7 @@ final class Engine {
                     return column.windows.isEmpty ? nil : column
                 }
                 if onlyApp != nil && columns.isEmpty { continue }
-                var title = count > 1 ? settings.workspaceName(workspace) : "Windows"
+                var title = count > 1 ? workspaceTitle(workspace, screen: current.screen) : "Windows"
                 if settings.profiles.count > 1 { title = "\(profileName) · \(title)" }
                 if displays.count > 1 { title = "\(display.name) · \(title)" }
                 result.append(
@@ -1002,7 +1013,9 @@ final class Engine {
                         aspectRatio: display.visibleFrame.width / max(display.visibleFrame.height, 1),
                         isRightToLeft: settings.layout.direction == .rightToLeft,
                         parkedCount: parked[key]?.elements.count ?? 0,
-                        name: settings.workspaceName(workspace)))
+                        name: settings.workspaceName(workspace),
+                        note: workspaceNote(workspace),
+                        isFit: settings.isFit(key.workspace)))
             }
         }
         return result
@@ -1133,7 +1146,7 @@ final class Engine {
                     x: visible.minX, y: primaryHeight - visible.maxY, width: visible.width, height: visible.height),
                 workspace: key.workspace - base,
                 workspaceCount: visibleWorkspaceCount(on: key.screen),
-                workspaceNames: (0..<visibleWorkspaceCount(on: key.screen)).map(settings.workspaceName),
+                workspaceNames: (0..<visibleWorkspaceCount(on: key.screen)).map { workspaceTitle($0, screen: key.screen) },
                 tiles: tiles,
                 totalWidth: strip.totalWidth(config: config, viewportWidth: width),
                 viewportX: strip.scroll,
@@ -1351,6 +1364,7 @@ final class Engine {
 
     private func layout(animated: Bool, updateOverlays shouldUpdateOverlays: Bool = true, skip: Set<WindowID> = []) {
         guard isRunning, !isPaused else { return }
+        fitWorkspacesInView()
         var targets: [WindowID: (from: Rect, to: Rect)] = [:]
         for display in displays {
             let key = currentKey(display)
@@ -2149,13 +2163,37 @@ final class Engine {
     private struct Snapshot {
         var strips: [StripKey: Strip]
         var activeWorkspace: [ScreenKey: Int]
+        /// What the change after this snapshot was, and when.
+        var label = "Layout change"
+        var date = Date()
+    }
+
+    /// Names the next change for the undo history.
+    private var nextChangeLabel: String?
+
+    /// Recent changes, newest first, to jump back to (the Undo History menu).
+    func undoHistory(_ limit: Int = 12) -> [(label: String, date: Date)] {
+        history.suffix(limit).reversed().map { ($0.label, $0.date) }
+    }
+
+    /// Undoes the last `count` changes in one go.
+    func undo(steps count: Int) {
+        guard count > 0, count <= history.count else { return }
+        for _ in 0..<count - 1 {
+            guard let snapshot = history.popLast() else { break }
+            future.append(Snapshot(strips: strips, activeWorkspace: activeWorkspace, label: snapshot.label))
+            strips = snapshot.strips
+            activeWorkspace = snapshot.activeWorkspace
+        }
+        undo()
     }
 
     private var history: [Snapshot] = []
 
     /// Saves the layout before a change, so it can be undone.
     private func recordHistory() {
-        history.append(Snapshot(strips: strips, activeWorkspace: activeWorkspace))
+        history.append(Snapshot(strips: strips, activeWorkspace: activeWorkspace, label: nextChangeLabel ?? "Layout change"))
+        nextChangeLabel = nil
         if history.count > 40 { history.removeFirst(history.count - 40) }
         future.removeAll()
     }
@@ -3946,6 +3984,45 @@ final class Engine {
         lines.append("Whole-slide apps: " + (roomyApps.isEmpty ? "none" : roomyApps.sorted().joined(separator: ", ")))
         lines.append("Paused: \(isPaused), profile: \(profileName), focus mode: \(isFocusMode)")
         return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Fit mode and workspace names
+
+    /// In fit mode every slide on the strip shares the screen equally, so
+    /// nothing ever scrolls out of view.
+    private func fitWorkspacesInView() {
+        for display in displays {
+            let key = currentKey(display)
+            guard settings.isFit(key.workspace), var strip = strips[key], !strip.isEmpty else { continue }
+            let scrolling = strip.columns.filter { $0.pin == nil }.count
+            let width = 1 / Double(max(scrolling, 1))
+            guard strip.columns.contains(where: { $0.pin == nil && (abs($0.width - width) > 0.001 || $0.isFullWidth) })
+                || strip.scroll != 0
+            else { continue }
+            strip.balance(width: width)
+            strip.clampScroll(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
+            strips[key] = strip
+        }
+    }
+
+    /// A workspace's name: the user's, or (with auto names) its apps', or "Workspace n".
+    func workspaceTitle(_ index: Int, screen: ScreenKey? = nil) -> String {
+        let custom = settings.workspaceNames.indices.contains(index)
+            ? settings.workspaceNames[index].trimmingCharacters(in: .whitespaces) : ""
+        guard custom.isEmpty, settings.autoNameWorkspaces,
+            let screen = screen ?? activeContext()?.1.screen,
+            let strip = strips[StripKey(screen: screen, workspace: base + index)], !strip.isEmpty
+        else { return settings.workspaceName(index) }
+        var apps: [String] = []
+        for id in strip.allWindows {
+            if let name = windows[id]?.appName, !apps.contains(name) { apps.append(name) }
+        }
+        return apps.count > 2 ? "\(apps[0]), \(apps[1]) +\(apps.count - 2)" : apps.joined(separator: " & ")
+    }
+
+    func workspaceNote(_ index: Int) -> String? {
+        let note = settings.workspaceNotes[String(index)]?.trimmingCharacters(in: .whitespaces) ?? ""
+        return note.isEmpty ? nil : note
     }
 
     // MARK: - Haptics

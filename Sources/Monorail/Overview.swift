@@ -21,6 +21,8 @@ final class OverviewModel: ObservableObject {
     @Published var query = ""
     /// The height of each slide card (a slider in the header).
     @Published var cardHeight: CGFloat = 190
+    /// Windows picked with ⌘-click, for doing something to all of them.
+    @Published var picked: Set<WindowID> = []
 
     /// The strips, with only the windows that match the search.
     var visibleStrips: [Engine.OverviewStrip] {
@@ -94,6 +96,13 @@ struct OverviewActions {
     var park: (Int) -> Void = { _ in }
     var unpark: (Int) -> Void = { _ in }
     var setWorkspaceName: (Int, String) -> Void = { _, _ in }
+    var setWorkspaceNote: (Int, String) -> Void = { _, _ in }
+    var toggleFit: (StripKey) -> Void = { _ in }
+    /// Picked windows: put together, moved to a workspace, minimised or closed.
+    var pairPicked: ([WindowID]) -> Void = { _ in }
+    var movePicked: ([WindowID], Int) -> Void = { _, _ in }
+    var minimizePicked: ([WindowID]) -> Void = { _ in }
+    var closePicked: ([WindowID]) -> Void = { _ in }
     var moveColumnAcross: (_ sourceRow: Int, _ column: Int, _ target: StripKey, _ index: Int) -> Void = { _, _, _, _ in }
 }
 
@@ -163,6 +172,13 @@ struct OverviewView: View {
             .padding(.bottom, 32)
             // Clear the menu bar, then leave the same breathing room as the sides.
             .padding(.top, model.topInset + 34)
+            if !model.picked.isEmpty {
+                VStack {
+                    Spacer()
+                    PickedBar(model: model, actions: actions)
+                        .padding(.bottom, 28)
+                }
+            }
         }
     }
 
@@ -309,7 +325,21 @@ private struct StripRow: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.white.opacity(0.8))
                 }
+                Spacer()
+                Button {
+                    actions.toggleFit(strip.key)
+                } label: {
+                    Label(strip.isFit ? "Fit on screen" : "Scrolling",
+                          systemImage: strip.isFit ? "rectangle.split.3x1.fill" : "arrow.left.and.right")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(Color.white.opacity(strip.isFit ? 0.22 : 0.1)))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.85))
+                .help(strip.isFit ? "Every slide shares the screen · click to scroll instead" : "Slides scroll · click to fit every slide on screen")
             }
+            NoteField(strip: strip, save: actions.setWorkspaceNote)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
@@ -468,8 +498,16 @@ private struct ColumnCard: View {
     }
 
     private func tile(_ window: Engine.WindowSummary) -> some View {
-        WindowTile(window: window, thumbnail: model.thumbnails[window.id], isSelected: model.selection == window.id)
-            .onTapGesture { actions.focus(window.id) }
+        WindowTile(window: window, thumbnail: model.thumbnails[window.id],
+                   isSelected: model.selection == window.id || model.picked.contains(window.id))
+            .onTapGesture {
+                // ⌘- or ⇧-click picks windows to act on together.
+                if !NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty {
+                    if model.picked.remove(window.id) == nil { model.picked.insert(window.id) }
+                } else {
+                    actions.focus(window.id)
+                }
+            }
             .windowControls(window.id, actions.commands)
             .onDrag { DragItem.window(window.id).provider }
     }
@@ -522,6 +560,57 @@ private struct WindowTile: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(window.accessibilityDescription)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+/// A workspace's note, edited where it is shown.
+private struct NoteField: View {
+    let strip: Engine.OverviewStrip
+    let save: (Int, String) -> Void
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("Add a note for this workspace", text: $text)
+            .textFieldStyle(.plain)
+            .font(.callout)
+            .foregroundStyle(.white.opacity(0.85))
+            .focused($focused)
+            .onSubmit { save(strip.workspace, text) }
+            .onChange(of: focused) { isFocused in if !isFocused { save(strip.workspace, text) } }
+            .onAppear { text = strip.note ?? "" }
+            .padding(.leading, 18)
+    }
+}
+
+/// What to do with the windows picked by ⌘-click.
+private struct PickedBar: View {
+    @ObservedObject var model: OverviewModel
+    let actions: OverviewActions
+
+    var body: some View {
+        let picked = Array(model.picked)
+        let names = actions.commands.workspaceNames()
+        HStack(spacing: 12) {
+            Text("\(picked.count) picked").font(.headline).foregroundStyle(.white)
+            Button("Put Together") { actions.pairPicked(picked); model.picked = [] }
+                .disabled(picked.count < 2 || picked.count > Column.maximumWindows)
+            if names.count > 1 {
+                Menu("Move to") {
+                    ForEach(Array(names.enumerated()), id: \.offset) { index, name in
+                        Button(name) { actions.movePicked(picked, index); model.picked = [] }
+                    }
+                }
+                .fixedSize()
+            }
+            Button("Minimise") { actions.minimizePicked(picked); model.picked = [] }
+            Button("Close") { actions.closePicked(picked); model.picked = [] }
+            Button("Clear") { model.picked = [] }.buttonStyle(.borderless).foregroundStyle(.white.opacity(0.8))
+        }
+        .padding(.horizontal, 18).padding(.vertical, 10)
+        .background(Capsule().fill(Color.black.opacity(0.55)))
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.2)))
+        .shadow(radius: 14)
     }
 }
 
@@ -625,6 +714,7 @@ final class OverviewController {
         self.onlyApp = onlyApp
         model.heading = appName.map { "\($0) windows" } ?? "Overview"
         model.query = ""
+        model.picked = []
         model.theme = WorkspaceColor.theme
         model.strips = engine.overview(onlyApp: onlyApp)
         model.selection = nil
@@ -650,6 +740,8 @@ final class OverviewController {
 
     var commands = WindowCommands()
     var setWorkspaceName: (Int, String) -> Void = { _, _ in }
+    var setWorkspaceNote: (Int, String) -> Void = { _, _ in }
+    var toggleFit: (StripKey) -> Void = { _ in }
 
     /// Opens the overview with workspace `index`'s name ready to edit.
     func showRenaming(_ index: Int) {
@@ -838,6 +930,27 @@ final class OverviewController {
             setWorkspaceName: { [weak self] index, name in
                 self?.setWorkspaceName(index, name)
                 DispatchQueue.main.async { self?.refresh() }
+            },
+            setWorkspaceNote: { [weak self] index, note in self?.setWorkspaceNote(index, note) },
+            toggleFit: { [weak self] key in
+                self?.toggleFit(key)
+                DispatchQueue.main.async { self?.refresh() }
+            },
+            pairPicked: { [weak self] ids in
+                self?.engine?.pairWindows(ids, arrangement: ids.count > 2 ? .grid : .columns)
+                self?.refresh()
+            },
+            movePicked: { [weak self] ids, index in
+                for id in ids { self?.engine?.moveWindow(id, toWorkspace: index) }
+                self?.refresh()
+            },
+            minimizePicked: { [weak self] ids in
+                for id in ids { self?.engine?.minimizeWindow(id) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self?.refresh() }
+            },
+            closePicked: { [weak self] ids in
+                for id in ids { self?.engine?.closeWindow(id) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self?.refresh() }
             },
             moveColumnAcross: { [weak self] sourceRow, column, target, index in
                 guard let self, self.model.strips.indices.contains(sourceRow) else { return }

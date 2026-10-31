@@ -132,6 +132,7 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case openIntoSlide = "open-into-slide"
     case cheatSheet = "cheat-sheet"
     case nameSlide = "name-slide"
+    case toggleFitMode = "fit-mode"
     case retile
     case undo
     case togglePause = "toggle-pause"
@@ -242,6 +243,7 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .openIntoSlide: return "New windows join the focused slide (on / off)"
         case .cheatSheet: return "Show the shortcut cheat sheet"
         case .nameSlide: return "Name the slide…"
+        case .toggleFitMode: return "Fit mode on / off (every slide on screen)"
         case .retile: return "Retile everything"
         case .undo: return "Undo last layout change"
         case .togglePause: return "Pause / resume"
@@ -311,6 +313,6 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     public static let unboundByDefault: Set<Action> = [
         .swapDisplays, .moveToPointerDisplay, .expandToFill, .closeSlide, .minimizeSlide, .gatherApp, .sortSlides,
         .tileAllFloating, .rescueWindows, .biggerGaps, .smallerGaps, .centerFloating, .lockSlide, .openIntoSlide,
-        .nameSlide,
+        .nameSlide, .toggleFitMode,
     ]
 }
