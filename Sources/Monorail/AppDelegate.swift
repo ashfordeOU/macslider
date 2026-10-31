@@ -125,8 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             self.integrations.update({ [weak self] in self?.currentState() }, settings: self.store.settings)
             self.updateStatusItem()
-            self?.sliderBar.update()
-            self?.popover.refresh()
+            self.sliderBar.update()
+            self.popover.refresh()
         }
         popover.mapProvider = { [weak self] in
             guard let maps = self?.engine.miniMaps(), !maps.isEmpty else { return nil }
