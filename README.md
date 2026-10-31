@@ -472,6 +472,39 @@ search, so you can see which slide wants you.
 - **In your language**: menus, Settings tabs and the welcome tour in English, Deutsch, Français, Español and 日本語 (**Settings → General → Language**).
 - **Practice windows**: the welcome tour can open three practice windows, so you learn the moves without touching your work.
 
+### Even more (0.9)
+
+**Hold <kbd>⌃⌥</kbd>** for a moment and a cheat sheet of every shortcut appears; let go and it's gone.
+
+- **Moving between places**: <kbd>⌃⌥PageDown</kbd> / <kbd>⌃⌥PageUp</kbd> next or previous workspace (add <kbd>⇧</kbd> to take the window), <kbd>⌃⌥⇧.</kbd> the next display, <kbd>⌃⌥⇧,</kbd> moves the whole workspace to the next display. **Swap displays** and **Move to the pointer's display** are in the palette.
+- **Windows**: <kbd>⌃⌥\\</kbd> the next window of the same app, <kbd>⌃⌥⇧Tab</kbd> swap with the window you were just on, <kbd>⌃⌥Y</kbd> redo.
+- **Slides**: <kbd>⌃⌥⇧G</kbd> rotate the windows in a slide, <kbd>⌃⌥⇧M</kbd> flip it. Name a slide or lock it (smart pairs and new windows leave it alone) from its right-click menu. Also: widen to fill the free space, sort slides by app, close or minimise a whole slide, gather an app's windows into one slide.
+- **Modes**: <kbd>⌃⌥⇧B</kbd> solo (hide every other app, again to bring them back), <kbd>⌃⌥⇧0</kbd> gaps on or off (bigger and smaller gaps too), new windows open in the focused slide or next to their app's other windows.
+- **Floating windows**: they go back where you last put them, **Centre** puts one in the middle, and **Size for Recording** makes one exactly 1280 × 720, 1920 × 1080 and more.
+- **Rules**: give an app a home display; **Never Manage This App** from any window's right-click menu.
+- **Looks**: the workspace's name shows as you switch, the overview has search and a card-size slider, the slider bar can show window titles or be compact, the menu bar can show a dot per slide or just the workspace number, quiet mode hides notices, and an optional soft click plays as you slide.
+- **Accessibility**: VoiceOver announces the slide and workspace you move to.
+- **Safety nets**: **Rescue Windows** in the menu brings every window back on screen if anything ever gets lost; a "Last session" snapshot is kept on quit and sleep; settings are backed up daily (seven kept, restore in **Settings → General**); **Copy Diagnostics** in About makes a bug report easy.
+- **Battery**: animations can step aside on battery.
+- **Insights** export as CSV.
+
+### AppleScript and the command line
+
+```applescript
+tell application "Monorail"
+    perform "focus-left"
+    apply layout "Coding"
+    open pair "Safari + Notes"
+    set state to current state -- JSON
+end tell
+```
+
+```bash
+monorail focus-left
+monorail layout Coding
+monorail windows      # JSON, with the local API on
+```
+
 ### AI assistants (MCP)
 
 Turn on **Local API** in **Settings → Automation**, click **Copy MCP Server Config** and add it to
@@ -622,6 +655,15 @@ AZERTY, QWERTZ, Dvorak and other layouts.
 | Zoom out on the strip | <kbd>⌃⌥⇧Z</kbd> · <kbd>⌥</kbd> + pinch |
 | Presentation mode | <kbd>⌃⌥⇧Y</kbd> |
 | Record the slide | <kbd>⌃⌥⇧V</kbd> |
+| Redo | <kbd>⌃⌥Y</kbd> |
+| Next / previous workspace | <kbd>⌃⌥PageDown</kbd> <kbd>⌃⌥PageUp</kbd> (add <kbd>⇧</kbd> to take the window) |
+| Next display · move workspace to next display | <kbd>⌃⌥⇧.</kbd> · <kbd>⌃⌥⇧,</kbd> |
+| Next window of the same app | <kbd>⌃⌥\\</kbd> |
+| Swap with the last window | <kbd>⌃⌥⇧Tab</kbd> |
+| Rotate · flip the slide | <kbd>⌃⌥⇧G</kbd> · <kbd>⌃⌥⇧M</kbd> |
+| Solo | <kbd>⌃⌥⇧B</kbd> |
+| Gaps on / off | <kbd>⌃⌥⇧0</kbd> |
+| Cheat sheet | Hold <kbd>⌃⌥</kbd> · <kbd>⌃⌥⇧/</kbd> |
 | Undo last layout change | <kbd>⌃⌥Z</kbd> |
 | Retile everything | <kbd>⌃⌥Esc</kbd> |
 | Pause / resume | <kbd>⌃⌥Q</kbd> |

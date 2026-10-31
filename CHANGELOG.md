@@ -4,6 +4,29 @@ All notable changes to Monorail by Ashforde® are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-10-31
+
+### Added
+- A cheat sheet of every shortcut while you hold ⌃⌥ (or ⌃⌥⇧/).
+- Redo (⌃⌥Y).
+- Next and previous workspace (⌃⌥PageDown/PageUp), and moving a window there (add ⇧).
+- Focus the next display (⌃⌥⇧.), move the whole workspace to the next display (⌃⌥⇧,), swap the two displays' workspaces, and move a window to the display under the pointer.
+- Next window of the same app (⌃⌥\\) and swap with the window you were just on (⌃⌥⇧Tab).
+- Rotate (⌃⌥⇧G) and flip (⌃⌥⇧M) a slide, sort slides by app, and widen a slide to fill the free space.
+- Close or minimise a whole slide, and gather an app's windows into one slide.
+- Name a slide and lock a slide, from its right-click menu.
+- Tile every floating window, and Rescue Windows to bring everything back on screen.
+- Solo mode (⌃⌥⇧B): hide every other app, then bring them back.
+- Gaps on or off (⌃⌥⇧0), bigger and smaller gaps.
+- Centre a floating window, and sizes for recordings (1280 × 720, 1920 × 1080 and more).
+- New windows can open in the focused slide, or next to their app's other windows.
+- Per-app home display, Never Manage This App, and remembered floating window positions.
+- Settings lists the apps that need a whole slide, with a way to let one share again.
+- The workspace's name as you switch, overview search and card size, window titles on slider tiles, a compact slider bar, menu bar styles (dots or workspace number), quiet mode, a soft click on slide changes, and VoiceOver announcements.
+- Focus follows mouse delay, and no animations on battery.
+- A "Last session" snapshot on quit and before sleep, daily settings backups with restore, Copy Diagnostics, and Insights as CSV.
+- AppleScript (perform, apply layout, open pair, start template, restore snapshot, current state, window list) and a richer `monorail` command line.
+
 ## [0.8.0] - 2026-10-31
 
 ### Added
