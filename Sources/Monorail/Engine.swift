@@ -99,6 +99,15 @@ final class Engine {
     var onStripZoom: () -> Void = {}
     /// A window was adopted (for scripts): id, app, title.
     var onWindowOpened: (WindowID, String, String) -> Void = { _, _, _ in }
+    /// Changes a setting the user owns (gaps, open-into-slide), through the settings store.
+    var onAdjustSettings: ((inout AppSettings) -> Void) -> Void = { _ in }
+    /// The workspace shown changed: its name, number and how many there are.
+    var onWorkspaceShown: (String, Int, Int) -> Void = { _, _, _ in }
+    /// Ask the user for a slide name; the cheat sheet.
+    var onAskForSlideName: (WindowID, String) -> Void = { _, _ in }
+    var onCheatSheet: () -> Void = {}
+    /// A slide or workspace change worth announcing to VoiceOver.
+    var onAnnounce: (String) -> Void = { _ in }
     var onAskForSnapshotName: () -> Void = {}
     /// A short confirmation to show the user ("Nothing to undo").
     var onNotice: (String) -> Void = { _ in }
@@ -166,6 +175,7 @@ final class Engine {
         guard isRunning else { return }
         attentionTimer?.invalidate()
         animator.finishNow()
+        if settings.autoSnapshot { saveSnapshot(named: Self.lastSessionName, quiet: true) }
         saveState()
         restoreAll()
         overlays.hideAll()
@@ -325,6 +335,78 @@ final class Engine {
         case .recordSlide:
             toggleRecording()
             return
+        case .redo:
+            redo()
+            return
+        case .nextWorkspace, .previousWorkspace:
+            switchWorkspaceVertically(next: action == .nextWorkspace)
+            return
+        case .moveToNextWorkspace, .moveToPreviousWorkspace:
+            if let (_, key) = activeContext() {
+                let target = key.workspace - base + (action == .moveToNextWorkspace ? 1 : -1)
+                if target >= 0, target < workspaceLimit {
+                    moveFocusedWindow(toWorkspace: target)
+                    onNotice("Moved to \(settings.workspaceName(target))")
+                }
+            }
+            return
+        case .focusNextDisplay:
+            focusNextDisplay()
+            return
+        case .moveWorkspaceToNextDisplay:
+            moveWorkspaceToNextDisplay()
+            return
+        case .swapDisplays:
+            swapDisplays()
+            return
+        case .moveToPointerDisplay:
+            moveFocusedToPointerDisplay()
+            return
+        case .cycleAppWindows:
+            cycleAppWindows()
+            return
+        case .swapWithRecent:
+            swapWithRecent()
+            return
+        case .closeSlide, .minimizeSlide:
+            if let id = focusedWindowID(), let key = windows[id]?.key, let strip = strips[key], let (c, _) = strip.locate(id) {
+                for mate in strip.columns[c].windows {
+                    if action == .closeSlide { closeWindow(mate) } else { minimizeWindow(mate) }
+                }
+            }
+            return
+        case .gatherApp:
+            gatherFocusedApp()
+            return
+        case .tileAllFloating:
+            tileAllFloating()
+            return
+        case .rescueWindows:
+            rescueWindows()
+            return
+        case .soloMode:
+            toggleSolo()
+            return
+        case .toggleGaps, .biggerGaps, .smallerGaps:
+            adjustGaps(action)
+            return
+        case .centerFloating:
+            centerFocusedFloating()
+            return
+        case .openIntoSlide:
+            let on = !settings.openIntoFocusedSlide
+            onAdjustSettings { $0.openIntoFocusedSlide = on }
+            onNotice(on ? "New windows join the focused slide" : "New windows get their own place again")
+            return
+        case .cheatSheet:
+            onCheatSheet()
+            return
+        case .nameSlide:
+            if let id = focusedWindowID(), windows[id]?.key != nil { onAskForSlideName(id, slideName(of: id) ?? "") }
+            return
+        case .lockSlide:
+            if let id = focusedWindowID() { toggleLock(id) }
+            return
         default:
             break
         }
@@ -407,6 +489,14 @@ final class Engine {
         case .pinLeft: strip.togglePin(.left)
         case .pinRight: strip.togglePin(.right)
         case .toggleTabbed: strip.toggleTabbed()
+        case .rotateSlide: strip.rotateFocused()
+        case .flipSlide: strip.flipFocused()
+        case .sortSlides:
+            strip.sortColumns { [weak self] column in
+                column.windows.first.flatMap { self?.windows[$0]?.appName } ?? ""
+            }
+        case .expandToFill:
+            expandToFill(&strip, display: display)
         default:
             if let number = action.columnNumber { strip.focusColumn(at: number - 1) }
         }
@@ -428,7 +518,7 @@ final class Engine {
         .moveLeft, .moveRight, .moveUp, .moveDown, .cycleWidth, .cycleWidthBackward, .narrower, .wider,
         .toggleFullWidth, .consumeIntoLeft, .consumeIntoRight, .expelLeft, .expel, .pinLeft, .pinRight,
         .toggleTabbed, .cycleLayout, .mainLarger, .mainSmaller, .makeMain, .regroup, .toggleFloat,
-        .sendToNextDisplay,
+        .sendToNextDisplay, .rotateSlide, .flipSlide, .sortSlides, .expandToFill,
     ]
 
     /// Keys name what you see: with a right-to-left strip, "left" is the
@@ -521,7 +611,14 @@ final class Engine {
         var strip = strips[key] ?? Strip()
         let rule = settings.rule(for: window.bundleID, title: window.title)
         let position = rule?.position ?? settings.newWindowPosition
-        if rule?.ownSlide == true || (settings.groupByApp && roomyApps.contains(Self.appKey(window))) {
+        let columnsBefore = strip.columns.count
+        if settings.openIntoFocusedSlide, rule?.ownSlide != true, strip.columns.indices.contains(strip.focusedColumn),
+            !strip.columns[strip.focusedColumn].isLocked, !strip.columns[strip.focusedColumn].isFull,
+            strip.columns[strip.focusedColumn].pin == nil
+        {
+            // Open-into-slide mode: the window joins the slide you're in.
+            strip.add(window.id, toColumn: strip.focusedColumn, focus: focus, custom: true)
+        } else if rule?.ownSlide == true || (settings.groupByApp && roomyApps.contains(Self.appKey(window))) {
             // A rule asks for it, or the app can't shrink to share a slide.
             strip.insertSlide(
                 [window.id], width: 1, arrangement: settings.arrangement(for: window.bundleID),
@@ -564,6 +661,14 @@ final class Engine {
                 window.id, width: width ?? rule?.width ?? rememberedWidth(window) ?? settings.layout.defaultWidth,
                 position: position, focus: focus)
         }
+        // Next to the app's other windows, if that's the preference.
+        if settings.openNextToSameApp, strip.columns.count > columnsBefore, let new = strip.locate(window.id)?.column,
+            let last = strip.columns.indices.last(where: { index in
+                index != new && strip.columns[index].windows.contains { windows[$0].map(Self.appKey) == Self.appKey(window) }
+            })
+        {
+            strip.moveColumn(from: new, to: last < new ? last + 1 : last)
+        }
         if focus { strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width) }
         strips[key] = strip
         window.key = key
@@ -579,7 +684,7 @@ final class Engine {
     private func smartPairs(_ strip: Strip) -> Strip {
         var strip = strip
         let groups = Grouping.plan(
-            strip.columns.filter { $0.pin == nil }.flatMap(\.windows),
+            strip.columns.filter { $0.pin == nil && !$0.isLocked }.flatMap(\.windows),
             app: { [weak self] id in self?.windows[id].map(Self.appKey) ?? "" },
             capacity: { [weak self] app in self?.settings.tiles(for: app) ?? 2 },
             pairSize: settings.tilesPerSlide
@@ -645,6 +750,9 @@ final class Engine {
         if let target = strips[newKey]?.focusedWindow { focus(target, warpMouse: false) }
         scheduleSave()
         onStateChange()
+        let name = settings.workspaceName(index)
+        onWorkspaceShown(name, index, visibleWorkspaceCount(on: key.screen))
+        onAnnounce("\(name), \(strips[newKey]?.columns.count ?? 0) slides")
     }
 
     /// Makes the workspace that holds `key` the visible one on its display.
@@ -829,6 +937,8 @@ final class Engine {
         var isFocused: Bool
         var pin: PinSide?
         var customRows: [Int]?
+        var name: String?
+        var isLocked = false
     }
 
     struct OverviewStrip: Identifiable {
@@ -870,7 +980,9 @@ final class Engine {
                         isTabbed: column.isTabbed,
                         isFocused: index == strip.focusedColumn && key == current,
                         pin: column.pin,
-                        customRows: column.customRows
+                        customRows: column.customRows,
+                        name: column.name,
+                        isLocked: column.isLocked
                     )
                 }.compactMap { column -> OverviewColumn? in
                     guard let onlyApp else { return column }
@@ -961,6 +1073,8 @@ final class Engine {
         var split: Double
         var isFocused: Bool
         var customRows: [Int]?
+        var name: String?
+        var isLocked = false
     }
 
     /// Everything the slider bar draws for one display.
@@ -1007,7 +1121,9 @@ final class Engine {
                     arrangement: column.arrangement,
                     split: column.split,
                     isFocused: index == strip.focusedColumn && column.windows.contains { $0 == focused },
-                    customRows: column.customRows
+                    customRows: column.customRows,
+                    name: column.name,
+                    isLocked: column.isLocked
                 )
             }
             let visible = display.visibleFrame
@@ -1137,7 +1253,7 @@ final class Engine {
             NSEvent.pressedMouseButtons == 0
         else { return }
         let now = CACurrentMediaTime()
-        guard now - lastFocusFollowsMouse > 0.15 else { return }
+        guard now - lastFocusFollowsMouse > max(settings.focusFollowsMouseDelay, 0.05) else { return }
         lastFocusFollowsMouse = now
         guard let id = topWindow(at: point), let window = windows[id], window.key != nil,
             id != focusedWindowID()
@@ -1425,7 +1541,7 @@ final class Engine {
     private func viewport(of display: Display) -> Rect {
         var area = display.viewport
         guard settings.sliderBar(for: display.uuid) == .always else { return area }
-        let reserved = AppSettings.sliderBarHeight
+        let reserved = AppSettings.sliderBarHeight - (settings.compactSlider ? 12 : 0)
         area.height -= reserved
         if settings.sliderBarEdge == .top { area.y += reserved }
         return area
@@ -1591,10 +1707,23 @@ final class Engine {
         let rule = settings.rule(for: window.bundleID, title: window.title)
         if rule?.isTitleRule == true { titleRuled.insert(id) }
         let floats = rule?.float == true || element.hasFixedSize || !element.isSettable(kAXSizeAttribute)
-        if floats && !force { return false }
+        if floats && !force {
+            // A floating window goes back where you last put this app's windows.
+            if settings.rememberFloatingPositions, let frame = floatingFrames[Self.appKey(window)],
+                displays.contains(where: { $0.frame.intersects(frame) })
+            {
+                element.setFrame(frame)
+            }
+            return false
+        }
 
-        // Apps can have a home workspace ("Slack opens in Chat").
+        // Apps can have a home workspace ("Slack opens in Chat") and display.
         var target = key
+        var targetDisplay = display
+        if let name = rule?.display, let home = displays.first(where: { $0.name == name }), home.uuid != display.uuid {
+            targetDisplay = home
+            target = currentKey(home)
+        }
         if let home = rule?.workspace, home >= 0, home < workspaceLimit { target.workspace = base + home }
         // A project's windows gather where its first window is.
         if let project = ProjectMatcher.project(in: window.title, projects: settings.projects) {
@@ -1605,7 +1734,7 @@ final class Engine {
                 projectHomes[project] = target
             }
         }
-        place(window, in: target, display: display, focus: focus && target == key)
+        place(window, in: target, display: targetDisplay, focus: focus && target == key)
         return true
     }
 
@@ -1881,6 +2010,12 @@ final class Engine {
     /// column width; dropping a dragged window moves its column to where it
     /// was dropped. Either way the layout is re-applied after mouse-up.
     private func userMovedOrResized(_ element: AXUIElement, resized: Bool) {
+        if settings.rememberFloatingPositions, let window = window(for: element), window.key == nil,
+            window.id != scratchpad, let frame = element.frame
+        {
+            floatingFrames[Self.appKey(window)] = frame
+            scheduleSave()
+        }
         if !resized, !animator.isRunning, NSEvent.pressedMouseButtons != 0, let window = window(for: element),
             CACurrentMediaTime() - window.appliedAt > 0.3
         {
@@ -2022,6 +2157,21 @@ final class Engine {
     private func recordHistory() {
         history.append(Snapshot(strips: strips, activeWorkspace: activeWorkspace))
         if history.count > 40 { history.removeFirst(history.count - 40) }
+        future.removeAll()
+    }
+
+    /// Changes undone, to redo.
+    private var future: [Snapshot] = []
+    var canRedo: Bool { !future.isEmpty }
+
+    func redo() {
+        guard isRunning, !isPaused, let snapshot = future.popLast() else {
+            onNotice("Nothing to redo")
+            return
+        }
+        history.append(Snapshot(strips: strips, activeWorkspace: activeWorkspace))
+        restore(snapshot)
+        onNotice("Redid layout change")
     }
 
     var canUndo: Bool { !history.isEmpty }
@@ -2034,6 +2184,13 @@ final class Engine {
             return
         }
         onNotice("Undid last layout change")
+        future.append(Snapshot(strips: strips, activeWorkspace: activeWorkspace))
+        restore(snapshot)
+    }
+
+    /// Puts a saved arrangement back: windows that closed since are dropped,
+    /// ones opened since are placed anew.
+    private func restore(_ snapshot: Snapshot) {
         strips = snapshot.strips
         activeWorkspace = snapshot.activeWorkspace
         var placed = Set<WindowID>()
@@ -2164,8 +2321,10 @@ final class Engine {
         on(NSWorkspace.screensDidWakeNotification) { [weak self] _ in self?.scheduleSync(after: 1.0) }
         on(NSWorkspace.sessionDidBecomeActiveNotification) { [weak self] _ in self?.scheduleSync(after: 1.0) }
         on(NSWorkspace.willSleepNotification) { [weak self] _ in
-            self?.animator.finishNow()
-            self?.saveState()
+            guard let self else { return }
+            self.animator.finishNow()
+            if self.settings.autoSnapshot { self.saveSnapshot(named: Self.lastSessionName, quiet: true) }
+            self.saveState()
         }
         on(NSApplication.didChangeScreenParametersNotification, in: .default) { [weak self] _ in
             self?.scheduleSync(after: 0.5)
@@ -2214,6 +2373,7 @@ final class Engine {
         var wholeSlideApps: [String]?
         var sticky: [WindowID]?
         var appWidths: [String: Double]?
+        var floatingFrames: [String: CGRect]?
         var projectHomes: [String: StripKey]?
     }
 
@@ -2243,6 +2403,7 @@ final class Engine {
             names: names.filter { windows[$0.key] != nil }, session: session,
             activeProfile: activeProfile, profileWorkspaces: profileWorkspaces, marks: marks, scratchpad: scratchpad,
             wholeSlideApps: roomyApps.sorted(), sticky: Array(stickyWindows), appWidths: appWidths,
+            floatingFrames: floatingFrames,
             projectHomes: projectHomes)
         do {
             try FileManager.default.createDirectory(at: SettingsStore.directory, withIntermediateDirectories: true)
@@ -2266,6 +2427,7 @@ final class Engine {
         roomyApps = Set(state.wholeSlideApps ?? [])
         stickyWindows = Set(state.sticky ?? [])
         appWidths = state.appWidths ?? [:]
+        floatingFrames = state.floatingFrames ?? [:]
         projectHomes = state.projectHomes ?? [:]
         lastSession = state.session ?? []
         lastSessionLoaded = Date()
@@ -2808,7 +2970,9 @@ final class Engine {
 
     /// Saves every workspace of every profile on every display, and the apps
     /// that are open, to bring the whole session back later.
-    func saveSnapshot(named name: String) {
+    static let lastSessionName = "Last session"
+
+    func saveSnapshot(named name: String, quiet: Bool = false) {
         var workspaces: [Int: [SavedColumn]] = [:]
         for (key, strip) in strips where !strip.isEmpty {
             workspaces[key.workspace, default: []] += strip.columns.map { SavedColumn($0, fingerprint: fingerprint(of:)) }
@@ -2823,7 +2987,7 @@ final class Engine {
         savedLayouts.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         writeLayouts()
         onStateChange()
-        onNotice("Snapshot “\(name)” · \(workspaces.count) workspaces, \(apps.count) apps")
+        if !quiet { onNotice("Snapshot “\(name)” · \(workspaces.count) workspaces, \(apps.count) apps") }
     }
 
     /// Relaunches a snapshot's apps, then puts their windows back as they
@@ -3009,8 +3173,9 @@ final class Engine {
 
     /// Animations stay off while macOS asks for less motion or saves power.
     private var reduceMotion: Bool {
-        settings.followReduceMotion
-            && (NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || ProcessInfo.processInfo.isLowPowerModeEnabled)
+        (settings.followReduceMotion
+            && (NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || ProcessInfo.processInfo.isLowPowerModeEnabled))
+            || (settings.skipAnimationsOnBattery && Power.onBattery)
     }
 
     private func moveFocusedToEmptyWorkspace() {
@@ -3491,13 +3656,313 @@ final class Engine {
         layout(animated: true)
     }
 
+    // MARK: - 0.9: displays, slides and rescue
+
+    /// Where each app's floating windows were last put.
+    private var floatingFrames: [String: CGRect] = [:]
+
+    private func focusNextDisplay() {
+        guard displays.count > 1, let (display, _) = activeContext(),
+            let index = displays.firstIndex(where: { $0.uuid == display.uuid })
+        else { return }
+        let next = displays[(index + 1) % displays.count]
+        if let target = strips[currentKey(next)]?.focusedWindow {
+            focusAndReveal(target)
+        } else {
+            CGWarpMouseCursorPosition(CGPoint(x: next.frame.midX, y: next.frame.midY))
+        }
+    }
+
+    /// The whole workspace (every slide) moves to the next display.
+    private func moveWorkspaceToNextDisplay() {
+        guard displays.count > 1, let (display, key) = activeContext(), let strip = strips[key], !strip.isEmpty,
+            let index = displays.firstIndex(where: { $0.uuid == display.uuid })
+        else { return }
+        recordHistory()
+        let next = displays[(index + 1) % displays.count]
+        let target = currentKey(next)
+        var into = strips[target] ?? Strip()
+        into.replaceColumns(into.columns + strip.columns, keepingFocusOn: strip.focusedWindow)
+        strips[target] = into
+        strips[key] = Strip()
+        for id in into.allWindows {
+            windows[id]?.key = target
+            windows[id]?.lastApplied = nil
+        }
+        layout(animated: true)
+        if let id = strip.focusedWindow { focus(id, warpMouse: true) }
+        scheduleSave()
+        onNotice("Moved \(settings.workspaceName(key.workspace - base)) to \(next.name)")
+    }
+
+    /// The first two displays trade their workspaces.
+    private func swapDisplays() {
+        guard displays.count > 1 else { return }
+        recordHistory()
+        let a = currentKey(displays[0]), b = currentKey(displays[1])
+        let first = strips[a] ?? Strip(), second = strips[b] ?? Strip()
+        strips[a] = second
+        strips[b] = first
+        for id in second.allWindows { windows[id]?.key = a; windows[id]?.lastApplied = nil }
+        for id in first.allWindows { windows[id]?.key = b; windows[id]?.lastApplied = nil }
+        layout(animated: true)
+        scheduleSave()
+        onNotice("Swapped displays")
+    }
+
+    private func moveFocusedToPointerDisplay() {
+        guard let pointer = displayUnderMouse(), let id = focusedWindowID(), let window = windows[id], let key = window.key,
+            key.display != pointer.uuid
+        else { return }
+        recordHistory()
+        let width = strips[key].flatMap { strip in strip.locate(id).map { strip.columns[$0.column].width } }
+        removeFromStrip(window)
+        place(window, in: currentKey(pointer), display: pointer, focus: true, width: width, restoring: false)
+        window.lastApplied = nil
+        layout(animated: true)
+        focus(id, warpMouse: false)
+    }
+
+    /// The next window of the same app, in strip order, across workspaces.
+    private func cycleAppWindows() {
+        guard let id = focusedWindowID(), let window = windows[id] else { return }
+        let app = Self.appKey(window)
+        let ordered = strips.sorted { ($0.key.display, $0.key.workspace) < ($1.key.display, $1.key.workspace) }
+            .flatMap(\.value.allWindows).filter { windows[$0].map(Self.appKey) == app }
+        guard ordered.count > 1, let index = ordered.firstIndex(of: id) else {
+            onNotice("No other \(window.appName) window")
+            return
+        }
+        focusAndReveal(ordered[(index + 1) % ordered.count])
+    }
+
+    /// The focused window and the one before it trade places.
+    private func swapWithRecent() {
+        guard let id = focusedWindowID(), let key = windows[id]?.key,
+            let other = focusHistory.reversed().first(where: { $0 != id && windows[$0]?.key == key }),
+            var strip = strips[key]
+        else {
+            onNotice("No earlier window on this strip")
+            return
+        }
+        recordHistory()
+        strip.swapWindows(id, other)
+        commit(strip, key)
+    }
+
+    /// Widens the focused slide to fill whatever the other slides on screen leave free.
+    private func expandToFill(_ strip: inout Strip, display: Display) {
+        let config = layoutConfig(for: display)
+        let area = viewport(of: display)
+        let frames = strip.columnFrames(config: config, viewport: area)
+        let others = frames.indices.filter { index in
+            index != strip.focusedColumn && strip.columns[index].pin == nil
+                && frames[index].frame.x >= area.x - 1 && frames[index].frame.x + frames[index].frame.width <= area.x + area.width + 1
+        }
+        let used = others.reduce(0.0) { $0 + frames[$1].frame.width + config.gap }
+        let free = area.width - used - config.edgeGap * 2
+        guard free > 100, let id = strip.focusedWindow else { return }
+        strip.setWidth(config.fraction(forColumnWidth: free, viewportWidth: area.width), of: id)
+    }
+
+    /// Every window of the focused app (up to six on this screen) into one slide.
+    private func gatherFocusedApp() {
+        guard let id = focusedWindowID(), let window = windows[id], let key = window.key else { return }
+        let app = Self.appKey(window)
+        let mine = [id] + windows.values.filter { $0.id != id && $0.key?.screen == key.screen && Self.appKey($0) == app }.map(\.id)
+        guard mine.count > 1 else {
+            onNotice("\(window.appName) has one window here")
+            return
+        }
+        pairWindows(Array(mine.prefix(Column.maximumWindows)), arrangement: mine.count > 2 ? .grid : .columns)
+        onNotice("Gathered \(min(mine.count, Column.maximumWindows)) \(window.appName) windows")
+    }
+
+    private func tileAllFloating() {
+        let floating = windows.values.filter { $0.key == nil && $0.id != scratchpad && !demoWindows.contains($0.id) }
+        guard !floating.isEmpty else {
+            onNotice("No floating windows")
+            return
+        }
+        recordHistory()
+        for window in floating { tile(window) }
+        onNotice("Tiled \(floating.count) floating windows")
+    }
+
+    /// When something goes wrong: every window of every app back on screen, then a fresh layout.
+    func rescueWindows() {
+        animator.finishNow()
+        showingDesktop = false
+        guard let main = displays.first else { return }
+        var moved = 0
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
+            for element in AXUIElement.application(app.processIdentifier).windows {
+                guard let frame = element.frame, element.role == kAXWindowRole else { continue }
+                let onScreen = displays.contains { $0.frame.intersection(frame).area > frame.area * 0.5 }
+                // Tiled windows waiting in other workspaces are off screen on purpose; the retile handles them.
+                let waiting = element.windowID.flatMap { windows[$0]?.key } != nil
+                if !onScreen, !waiting {
+                    let size = CGSize(width: min(frame.width, main.visibleFrame.width * 0.8), height: min(frame.height, main.visibleFrame.height * 0.8))
+                    element.setFrame(CGRect(x: main.visibleFrame.midX - size.width / 2, y: main.visibleFrame.midY - size.height / 2,
+                                            width: size.width, height: size.height))
+                    moved += 1
+                }
+            }
+        }
+        retile()
+        onNotice(moved > 0 ? "Brought \(moved) windows back on screen" : "Every window is on screen")
+    }
+
+    // MARK: Solo
+
+    private var soloHidden: [pid_t] = []
+
+    /// Hides every app except the ones in the focused slide; again to bring them back.
+    private func toggleSolo() {
+        if !soloHidden.isEmpty {
+            for pid in soloHidden { NSRunningApplication(processIdentifier: pid)?.unhide() }
+            soloHidden.removeAll()
+            onNotice("Solo off")
+            return
+        }
+        guard let id = focusedWindowID(), let key = windows[id]?.key, let strip = strips[key], let (c, _) = strip.locate(id) else { return }
+        let keep = Set(strip.columns[c].windows.compactMap { windows[$0]?.pid } + [ownPID])
+        for app in NSWorkspace.shared.runningApplications
+        where app.activationPolicy == .regular && !keep.contains(app.processIdentifier) && !app.isHidden {
+            if app.hide() { soloHidden.append(app.processIdentifier) }
+        }
+        onNotice("Solo · \(soloHidden.count) apps hidden · again to bring them back")
+    }
+
+    // MARK: Gaps
+
+    private var gapsBeforeZen: (gap: Double, edge: Double)?
+
+    private func adjustGaps(_ action: Action) {
+        switch action {
+        case .toggleGaps:
+            if settings.layout.gap > 0 || settings.layout.edgeGap > 0 {
+                gapsBeforeZen = (settings.layout.gap, settings.layout.edgeGap)
+                onAdjustSettings { $0.layout.gap = 0; $0.layout.edgeGap = 0 }
+                onNotice("No gaps")
+            } else {
+                let back = gapsBeforeZen ?? (LayoutConfig().gap, LayoutConfig().edgeGap)
+                onAdjustSettings { $0.layout.gap = back.gap; $0.layout.edgeGap = back.edge }
+                onNotice("Gaps back")
+            }
+        default:
+            let step = action == .biggerGaps ? 4.0 : -4.0
+            onAdjustSettings { settings in
+                settings.layout.gap = min(max(settings.layout.gap + step, 0), 40)
+                settings.layout.edgeGap = min(max(settings.layout.edgeGap + step, 0), 40)
+            }
+        }
+    }
+
+    private func centerFocusedFloating() {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+            let element = AXUIElement.application(app.processIdentifier).focusedWindow, let frame = element.frame,
+            let display = display(containing: frame)
+        else { return }
+        if let id = element.windowID, windows[id]?.key != nil {
+            onNotice("Tiled windows stay on the strip · ⌃⌥T floats one")
+            return
+        }
+        let area = display.visibleFrame
+        element.setPosition(CGPoint(x: area.midX - frame.width / 2, y: area.midY - frame.height / 2))
+    }
+
+    /// Floats a window and makes it exactly `size`, centred (for recordings and screenshots).
+    func setFloatingSize(_ id: WindowID, _ size: CGSize) {
+        guard let window = windows[id] else { return }
+        if window.key != nil {
+            removeFromStrip(window)
+            window.lastApplied = nil
+            layout(animated: true)
+        }
+        guard let display = display(containing: window.element.frame ?? .zero) ?? displays.first else { return }
+        let area = display.visibleFrame
+        let fitted = CGSize(width: min(size.width, area.width), height: min(size.height, area.height))
+        window.element.setFrame(CGRect(x: area.midX - fitted.width / 2, y: area.midY - fitted.height / 2,
+                                       width: fitted.width, height: fitted.height))
+        focus(id, warpMouse: false)
+    }
+
+    /// Stops managing a window (the app gets a float rule from the caller).
+    func release(_ id: WindowID) {
+        guard let window = windows[id] else { return }
+        if window.key != nil {
+            removeFromStrip(window)
+            window.lastApplied = nil
+            layout(animated: true)
+        }
+    }
+
+    // MARK: Slide names and locks
+
+    func slideName(of id: WindowID) -> String? {
+        guard let key = windows[id]?.key, let strip = strips[key], let (c, _) = strip.locate(id) else { return nil }
+        return strip.columns[c].name
+    }
+
+    func nameSlide(_ id: WindowID, _ name: String) {
+        guard let key = windows[id]?.key, var strip = strips[key] else { return }
+        strip.setName(name, ofSlideWith: id)
+        strips[key] = strip
+        scheduleSave()
+        onStateChange()
+    }
+
+    func isSlideLocked(_ id: WindowID) -> Bool {
+        guard let key = windows[id]?.key, let strip = strips[key], let (c, _) = strip.locate(id) else { return false }
+        return strip.columns[c].isLocked
+    }
+
+    func toggleLock(_ id: WindowID) {
+        guard let key = windows[id]?.key, var strip = strips[key] else { return }
+        let locked = strip.toggleLock(ofSlideWith: id)
+        strips[key] = strip
+        scheduleSave()
+        onStateChange()
+        onNotice(locked ? "Slide locked · smart pairs and new windows leave it alone" : "Slide unlocked")
+    }
+
+    // MARK: For Settings and diagnostics
+
+    var wholeSlideApps: [String] { roomyApps.sorted() }
+
+    func forgetWholeSlideApp(_ app: String) {
+        roomyApps.remove(app)
+        scheduleSave()
+    }
+
+    /// A short report for bug reports: no window titles, nothing private.
+    func diagnostics() -> String {
+        var lines: [String] = []
+        lines.append("Displays: " + displays.map { "\($0.name) \(Int($0.frame.width))×\(Int($0.frame.height))" }.joined(separator: ", "))
+        lines.append("Managed windows: \(windows.count) (\(windows.values.filter { $0.key == nil }.count) floating)")
+        lines.append("Strips: \(strips.filter { !$0.value.isEmpty }.count), slides on screen: \(slideCount)")
+        lines.append("Apps: " + Set(windows.values.map(\.appName)).sorted().joined(separator: ", "))
+        lines.append("Whole-slide apps: " + (roomyApps.isEmpty ? "none" : roomyApps.sorted().joined(separator: ", ")))
+        lines.append("Paused: \(isPaused), profile: \(profileName), focus mode: \(isFocusMode)")
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: - Haptics
 
     /// A light tap on Force Touch trackpads as the strip lands on a slide.
     private func haptic() {
+        if settings.slideSound { Self.click?.play() }
         guard settings.hapticFeedback else { return }
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
+
+    /// A soft click for slide changes.
+    private static let click: NSSound? = {
+        let sound = NSSound(named: "Tink")
+        sound?.volume = 0.25
+        return sound
+    }()
 
     // MARK: - Snapping floating windows
 

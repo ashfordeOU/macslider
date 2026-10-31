@@ -17,6 +17,8 @@ public struct AppRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     public var arrangement: Arrangement?
     /// Workspace (0-based) this app's new windows open in.
     public var workspace: Int?
+    /// The display (by name) this app's new windows open on.
+    public var display: String?
     /// Only windows whose title contains this (any case), e.g. "Meet" in a
     /// browser. Empty or nil applies to every window of the app.
     public var titleContains: String?
@@ -173,6 +175,24 @@ public enum ProjectMatcher {
             let after = range.upperBound == lower.endIndex ? nil : lower[range.upperBound]
             func isWordCharacter(_ c: Character?) -> Bool { c.map { $0.isLetter || $0.isNumber } ?? false }
             return !isWordCharacter(before) && !isWordCharacter(after)
+        }
+    }
+}
+
+/// What the menu bar item shows.
+public enum MenuBarStyle: String, Codable, CaseIterable, Sendable {
+    /// The M glyph and the slide number.
+    case glyph
+    /// A dot per slide, the focused one filled.
+    case dots
+    /// Just the workspace number.
+    case number
+
+    public var title: String {
+        switch self {
+        case .glyph: return "M and slide number"
+        case .dots: return "A dot per slide"
+        case .number: return "Workspace number"
         }
     }
 }
@@ -393,6 +413,34 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var scripts = false
     /// Interface language: empty follows macOS.
     public var language = ""
+    /// New windows open right after their app's other windows.
+    public var openNextToSameApp = false
+    /// New windows join the focused slide (toggled by an action).
+    public var openIntoFocusedSlide = false
+    /// Show the workspace's name in the middle of the screen when switching.
+    public var workspaceHUD = true
+    /// Window titles on the slider bar's tiles, and a smaller bar.
+    public var sliderTitles = false
+    public var compactSlider = false
+    public var menuBarStyle: MenuBarStyle = .glyph
+    /// No pop-up notices (confirmations, tips).
+    public var quietMode = false
+    /// A soft click as the strip lands on a slide.
+    public var slideSound = false
+    /// VoiceOver says which slide and workspace you moved to.
+    public var announceChanges = true
+    /// Floating windows go back where you last put them, per app.
+    public var rememberFloatingPositions = true
+    /// Take a "Last session" snapshot on quit and before sleep.
+    public var autoSnapshot = true
+    /// Keep a copy of the settings each day (the last seven).
+    public var dailyBackups = true
+    /// Skip animations while running on battery.
+    public var skipAnimationsOnBattery = false
+    /// Hold ⌃⌥ for a moment to see a cheat sheet of shortcuts.
+    public var cheatSheetOnHold = true
+    /// Focus follows mouse waits this long (seconds) before switching.
+    public var focusFollowsMouseDelay = 0.15
     /// Snap windows back when an app moves or resizes one by itself.
     public var keepWindowsInPlace = true
     /// After resizing a window in a slide, offer to rearrange the slide.
@@ -509,6 +557,9 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case liveReloadSettings, publishState, eventScript, followReduceMotion, resizeHUD
         case rememberWidths, centerLoneWindow, autoGrowFocus, projects, templates, meetingHelper, meetingProfile
         case verticalWorkspaceSwipes, pinchZoomsStrip, localAPI, apiPort, scripts, language
+        case openNextToSameApp, openIntoFocusedSlide, workspaceHUD, sliderTitles, compactSlider, menuBarStyle, quietMode
+        case slideSound, announceChanges, rememberFloatingPositions, autoSnapshot, dailyBackups, skipAnimationsOnBattery
+        case cheatSheetOnHold, focusFollowsMouseDelay
     }
 
     public init(from decoder: Decoder) throws {
@@ -603,6 +654,21 @@ public struct AppSettings: Equatable, Codable, Sendable {
         apiPort = value(.apiPort, d.apiPort)
         scripts = value(.scripts, d.scripts)
         language = value(.language, d.language)
+        openNextToSameApp = value(.openNextToSameApp, d.openNextToSameApp)
+        openIntoFocusedSlide = value(.openIntoFocusedSlide, d.openIntoFocusedSlide)
+        workspaceHUD = value(.workspaceHUD, d.workspaceHUD)
+        sliderTitles = value(.sliderTitles, d.sliderTitles)
+        compactSlider = value(.compactSlider, d.compactSlider)
+        menuBarStyle = value(.menuBarStyle, d.menuBarStyle)
+        quietMode = value(.quietMode, d.quietMode)
+        slideSound = value(.slideSound, d.slideSound)
+        announceChanges = value(.announceChanges, d.announceChanges)
+        rememberFloatingPositions = value(.rememberFloatingPositions, d.rememberFloatingPositions)
+        autoSnapshot = value(.autoSnapshot, d.autoSnapshot)
+        dailyBackups = value(.dailyBackups, d.dailyBackups)
+        skipAnimationsOnBattery = value(.skipAnimationsOnBattery, d.skipAnimationsOnBattery)
+        cheatSheetOnHold = value(.cheatSheetOnHold, d.cheatSheetOnHold)
+        focusFollowsMouseDelay = value(.focusFollowsMouseDelay, d.focusFollowsMouseDelay)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

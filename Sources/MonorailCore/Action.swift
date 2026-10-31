@@ -103,6 +103,35 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case stripZoom = "strip-zoom"
     case presentationMode = "presentation-mode"
     case recordSlide = "record-slide"
+    case redo = "redo"
+    case nextWorkspace = "next-workspace"
+    case previousWorkspace = "previous-workspace"
+    case moveToNextWorkspace = "move-to-next-workspace"
+    case moveToPreviousWorkspace = "move-to-previous-workspace"
+    case focusNextDisplay = "focus-next-display"
+    case moveWorkspaceToNextDisplay = "move-workspace-to-next-display"
+    case swapDisplays = "swap-displays"
+    case moveToPointerDisplay = "move-to-pointer-display"
+    case cycleAppWindows = "cycle-app-windows"
+    case swapWithRecent = "swap-with-recent"
+    case rotateSlide = "rotate-slide"
+    case flipSlide = "flip-slide"
+    case expandToFill = "expand-to-fill"
+    case closeSlide = "close-slide"
+    case minimizeSlide = "minimize-slide"
+    case gatherApp = "gather-app"
+    case sortSlides = "sort-slides"
+    case tileAllFloating = "tile-floating"
+    case rescueWindows = "rescue-windows"
+    case soloMode = "solo"
+    case toggleGaps = "toggle-gaps"
+    case biggerGaps = "bigger-gaps"
+    case smallerGaps = "smaller-gaps"
+    case centerFloating = "center-floating"
+    case lockSlide = "lock-slide"
+    case openIntoSlide = "open-into-slide"
+    case cheatSheet = "cheat-sheet"
+    case nameSlide = "name-slide"
     case retile
     case undo
     case togglePause = "toggle-pause"
@@ -184,6 +213,35 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .stripZoom: return "Zoom out on the strip"
         case .presentationMode: return "Presentation mode"
         case .recordSlide: return "Record the slide (again to stop)"
+        case .redo: return "Redo layout change"
+        case .nextWorkspace: return "Next workspace"
+        case .previousWorkspace: return "Previous workspace"
+        case .moveToNextWorkspace: return "Move window to the next workspace"
+        case .moveToPreviousWorkspace: return "Move window to the previous workspace"
+        case .focusNextDisplay: return "Focus the next display"
+        case .moveWorkspaceToNextDisplay: return "Move the workspace to the next display"
+        case .swapDisplays: return "Swap the workspaces on two displays"
+        case .moveToPointerDisplay: return "Move window to the display under the pointer"
+        case .cycleAppWindows: return "Next window of the same app"
+        case .swapWithRecent: return "Swap with the last window"
+        case .rotateSlide: return "Rotate the windows in the slide"
+        case .flipSlide: return "Flip the slide"
+        case .expandToFill: return "Widen the slide to fill the screen’s free space"
+        case .closeSlide: return "Close every window in the slide"
+        case .minimizeSlide: return "Minimise the slide"
+        case .gatherApp: return "Gather this app’s windows into one slide"
+        case .sortSlides: return "Sort slides by app"
+        case .tileAllFloating: return "Tile every floating window"
+        case .rescueWindows: return "Rescue windows (bring everything on screen)"
+        case .soloMode: return "Solo: hide other apps"
+        case .toggleGaps: return "Gaps on / off"
+        case .biggerGaps: return "Bigger gaps"
+        case .smallerGaps: return "Smaller gaps"
+        case .centerFloating: return "Centre the floating window"
+        case .lockSlide: return "Lock / unlock the slide"
+        case .openIntoSlide: return "New windows join the focused slide (on / off)"
+        case .cheatSheet: return "Show the shortcut cheat sheet"
+        case .nameSlide: return "Name the slide…"
         case .retile: return "Retile everything"
         case .undo: return "Undo last layout change"
         case .togglePause: return "Pause / resume"
@@ -247,4 +305,12 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         while name.hasSuffix("/") { name.removeLast() }
         self.init(rawValue: name.lowercased())
     }
+
+    /// Actions without a default shortcut (bind one in Settings, or use the
+    /// menu, command palette, a window's right-click menu or a URL).
+    public static let unboundByDefault: Set<Action> = [
+        .swapDisplays, .moveToPointerDisplay, .expandToFill, .closeSlide, .minimizeSlide, .gatherApp, .sortSlides,
+        .tileAllFloating, .rescueWindows, .biggerGaps, .smallerGaps, .centerFloating, .lockSlide, .openIntoSlide,
+        .nameSlide,
+    ]
 }

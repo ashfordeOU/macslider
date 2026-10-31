@@ -83,6 +83,10 @@
 			</dict>
 		</dict>
 	</array>
+	<key>NSAppleScriptEnabled</key>
+	<true/>
+	<key>OSAScriptingDefinition</key>
+	<string>Monorail.sdef</string>
 	<key>NSLocationUsageDescription</key>
 	<string>Monorail reads the name of your Wi-Fi network to switch profile or layout when you join it. Your location is never stored or sent anywhere.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

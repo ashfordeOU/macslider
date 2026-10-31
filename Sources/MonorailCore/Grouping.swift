@@ -70,7 +70,9 @@ public enum Grouping {
             if let name = app(window) { counts[name, default: 0] += 1 }
         }
         // Pinned columns and columns the user arranged by hand are never touched.
-        let scrolling = strip.columns.indices.filter { strip.columns[$0].pin == nil && !strip.columns[$0].isCustom }
+        let scrolling = strip.columns.indices.filter {
+            strip.columns[$0].pin == nil && !strip.columns[$0].isCustom && !strip.columns[$0].isLocked
+        }
         func apps(of column: Int) -> [String?] { strip.columns[column].windows.map(app) }
 
         let existing = counts[newApp] ?? 0

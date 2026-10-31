@@ -14,7 +14,7 @@ final class KeymapTests: XCTestCase {
     }
 
     func testEveryActionHasADefaultShortcut() {
-        for action in Action.allCases where action.columnNumber == nil {
+        for action in Action.allCases where action.columnNumber == nil && !Action.unboundByDefault.contains(action) {
             XCTAssertFalse(Keymap.default.shortcuts(for: action).isEmpty, "\(action) has no default")
         }
     }

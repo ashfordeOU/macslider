@@ -42,7 +42,10 @@ final class SliderBarController {
         get { peekWatcher.isEnabled }
         set { peekWatcher.isEnabled = newValue }
     }
-    private static let height: CGFloat = 52
+    /// A smaller bar, and window titles on its tiles.
+    var compact = false
+    var showTitles = false
+    private var height: CGFloat { compact ? 40 : 52 }
     private static let margin: CGFloat = 6
 
     /// Refreshes the bars. Called whenever the strips change.
@@ -63,6 +66,7 @@ final class SliderBarController {
         for map in maps {
             let bar = bars[map.displayUUID] ?? makeBar(for: map.displayUUID)
             bars[map.displayUUID] = bar
+            if bar.model.showTitles != showTitles { bar.model.showTitles = showTitles }
             if bar.model.map != map {
                 changed = changed || bar.model.map?.viewportX != map.viewportX
                     || bar.model.map?.tiles != map.tiles || bar.model.map?.workspace != map.workspace
@@ -143,15 +147,15 @@ final class SliderBarController {
         let width = min(max(screen.width * 0.5, 320), 820)
         let y = edge == .bottom
             ? screen.minY + Self.margin
-            : screen.maxY - Self.height - Self.margin
-        let frame = NSRect(x: screen.midX - width / 2, y: y, width: width, height: Self.height)
+            : screen.maxY - height - Self.margin
+        let frame = NSRect(x: screen.midX - width / 2, y: y, width: width, height: height)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
     }
 
     private func makeBar(for uuid: String) -> (panel: NSPanel, model: SliderBarModel) {
         let model = SliderBarModel()
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 600, height: Self.height),
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: height),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: true
@@ -254,6 +258,8 @@ final class SliderBarModel: ObservableObject {
     @Published var hoveredWorkspace: Int?
     @Published var isHovering = false
     @Published var isDragging = false
+    /// Window titles (or the slide's name) on the tiles.
+    @Published var showTitles = false
 }
 
 private enum AppIcons {
@@ -370,7 +376,7 @@ private struct SliderBarView: View {
                 RoundedRectangle(cornerRadius: 7)
                     .fill(Color.primary.opacity(0.05))
                 ForEach(map.tiles) { tile in
-                    TileView(tile: tile, height: size.height - 8)
+                    TileView(tile: tile, height: size.height - 8, showTitle: model.showTitles)
                         .frame(width: max(tile.width * scale - 3, 6), height: size.height - 8)
                         .offset(x: trackX(tile.x, width: tile.width, lower: lower, span: span, scale: scale, map: map) + 1.5, y: 4)
                         .onHover { hovering in
@@ -453,6 +459,7 @@ private struct SliderBarView: View {
 private struct TileView: View {
     let tile: Engine.MiniTile
     let height: CGFloat
+    var showTitle = false
 
     private var icons: [pid_t] {
         var seen: [pid_t] = []
@@ -472,15 +479,23 @@ private struct TileView: View {
                     .padding(3)
             }
             HStack(spacing: 2) {
-                ForEach(icons.prefix(4), id: \.self) { pid in
+                ForEach(icons.prefix(showTitle ? 1 : 4), id: \.self) { pid in
                     if let icon = AppIcons.icon(for: pid) {
                         Image(nsImage: icon).resizable().frame(width: iconSize, height: iconSize)
                     }
                 }
-                if tile.windows.count > 1 {
+                if showTitle || tile.name != nil {
+                    Text(tile.name ?? tile.windows.first.map { $0.title.isEmpty ? $0.appName : $0.title } ?? "")
+                        .font(.system(size: 10, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                } else if tile.windows.count > 1 {
                     Text("\(tile.windows.count)")
                         .font(.system(size: 9, weight: .bold, design: .rounded))
                         .foregroundStyle(.secondary)
+                }
+                if tile.isLocked {
+                    Image(systemName: "lock.fill").font(.system(size: 8)).foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 3)

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="Monorail Terminology">
+    <suite name="Monorail Suite" code="MnRl" description="Drive Monorail by Ashforde® from AppleScript.">
+        <command name="perform" code="MnRlPerf" description="Run a Monorail action by name, like &quot;focus-left&quot; or &quot;overview&quot;.">
+            <cocoa class="MonorailPerformCommand"/>
+            <direct-parameter type="text" description="The action's name (see monorail://… URLs)."/>
+            <result type="boolean" description="True if the action exists."/>
+        </command>
+        <command name="apply layout" code="MnRlLayo" description="Apply a saved layout.">
+            <cocoa class="MonorailOpenCommand"/>
+            <direct-parameter type="text" description="The layout's name."/>
+            <result type="boolean"/>
+        </command>
+        <command name="open pair" code="MnRlPair" description="Open a saved app pair.">
+            <cocoa class="MonorailOpenCommand"/>
+            <direct-parameter type="text" description="The pair's name."/>
+            <result type="boolean"/>
+        </command>
+        <command name="start template" code="MnRlTmpl" description="Start a workspace template.">
+            <cocoa class="MonorailOpenCommand"/>
+            <direct-parameter type="text" description="The template's name."/>
+            <result type="boolean"/>
+        </command>
+        <command name="restore snapshot" code="MnRlSnap" description="Restore a session snapshot.">
+            <cocoa class="MonorailOpenCommand"/>
+            <direct-parameter type="text" description="The snapshot's name."/>
+            <result type="boolean"/>
+        </command>
+        <command name="current state" code="MnRlStat" description="The workspace, slide and focused window, as JSON.">
+            <cocoa class="MonorailQueryCommand"/>
+            <result type="text"/>
+        </command>
+        <command name="window list" code="MnRlWins" description="Every window Monorail manages, as JSON.">
+            <cocoa class="MonorailQueryCommand"/>
+            <result type="text"/>
+        </command>
+    </suite>
+</dictionary>

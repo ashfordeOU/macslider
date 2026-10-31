@@ -17,6 +17,28 @@ final class OverviewModel: ObservableObject {
     @Published var theme: Theme = .vivid
     /// "Overview", or the app whose windows are shown.
     @Published var heading = "Overview"
+    /// Type to narrow the overview to matching windows.
+    @Published var query = ""
+    /// The height of each slide card (a slider in the header).
+    @Published var cardHeight: CGFloat = 190
+
+    /// The strips, with only the windows that match the search.
+    var visibleStrips: [Engine.OverviewStrip] {
+        let terms = query.lowercased().split(separator: " ").map(String.init)
+        guard !terms.isEmpty else { return strips }
+        return strips.compactMap { strip in
+            var strip = strip
+            strip.columns = strip.columns.compactMap { column in
+                var column = column
+                column.windows = column.windows.filter { window in
+                    let text = "\(window.appName) \(window.title) \(column.name ?? "")".lowercased()
+                    return terms.allSatisfy { text.contains($0) }
+                }
+                return column.windows.isEmpty ? nil : column
+            }
+            return strip.columns.isEmpty ? nil : strip
+        }
+    }
 
     func loadThumbnails() {
         previewsAllowed = WindowThumbnails.isAllowed
@@ -130,7 +152,7 @@ struct OverviewView: View {
                 header
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: 22) {
-                        ForEach(Array(model.strips.enumerated()), id: \.element.id) { row, strip in
+                        ForEach(Array(model.visibleStrips.enumerated()), id: \.element.id) { row, strip in
                             StripRow(row: row, strip: strip, model: model, actions: actions)
                         }
                     }
@@ -157,6 +179,18 @@ struct OverviewView: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 24)
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.6))
+                TextField("Search windows", text: $model.query)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(.white)
+                    .frame(width: 160)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Capsule().fill(Color.white.opacity(0.12)))
+            Slider(value: $model.cardHeight, in: 120...300)
+                .frame(width: 90)
+                .help("Card size")
             CloseDropTarget { id in actions.commands.close(id) }
             Button {
                 actions.resetPairs()
@@ -181,7 +215,7 @@ private struct StripRow: View {
     let strip: Engine.OverviewStrip
     @ObservedObject var model: OverviewModel
     let actions: OverviewActions
-    private let height: CGFloat = 190
+    private var height: CGFloat { model.cardHeight }
 
     @State private var draft = ""
     @FocusState private var fieldFocused: Bool
@@ -361,6 +395,8 @@ private struct ColumnCard: View {
             HStack(spacing: 4) {
                 Image(systemName: "line.3.horizontal")
                 if column.pin != nil { Image(systemName: "pin.fill") }
+                if column.isLocked { Image(systemName: "lock.fill") }
+                if let name = column.name { Text(name).font(.system(size: 11, weight: .semibold)).lineLimit(1) }
                 if column.isTabbed {
                     Image(systemName: "menubar.rectangle")
                 } else if column.windows.count > 1 {
@@ -588,6 +624,7 @@ final class OverviewController {
         guard let engine else { return }
         self.onlyApp = onlyApp
         model.heading = appName.map { "\($0) windows" } ?? "Overview"
+        model.query = ""
         model.theme = WorkspaceColor.theme
         model.strips = engine.overview(onlyApp: onlyApp)
         model.selection = nil
@@ -675,6 +712,23 @@ final class OverviewController {
             self?.close()
             self?.commands.pictureInPicture(id)
         }
+        commands.nameSlide = { [weak self] id in
+            self?.close()
+            self?.commands.nameSlide(id)
+        }
+        commands.isSlideLocked = { [weak self] id in self?.commands.isSlideLocked(id) ?? false }
+        commands.toggleLock = { [weak self] id in
+            self?.commands.toggleLock(id)
+            self?.refresh()
+        }
+        commands.neverManage = { [weak self] id in
+            self?.commands.neverManage(id)
+            self?.refresh()
+        }
+        commands.setSize = { [weak self] id, size in
+            self?.close()
+            self?.commands.setSize(id, size)
+        }
         return commands
     }
 
@@ -682,7 +736,7 @@ final class OverviewController {
     /// delete closes it.
     private func handleKey(_ event: NSEvent) -> Bool {
         guard model.editing == nil else { return false }
-        let rows = model.strips.map { strip -> [WindowID] in
+        let rows = model.visibleStrips.map { strip -> [WindowID] in
             let ids = strip.columns.flatMap { $0.windows.map(\.id) }
             return strip.isRightToLeft ? ids.reversed() : ids
         }
@@ -695,7 +749,7 @@ final class OverviewController {
         switch event.keyCode {
         case KeyCode.left, KeyCode.right:
             guard let (r, i) = position else {
-                select(model.strips.flatMap { $0.columns.flatMap(\.windows) }.first(where: \.isFocused)?.id ?? all.first)
+                select(model.visibleStrips.flatMap { $0.columns.flatMap(\.windows) }.first(where: \.isFocused)?.id ?? all.first)
                 return true
             }
             let step = event.keyCode == KeyCode.right ? 1 : -1

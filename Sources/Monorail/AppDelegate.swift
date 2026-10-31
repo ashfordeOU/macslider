@@ -34,6 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let api = LocalAPI()
     private let scripts = ScriptHost()
     private var resizeModeTimer: Timer?
+    private let cheatSheet = CheatSheet()
+    private let workspaceHUD = WorkspaceHUD()
     private var demoWindows: [NSWindow] = []
     private var statsTimer: Timer?
     private var apiStarted = false
@@ -193,9 +195,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
         engine.onNotice = { [weak self] text in
-            guard self?.engine.isPresenting != true else { return }
-            self?.toast.show(text)
+            guard let self, !self.engine.isPresenting, !self.store.settings.quietMode else { return }
+            self.toast.show(text)
         }
+        engine.onAdjustSettings = { [weak self] change in
+            guard let self else { return }
+            var settings = self.store.settings
+            change(&settings)
+            self.store.settings = settings
+        }
+        engine.onWorkspaceShown = { [weak self] name, index, count in
+            guard let self, self.store.settings.workspaceHUD, !self.engine.isPresenting else { return }
+            self.workspaceHUD.show(name: name, index: index, count: count)
+        }
+        engine.onAskForSlideName = { [weak self] id, current in self?.askForSlideName(id, current: current) }
+        engine.onCheatSheet = { [weak self] in self?.cheatSheet.toggle() }
+        engine.onAnnounce = { [weak self] text in
+            guard self?.store.settings.announceChanges == true else { return }
+            NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                                 userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+        }
+        cheatSheet.keymap = { [weak self] in self?.store.settings.keymap ?? .default }
+        input.onKeyActivity = { [weak self] in self?.cheatSheet.keyWasPressed() }
+        NotificationCenter.default.addObserver(forName: .monorailCopyDiagnostics, object: nil, queue: .main) { [weak self] _ in
+            self?.copyDiagnostics()
+        }
+        NotificationCenter.default.addObserver(forName: .monorailForgetWholeSlideApp, object: nil, queue: .main) { [weak self] note in
+            if let app = note.object as? String { self?.engine.forgetWholeSlideApp(app) }
+        }
+        WholeSlideApps.list = { [weak self] in self?.engine.wholeSlideApps ?? [] }
         engine.onWindowHints = { [weak self] in self?.showHints() }
         engine.onResizeMode = { [weak self] on in self?.setResizeMode(on) }
         engine.onStripZoom = { [weak self] in self?.stripZoom.toggle() }
@@ -256,7 +284,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let name = self?.engine.allWindowSummaries().first { $0.id == self?.engine.focusedWindowID() }?.appName
             self?.overview.show(onlyApp: app, appName: name)
         }
-        input.onFlagsChanged = { [weak self] modifiers in self?.radial.modifiersChanged(modifiers) }
+        input.onFlagsChanged = { [weak self] modifiers in
+            guard let self else { return }
+            self.radial.modifiersChanged(modifiers)
+            self.cheatSheet.modifiersChanged(modifiers, enabled: self.store.settings.cheatSheetOnHold && !self.radial.isShown)
+        }
         input.onDragBegin = { [weak self] point, resize in self?.engine.beginModifierDrag(at: point, resize: resize) ?? false }
         input.onDragMove = { [weak self] point in self?.engine.continueModifierDrag(to: point) }
         input.onDragEnd = { [weak self] in self?.engine.endModifierDrag() }
@@ -369,6 +401,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updater.installAutomatically = settings.installUpdatesAutomatically
         hotEdges.onSlide = { [weak self] right in self?.engine.step(forward: right, honourReverse: false, visual: true) }
         hotEdges.setEnabled(settings.hotEdges && engine.isRunning)
+        sliderBar.compact = settings.compactSlider
+        sliderBar.showTitles = settings.sliderTitles
         sliderBar.peekEnabled = settings.peekWithOption
         popover.peekEnabled = settings.peekWithOption
         sliderBar.edge = settings.sliderBarEdge
@@ -482,6 +516,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         commands.isSticky = { [weak self] id in self?.engine.isSticky(id) ?? false }
         commands.toggleSticky = { [weak self] id in self?.engine.toggleSticky(id) }
         commands.pictureInPicture = { [weak self] id in self?.showPictureInPicture(id) }
+        commands.nameSlide = { [weak self] id in self?.askForSlideName(id, current: self?.engine.slideName(of: id) ?? "") }
+        commands.isSlideLocked = { [weak self] id in self?.engine.isSlideLocked(id) ?? false }
+        commands.toggleLock = { [weak self] id in self?.engine.toggleLock(id) }
+        commands.neverManage = { [weak self] id in self?.neverManage(id) }
+        commands.setSize = { [weak self] id, size in self?.engine.setFloatingSize(id, size) }
         return commands
     }
 
@@ -526,6 +565,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: - 0.8: hints, resize mode, templates, meetings, sharing, API, scripts, practice
+
+    @objc private func redoLayout() { afterMenu { $0.engine.redo() } }
+    @objc private func rescueFromMenu() { afterMenu { $0.engine.rescueWindows() } }
+
+    private func askForSlideName(_ id: WindowID, current: String) {
+        guard let name = TextPrompt.ask(
+            title: "Name this slide",
+            message: "Shown in the slider, the overview and the command palette. Leave empty for no name.",
+            initial: current, placeholder: "Writing, Review, Call…", button: "Name")
+        else { return }
+        engine.nameSlide(id, name)
+    }
+
+    /// Floats the window's app from now on (a rule in Settings → Apps).
+    private func neverManage(_ id: WindowID) {
+        guard let window = engine.allWindowSummaries().first(where: { $0.id == id }),
+            let bundleID = engine.windowList().first(where: { ($0["id"] as? Int) == Int(id) })?["bundleID"] as? String
+        else { return }
+        engine.release(id)
+        if let index = store.settings.appRules.firstIndex(where: { $0.bundleID == bundleID && !$0.isTitleRule }) {
+            store.settings.appRules[index].float = true
+        } else {
+            store.settings.appRules.append(AppRule(bundleID: bundleID, name: window.appName, float: true))
+        }
+        toast.show("Monorail leaves \(window.appName) alone now · change it in Settings → Apps")
+    }
+
+    private func copyDiagnostics() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        let os = ProcessInfo.processInfo.operatingSystemVersionString
+        var text = "\(Brand.full) \(version) on macOS \(os)\n"
+        text += "Accessibility: \(Accessibility.isTrusted(prompt: false) ? "allowed" : "not allowed"), "
+        text += "Screen Recording: \(WindowThumbnails.isAllowed ? "allowed" : "not allowed")\n"
+        text += engine.diagnostics()
+        text += "\nSettings: grouping \(store.settings.groupByApp), \(store.settings.tilesPerSlide) per slide, "
+        text += "\(store.settings.workspaceCount) workspaces, slider bar \(store.settings.sliderBar.rawValue), "
+        text += "gaps \(Int(store.settings.layout.gap))/\(Int(store.settings.layout.edgeGap))"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        toast.show("Diagnostics copied · paste them into a bug report")
+    }
+
+    // MARK: AppleScript
+
+    func scriptPerform(_ name: String) -> Bool {
+        guard let action = Action(rawValue: name) else { return false }
+        engine.perform(action)
+        return true
+    }
+
+    func scriptOpen(_ kind: String, _ name: String) -> Bool {
+        switch kind {
+        case "layout": engine.applyLayout(named: name)
+        case "pair":
+            guard let pair = store.settings.appPairs.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else { return false }
+            engine.openPair(pair)
+        case "template":
+            guard let template = store.settings.templates.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else { return false }
+            engine.runTemplate(template)
+        case "snapshot": engine.restoreSnapshot(named: name)
+        default: return false
+        }
+        return true
+    }
+
+    func scriptState() -> String {
+        guard let state = currentState(), let data = try? JSONEncoder().encode(state) else { return "{}" }
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    func scriptWindows() -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: engine.windowList(), options: [.sortedKeys]) else { return "[]" }
+        return String(data: data, encoding: .utf8) ?? "[]"
+    }
 
     @objc private func togglePresentation() { afterMenu { $0.engine.setPresenting(!$0.engine.isPresenting) } }
     @objc private func stopRecording() { afterMenu { $0.engine.perform(.recordSlide) } }
@@ -853,6 +966,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 symbol: "square.grid.2x2", keywords: "layout"
             ) { [weak self] in self?.engine.applyLayout(named: layout.name) })
         }
+        for (title, size) in standardSizes {
+            list.append(PaletteCommand(
+                id: "size-\(title)", title: "Size window to \(title)", subtitle: "Floats it, centred · for recordings",
+                symbol: "rectangle.dashed", keywords: "size resize record screenshot"
+            ) { [weak self] in
+                if let id = self?.engine.focusedWindowID() { self?.engine.setFloatingSize(id, size) }
+            })
+        }
         for template in settings.templates {
             list.append(PaletteCommand(
                 id: "template-\(template.id)", title: "Start template \(template.name)", subtitle: "Workspace template",
@@ -945,8 +1066,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         button.image = StatusIcon.image(paused: engine.isPaused, badge: updater.available != nil)
         button.imagePosition = .imageLeading
         if store.settings.showColumnIndicator, !engine.isPaused, let status = engine.status() {
-            let position = "\(status.focusedColumn)/\(status.columnCount)"
-            var title = engine.workspaceCount > 1 ? " \(status.workspace) · \(position)" : " \(position)"
+            var position = "\(status.focusedColumn)/\(status.columnCount)"
+            switch store.settings.menuBarStyle {
+            case .dots where status.columnCount > 0 && status.columnCount <= 9:
+                position = (1...status.columnCount).map { $0 == status.focusedColumn ? "●" : "○" }.joined()
+            case .number:
+                position = engine.workspaceCount > 1 ? "\(status.workspace)" : "\(status.focusedColumn)"
+            default:
+                break
+            }
+            var title = engine.workspaceCount > 1 && store.settings.menuBarStyle != .number
+                ? " \(status.workspace) · \(position)" : " \(position)"
             if store.settings.menuBarShowsApp, let app = engine.focusedAppName { title = " \(app) ·" + title }
             if engine.isFocusMode { title = " ◉" + title }
             if engine.isRecording { title = " ● REC" + title }
@@ -1028,7 +1158,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let undoItem = item(L("Undo Layout Change"), #selector(undoLayout), action: .undo)
         undoItem.isEnabled = engine.canUndo
         menu.addItem(undoItem)
+        let redoItem = item("Redo Layout Change", #selector(redoLayout), action: .redo)
+        redoItem.isEnabled = engine.canRedo
+        menu.addItem(redoItem)
         menu.addItem(item(L("Retile Windows"), #selector(retile), action: .retile))
+        menu.addItem(item("Rescue Windows", #selector(rescueFromMenu), action: .rescueWindows))
 
         let workspaceCount = engine.workspaceCount
         if workspaceCount > 1 {

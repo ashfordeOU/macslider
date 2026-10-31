@@ -312,3 +312,63 @@ final class V8Tests: XCTestCase {
         XCTAssertTrue(old.templates.isEmpty)
     }
 }
+
+final class V9Tests: XCTestCase {
+    func strip(_ slides: [[WindowID]]) -> Strip {
+        var strip = Strip()
+        for slide in slides { strip.insertSlide(slide, width: 1, arrangement: .columns, position: .end, focus: true) }
+        return strip
+    }
+
+    func testRotateAndFlipKeepTheFocusedWindow() {
+        var s = strip([[1, 2, 3]])
+        s.focus(2)
+        s.rotateFocused()
+        XCTAssertEqual(s.columns[0].windows, [3, 1, 2])
+        XCTAssertEqual(s.focusedWindow, 2)
+        s.rotateFocused(reverse: true)
+        XCTAssertEqual(s.columns[0].windows, [1, 2, 3])
+        s.flipFocused()
+        XCTAssertEqual(s.columns[0].windows, [3, 2, 1])
+        XCTAssertEqual(s.focusedWindow, 2)
+    }
+
+    func testSwapWindowsAcrossSlides() {
+        var s = strip([[1, 2], [3]])
+        XCTAssertTrue(s.swapWindows(1, 3))
+        XCTAssertEqual(s.columns.map(\.windows), [[3, 2], [1]])
+        XCTAssertEqual(s.focusedWindow, 1)
+        XCTAssertFalse(s.swapWindows(1, 1))
+    }
+
+    func testSortKeepsLockedSlidesInPlace() {
+        var s = strip([[1], [2], [3]])
+        s.toggleLock(ofSlideWith: 2)
+        let names: [WindowID: String] = [1: "c", 2: "a", 3: "b"]
+        s.sortColumns { names[$0.windows[0]]! }
+        XCTAssertEqual(s.columns.map(\.windows), [[3], [2], [1]], "slide 2 is locked, 1 and 3 swap")
+    }
+
+    func testLockedSlidesSurviveRegroupAndNamesPersist() throws {
+        var s = strip([[1], [2, 3], [4]])
+        s.toggleLock(ofSlideWith: 2)
+        s.setName("  Writing  ", ofSlideWith: 2)
+        s.regroup([[1, 4]], width: 1)
+        XCTAssertEqual(s.columns.map(\.windows), [[1, 4], [2, 3]])
+        XCTAssertEqual(s.columns[1].name, "Writing")
+        let decoded = try JSONDecoder().decode(Strip.self, from: JSONEncoder().encode(s))
+        XCTAssertTrue(decoded.columns[1].isLocked)
+        XCTAssertEqual(decoded.columns[1].name, "Writing")
+        s.setName("", ofSlideWith: 2)
+        XCTAssertNil(s.columns[1].name)
+    }
+
+    func testGroupingNeverJoinsALockedSlide() {
+        var s = Strip()
+        s.insertSlide([1], width: 1)
+        s.toggleLock(ofSlideWith: 1)
+        let decision = Grouping.decide(newApp: "a", strip: s, app: { _ in "a" }, capacity: { _ in 4 }, pairSize: 2,
+                                       pairLoneWindows: true)
+        XCTAssertEqual(decision, .newSlide)
+    }
+}

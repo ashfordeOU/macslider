@@ -105,6 +105,14 @@ private struct GeneralPane: View {
                 Toggle("Pause tiling", isOn: $paused)
                     .onChange(of: paused) { setPaused($0) }
                 Toggle("Show column position in the menu bar", isOn: $store.settings.showColumnIndicator)
+                Picker("Menu bar shows", selection: $store.settings.menuBarStyle) {
+                    ForEach(MenuBarStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .disabled(!store.settings.showColumnIndicator)
+                Toggle("Show the workspace’s name when switching", isOn: $store.settings.workspaceHUD)
+                Toggle("Quiet mode: no pop-up notices", isOn: $store.settings.quietMode)
+                Toggle("VoiceOver announces slide and workspace changes", isOn: $store.settings.announceChanges)
+                Toggle("Keep a “Last session” snapshot on quit and sleep", isOn: $store.settings.autoSnapshot)
                 Toggle("Show the focused app’s name in the menu bar too", isOn: $store.settings.menuBarShowsApp)
                     .disabled(!store.settings.showColumnIndicator)
                 Toggle("Clicking the menu bar icon shows the slider (right-click for the menu)", isOn: $store.settings.iconOpensSlider)
@@ -140,6 +148,7 @@ private struct GeneralPane: View {
             ProfilesSection(store: store)
             SyncSection(store: store)
             RestoreSection(store: store)
+            BackupsSection(store: store)
             Section {
                 ForEach(checks) { check in
                     HStack(alignment: .top, spacing: 10) {
@@ -225,6 +234,9 @@ private struct LayoutPane: View {
             }
             Section("Comfort") {
                 Toggle("Open each app’s windows at the width you last gave it", isOn: $store.settings.rememberWidths)
+                Toggle("Open new windows next to their app’s other windows", isOn: $store.settings.openNextToSameApp)
+                Toggle("Open new windows in the focused slide", isOn: $store.settings.openIntoFocusedSlide)
+                Toggle("Floating windows go back where you last put them", isOn: $store.settings.rememberFloatingPositions)
                 Picker("A lone window", selection: $store.settings.centerLoneWindow) {
                     Text("Fills its slide").tag(0.0)
                     ForEach([0.5, 0.6, 0.7, 0.8], id: \.self) { Text("Sits centred at \(Int($0 * 100))%").tag($0) }
@@ -235,6 +247,7 @@ private struct LayoutPane: View {
                 }
             }
             ProjectsSection(store: store)
+            WholeSlideAppsSection()
             DisplaysSection(store: store)
             Section("Widths") {
                 Picker("New window width", selection: $store.settings.layout.defaultWidth) {
@@ -303,6 +316,10 @@ private struct InputPane: View {
             Section("Animation") {
                 Toggle("Animate windows", isOn: $store.settings.animate)
                 Toggle("Skip animations with Reduce Motion or Low Power Mode", isOn: $store.settings.followReduceMotion)
+                    .disabled(!store.settings.animate)
+                Toggle("Skip animations on battery", isOn: $store.settings.skipAnimationsOnBattery)
+                    .disabled(!store.settings.animate)
+                Toggle("A soft click as the strip lands on a slide", isOn: $store.settings.slideSound)
                     .disabled(!store.settings.animate)
                 LabeledContent("Speed") {
                     Picker("", selection: $store.settings.animationDuration) {
@@ -374,6 +391,15 @@ private struct InputPane: View {
             }
             Section("Focus") {
                 Toggle("Focus follows mouse", isOn: $store.settings.focusFollowsMouse)
+                if store.settings.focusFollowsMouse {
+                    LabeledContent("Wait before focusing") {
+                        HStack {
+                            Slider(value: $store.settings.focusFollowsMouseDelay, in: 0.05...1).frame(width: 200)
+                            Text(String(format: "%.2f s", store.settings.focusFollowsMouseDelay)).monospacedDigit()
+                        }
+                    }
+                }
+                Toggle("Hold ⌃⌥ for a moment to see every shortcut", isOn: $store.settings.cheatSheetOnHold)
                 Toggle("Mouse follows focus", isOn: $store.settings.mouseFollowsFocus)
             }
         }
@@ -405,6 +431,8 @@ private struct AppearancePane: View {
                         Text("Bottom of the screen").tag(SliderBarEdge.bottom)
                         Text("Top of the screen").tag(SliderBarEdge.top)
                     }
+                    Toggle("Window titles on the slides", isOn: $store.settings.sliderTitles)
+                    Toggle("Compact", isOn: $store.settings.compactSlider)
                 }
             } header: {
                 Text("Slider bar")
@@ -552,6 +580,12 @@ private struct AppsPane: View {
                                 ForEach(1...Column.maximumWindows, id: \.self) { Text("\($0)").tag(Int?.some($0)) }
                             }
                             .frame(width: 130)
+                            .disabled(rule.float)
+                            Picker("Display", selection: $rule.display) {
+                                Text("Any").tag(String?.none)
+                                ForEach(NSScreen.screens.map(\.localizedName), id: \.self) { Text($0).tag(String?.some($0)) }
+                            }
+                            .frame(width: 170)
                             .disabled(rule.float)
                             Picker("Workspace", selection: $rule.workspace) {
                                 Text("Current").tag(Int?.none)
@@ -790,6 +824,8 @@ private struct APISection: View {
 extension Notification.Name {
     static let monorailReloadScripts = Notification.Name("org.ashforde.monorail.reloadScripts")
     static let monorailRunTemplate = Notification.Name("org.ashforde.monorail.runTemplate")
+    static let monorailCopyDiagnostics = Notification.Name("org.ashforde.monorail.copyDiagnostics")
+    static let monorailForgetWholeSlideApp = Notification.Name("org.ashforde.monorail.forgetWholeSlideApp")
 }
 
 // MARK: - Wallpapers
@@ -828,6 +864,71 @@ private struct WallpaperButton: View {
             store.settings.workspaceWallpapers[String(index)] = url.path
         }
     }
+}
+
+// MARK: - Backups
+
+private struct BackupsSection: View {
+    @ObservedObject var store: SettingsStore
+    @State private var restored = ""
+
+    var body: some View {
+        Section {
+            Toggle("Keep a copy of the settings each day (the last seven)", isOn: $store.settings.dailyBackups)
+            let backups = store.backups()
+            if backups.isEmpty {
+                Text("No backups yet. The first is made when Monorail next starts.").font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(backups, id: \.self) { url in
+                HStack {
+                    Text(url.deletingPathExtension().lastPathComponent.replacingOccurrences(of: "settings-", with: ""))
+                        .monospacedDigit()
+                    Spacer()
+                    if restored == url.lastPathComponent { Text("Restored").foregroundStyle(.green) }
+                    Button("Restore") {
+                        store.restore(backup: url)
+                        restored = url.lastPathComponent
+                    }
+                }
+            }
+        } header: {
+            Text("Backups")
+        }
+    }
+}
+
+// MARK: - Whole-slide apps
+
+/// Apps Monorail found can't shrink to share a slide, with a way to let them try again.
+private struct WholeSlideAppsSection: View {
+    @State private var apps: [String] = []
+
+    var body: some View {
+        Section {
+            if apps.isEmpty {
+                Text("None. Apps whose windows can’t get small enough to share a slide show up here.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(apps, id: \.self) { app in
+                HStack {
+                    Text(UsageStats.appName(app))
+                    Spacer()
+                    Button("Let It Share Again") {
+                        NotificationCenter.default.post(name: .monorailForgetWholeSlideApp, object: app)
+                        apps.removeAll { $0 == app }
+                    }
+                }
+            }
+        } header: {
+            Text("Apps that need a whole slide")
+        }
+        .onAppear { apps = WholeSlideApps.list() }
+    }
+}
+
+/// Lets Settings see the engine's list without holding the engine.
+enum WholeSlideApps {
+    static var list: () -> [String] = { [] }
 }
 
 // MARK: - Restore
@@ -1567,6 +1668,8 @@ private struct AboutPane: View {
             }
             Text("\(Brand.full) · © Ashforde OÜ · Licensed under the GNU AGPL v3.0")
                 .font(.footnote).foregroundStyle(.secondary)
+            Button("Copy Diagnostics") { NotificationCenter.default.post(name: .monorailCopyDiagnostics, object: nil) }
+                .help("A short report (no window titles) to paste into a bug report")
             Button("Reveal settings file") {
                 NSWorkspace.shared.activateFileViewerSelecting([SettingsStore.fileURL])
             }

@@ -29,7 +29,24 @@ struct WindowCommands {
     var toggleSticky: (WindowID) -> Void = { _ in }
     /// A live picture of the window in a screen corner.
     var pictureInPicture: (WindowID) -> Void = { _ in }
+    /// Name and lock the slide holding a window.
+    var nameSlide: (WindowID) -> Void = { _ in }
+    var isSlideLocked: (WindowID) -> Bool = { _ in false }
+    var toggleLock: (WindowID) -> Void = { _ in }
+    /// Stop managing the window's app altogether.
+    var neverManage: (WindowID) -> Void = { _ in }
+    /// Float the window at an exact size, centred.
+    var setSize: (WindowID, CGSize) -> Void = { _, _ in }
 }
+
+/// Sizes for recordings and screenshots.
+let standardSizes: [(String, CGSize)] = [
+    ("1280 × 720 (720p)", CGSize(width: 1280, height: 720)),
+    ("1440 × 900", CGSize(width: 1440, height: 900)),
+    ("1920 × 1080 (1080p)", CGSize(width: 1920, height: 1080)),
+    ("2560 × 1440", CGSize(width: 2560, height: 1440)),
+    ("1080 × 1080 (square)", CGSize(width: 1080, height: 1080)),
+]
 
 /// "Slide Layout ▸" for the slide holding a window.
 struct SlideLayoutMenu: View {
@@ -121,6 +138,8 @@ struct WindowContextMenu: View {
         if commands.currentLayout(window) != nil {
             SlideLayoutMenu(window: window, commands: commands)
             Button("Save Slide as App Pair…") { commands.saveAppPair(window) }
+            Button("Name Slide…") { commands.nameSlide(window) }
+            Button(commands.isSlideLocked(window) ? "Unlock Slide" : "Lock Slide") { commands.toggleLock(window) }
         }
         let names = commands.workspaceNames()
         if names.count > 1 {
@@ -135,6 +154,12 @@ struct WindowContextMenu: View {
             commands.toggleSticky(window)
         }
         Button("Picture in Picture") { commands.pictureInPicture(window) }
+        Menu("Size for Recording") {
+            ForEach(Array(standardSizes.enumerated()), id: \.offset) { _, entry in
+                Button(entry.0) { commands.setSize(window, entry.1) }
+            }
+        }
+        Button("Never Manage This App") { commands.neverManage(window) }
         Divider()
         Button("Full Screen") { commands.fullScreen(window) }
         Button("Minimise") { commands.minimize(window) }

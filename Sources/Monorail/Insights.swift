@@ -161,6 +161,18 @@ final class UsageStats: ObservableObject {
         }.map(\.apps)
     }
 
+    /// Every day's counts and minutes as CSV, for a spreadsheet.
+    func csv() -> String {
+        var lines = ["date,switches,windows_opened,focus_sessions,most_slides,workspace_minutes,top_app,top_app_minutes"]
+        for (date, day) in stored.days.sorted(by: { $0.key < $1.key }) {
+            let top = day.appMinutes.max { $0.value < $1.value }
+            let app = (top?.key ?? "").replacingOccurrences(of: "\"", with: "\"\"")
+            lines.append("\(date),\(day.switches),\(day.windowsOpened),\(day.focusSessions),\(day.mostSlides),"
+                + "\(day.workspaceMinutes.values.reduce(0, +)),\"\(app)\",\(top?.value ?? 0)")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
     func dismiss(_ apps: [String]) {
         stored.dismissed.append(apps.joined(separator: "|"))
         scheduleSave()
@@ -280,7 +292,17 @@ struct InsightsPane: View {
                             Text(Self.duration(pair.minutes)).monospacedDigit().foregroundStyle(.secondary)
                         }
                     }
-                    Button("Reset Insights", role: .destructive) { stats.reset() }
+                    HStack {
+                        Button("Export as CSV…") {
+                            let panel = NSSavePanel()
+                            panel.nameFieldStringValue = "Monorail Insights.csv"
+                            NSApp.activate(ignoringOtherApps: true)
+                            if panel.runModal() == .OK, let url = panel.url {
+                                try? stats.csv().write(to: url, atomically: true, encoding: .utf8)
+                            }
+                        }
+                        Button("Reset Insights", role: .destructive) { stats.reset() }
+                    }
                 }
             }
         }

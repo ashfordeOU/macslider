@@ -69,6 +69,8 @@ final class InputMonitor {
     var onTitleBarSwipe: (Engine.Swipe, WindowID) -> Void = { _, _ in }
     /// Called when the modifier keys change (for the radial menu).
     var onFlagsChanged: (Modifiers) -> Void = { _ in }
+    /// Any key press (the cheat sheet waits for a quiet ⌃⌥ hold).
+    var onKeyActivity: () -> Void = {}
 
     private(set) var isSlideMode = false
     private var tap: CFMachPort?
@@ -200,6 +202,7 @@ final class InputMonitor {
             guard !isSuspended else { return pass }
             let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
             let modifiers = Modifiers(event.flags)
+            DispatchQueue.main.async { self.onKeyActivity() }
             if let intercept = keyInterceptor, intercept(keyCode, modifiers) { return nil }
             if let capture = captureNextKey {
                 captureNextKey = nil

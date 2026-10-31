@@ -21,6 +21,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/Monorail" "$APP/Contents/MacOS/Monorail"
 cp scripts/monorail "$APP/Contents/Resources/monorail"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
+cp Resources/Monorail.sdef "$APP/Contents/Resources/Monorail.sdef"
 sed -e "s/__VERSION__/${VERSION}/" -e "s/__BUILD__/${BUILD}/" Resources/Info.plist > "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 

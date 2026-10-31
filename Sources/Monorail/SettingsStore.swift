@@ -79,6 +79,39 @@ final class SettingsStore: ObservableObject {
         } else {
             settings = AppSettings()
         }
+        if settings.dailyBackups { backUpToday() }
+    }
+
+    // MARK: - Backups
+
+    static var backupsFolder: URL { directory.appendingPathComponent("Backups", isDirectory: true) }
+
+    /// One copy of the settings a day; the last seven are kept.
+    private func backUpToday() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let file = Self.backupsFolder.appendingPathComponent("settings-\(formatter.string(from: Date())).json")
+        let manager = FileManager.default
+        guard !manager.fileExists(atPath: file.path), manager.fileExists(atPath: Self.fileURL.path) else { return }
+        try? manager.createDirectory(at: Self.backupsFolder, withIntermediateDirectories: true)
+        try? manager.copyItem(at: Self.fileURL, to: file)
+        for old in backups().dropFirst(7) { try? manager.removeItem(at: old) }
+    }
+
+    /// Backups, newest first.
+    func backups() -> [URL] {
+        ((try? FileManager.default.contentsOfDirectory(at: Self.backupsFolder, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension == "json" }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
+    }
+
+    /// Puts a backup's settings back.
+    func restore(backup: URL) {
+        stopRecording()
+        guard let data = try? Data(contentsOf: backup), let decoded = try? JSONDecoder().decode(AppSettings.self, from: data)
+        else { return }
+        settings = decoded
     }
 
     private func save() {

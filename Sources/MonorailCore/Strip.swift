@@ -33,6 +33,10 @@ public struct Column: Equatable, Codable, Sendable {
     /// Set when the user arranged this column by hand. Automatic grouping
     /// leaves custom columns alone until the strip is reset to smart pairs.
     public var isCustom: Bool
+    /// A name for the slide, shown in the slider, overview and palette.
+    public var name: String?
+    /// Locked slides keep their windows through smart pairs and never take new ones.
+    public var isLocked = false
 
     public init(
         windows: [WindowID],
@@ -73,6 +77,7 @@ public struct Column: Equatable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case windows, active, width, isFullWidth, isTabbed, arrangement, split, isGrid, pin, isCustom, customRows
+        case name, isLocked
     }
 
     public init(from decoder: Decoder) throws {
@@ -91,6 +96,8 @@ public struct Column: Equatable, Codable, Sendable {
             customRows: try c.decodeIfPresent([Int].self, forKey: .customRows)
         )
         active = min(max(active, 0), max(windows.count - 1, 0))
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        isLocked = try c.decodeIfPresent(Bool.self, forKey: .isLocked) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -105,6 +112,8 @@ public struct Column: Equatable, Codable, Sendable {
         try c.encodeIfPresent(pin, forKey: .pin)
         try c.encode(isCustom, forKey: .isCustom)
         try c.encodeIfPresent(customRows, forKey: .customRows)
+        try c.encodeIfPresent(name, forKey: .name)
+        if isLocked { try c.encode(isLocked, forKey: .isLocked) }
     }
 }
 
@@ -490,13 +499,16 @@ public struct Strip: Equatable, Codable, Sendable {
     ) {
         let focused = focusedWindow
         let pinned = columns.filter { $0.pin != nil }
-        let pinnedWindows = Set(pinned.flatMap(\.windows))
+        // Locked slides stay as they are, where they are.
+        let locked = columns.enumerated().filter { $0.element.isLocked && $0.element.pin == nil }
+        let kept = Set((pinned + locked.map(\.element)).flatMap(\.windows))
         var fresh = pinned
         for group in groups {
-            let members = group.filter { !pinnedWindows.contains($0) }
+            let members = group.filter { !kept.contains($0) }
             guard !members.isEmpty else { continue }
             fresh.append(Column(windows: members, width: width, arrangement: arrangement(members)))
         }
+        for (index, column) in locked { fresh.insert(column, at: min(index, fresh.count)) }
         columns = fresh
         focusedColumn = 0
         if let focused { focus(focused) }
@@ -587,6 +599,69 @@ public struct Strip: Equatable, Codable, Sendable {
             columns[c].isFullWidth = false
             columns[c].split = Arrangement.defaultSplit
         }
+    }
+
+    // MARK: - Rearranging inside and between slides
+
+    /// Turns the focused slide's windows one place round (backwards with `reverse`).
+    public mutating func rotateFocused(reverse: Bool = false) {
+        guard columns.indices.contains(focusedColumn), columns[focusedColumn].windows.count > 1 else { return }
+        let active = columns[focusedColumn].activeWindow
+        var windows = columns[focusedColumn].windows
+        if reverse { windows.append(windows.removeFirst()) } else { windows.insert(windows.removeLast(), at: 0) }
+        columns[focusedColumn].windows = windows
+        columns[focusedColumn].active = windows.firstIndex(of: active) ?? 0
+        columns[focusedColumn].isCustom = true
+    }
+
+    /// Mirrors the focused slide: its windows in the opposite order.
+    public mutating func flipFocused() {
+        guard columns.indices.contains(focusedColumn), columns[focusedColumn].windows.count > 1 else { return }
+        let active = columns[focusedColumn].activeWindow
+        columns[focusedColumn].windows.reverse()
+        columns[focusedColumn].active = columns[focusedColumn].windows.firstIndex(of: active) ?? 0
+        columns[focusedColumn].isCustom = true
+    }
+
+    /// Two windows trade places, in the same slide or in different ones.
+    @discardableResult
+    public mutating func swapWindows(_ a: WindowID, _ b: WindowID) -> Bool {
+        guard a != b, let first = locate(a), let second = locate(b) else { return false }
+        if first.column == second.column { return swapTiles(a, b) }
+        columns[first.column].windows[first.row] = b
+        columns[second.column].windows[second.row] = a
+        columns[first.column].isCustom = true
+        columns[second.column].isCustom = true
+        focus(a)
+        return true
+    }
+
+    /// Orders the slides by `key` (say, app name), leaving pinned and locked ones in place.
+    public mutating func sortColumns(by key: (Column) -> String) {
+        let focused = focusedWindow
+        let movable = columns.indices.filter { columns[$0].pin == nil && !columns[$0].isLocked }
+        let sorted = movable.map { columns[$0] }.enumerated().sorted { lhs, rhs in
+            let l = key(lhs.element), r = key(rhs.element)
+            return l == r ? lhs.offset < rhs.offset : l.localizedCaseInsensitiveCompare(r) == .orderedAscending
+        }.map(\.element)
+        for (slot, column) in zip(movable, sorted) { columns[slot] = column }
+        if let focused { focus(focused) }
+    }
+
+    /// Names (or, with nil or empty, un-names) the slide holding `window`.
+    public mutating func setName(_ name: String?, ofSlideWith window: WindowID) {
+        guard let (c, _) = locate(window) else { return }
+        let trimmed = name?.trimmingCharacters(in: .whitespaces)
+        columns[c].name = (trimmed?.isEmpty ?? true) ? nil : trimmed
+    }
+
+    /// Locks or unlocks the slide holding `window`. Returns the new state.
+    @discardableResult
+    public mutating func toggleLock(ofSlideWith window: WindowID) -> Bool {
+        guard let (c, _) = locate(window) else { return false }
+        columns[c].isLocked.toggle()
+        if columns[c].isLocked { columns[c].isCustom = true }
+        return columns[c].isLocked
     }
 
     /// Replaces the strip's columns, e.g. when a saved layout is applied.

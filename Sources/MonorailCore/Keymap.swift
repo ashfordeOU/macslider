@@ -43,7 +43,7 @@ public enum KeyCode {
     public static let m: UInt16 = 46
     public static let equal: UInt16 = 24, minus: UInt16 = 27, comma: UInt16 = 43, period: UInt16 = 47
     public static let semicolon: UInt16 = 41, grave: UInt16 = 50, zero: UInt16 = 29
-    public static let slash: UInt16 = 44
+    public static let slash: UInt16 = 44, backslash: UInt16 = 42
     public static let rightBracket: UInt16 = 30, leftBracket: UInt16 = 33
     public static let returnKey: UInt16 = 36, tab: UInt16 = 48, space: UInt16 = 49
     public static let delete: UInt16 = 51, escape: UInt16 = 53
@@ -210,6 +210,20 @@ public struct Keymap: Equatable, Codable, Sendable {
             .stripZoom: [s(KeyCode.z, cos)],
             .presentationMode: [s(KeyCode.y, cos)],
             .recordSlide: [s(KeyCode.v, cos)],
+            .redo: [s(KeyCode.y, co)],
+            .nextWorkspace: [s(KeyCode.pageDown, co)],
+            .previousWorkspace: [s(KeyCode.pageUp, co)],
+            .moveToNextWorkspace: [s(KeyCode.pageDown, cos)],
+            .moveToPreviousWorkspace: [s(KeyCode.pageUp, cos)],
+            .focusNextDisplay: [s(KeyCode.period, cos)],
+            .moveWorkspaceToNextDisplay: [s(KeyCode.comma, cos)],
+            .cycleAppWindows: [s(KeyCode.backslash, co)],
+            .swapWithRecent: [s(KeyCode.tab, cos)],
+            .rotateSlide: [s(KeyCode.g, cos)],
+            .flipSlide: [s(KeyCode.m, cos)],
+            .soloMode: [s(KeyCode.b, cos)],
+            .toggleGaps: [s(KeyCode.zero, cos)],
+            .cheatSheet: [s(KeyCode.slash, cos)],
             // Snapping (floats the window first): Control-Option-Command plus a key.
             .snapLeftHalf: [s(KeyCode.left, coc)],
             .snapRightHalf: [s(KeyCode.right, coc)],
