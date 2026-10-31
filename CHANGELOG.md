@@ -4,6 +4,25 @@ All notable changes to Monorail by Ashforde® are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-10-31
+
+Monorail by Ashforde® 1.0.
+
+### Added
+- Caps Lock as the Monorail key: hold it instead of ⌃⌥ for every shortcut, tap it for the command palette.
+- Fit mode: every slide shares the screen, for all workspaces or just some.
+- Start-up styles: Scrolling strip, Fit on screen or Minimal, in the welcome tour and Settings.
+- Undo History in the menu bar: jump back to just before any recent change.
+- What's New after each update.
+- A beta update channel.
+- Workspace notes, shown in the overview and as you switch.
+- Auto-named workspaces, from their apps.
+- Pick several windows in the overview (⌘-click) and put them together, move, minimise or close them at once.
+- A weekly summary notification on Monday mornings.
+
+### Changed
+- Versions with beta tags compare correctly, so a final release is always offered over its betas.
+
 ## [0.9.0] - 2026-10-31
 
 ### Added

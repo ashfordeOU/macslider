@@ -17,7 +17,7 @@
 
 ---
 
-**Monorail by Ashforde®** is a scrolling window manager for your Mac.
+**Monorail by Ashforde®** is a scrolling window manager for your Mac. **Version 1.0 is here.**
 
 Grid tilers squeeze every new window into the space that's already there.
 **Monorail does the opposite.** Each window is a column on a horizontal strip
@@ -471,6 +471,19 @@ search, so you can see which slide wants you.
 - **Share layouts**: **Saved Layouts → Share Layout…** makes a `.monorail` file; double-click one on any Mac to add and apply it. Templates and app pairs share the same way.
 - **In your language**: menus, Settings tabs and the welcome tour in English, Deutsch, Français, Español and 日本語 (**Settings → General → Language**).
 - **Practice windows**: the welcome tour can open three practice windows, so you learn the moves without touching your work.
+
+### New in 1.0
+
+- **Caps Lock as the Monorail key**: turn it on in **Settings → General** and hold Caps Lock instead of <kbd>⌃⌥</kbd> for every shortcut (Caps Lock + <kbd>→</kbd> slides right). Tap it on its own for the command palette. macOS gets Caps Lock back when you quit Monorail.
+- **Fit mode**: a workspace where every slide shares the screen, like classic tiling, so nothing scrolls. Turn it on for all workspaces, or for one from the overview (the **Scrolling / Fit on screen** button on each workspace) or **Fit Every Slide on Screen** in the menu bar.
+- **Your style in one click**: the welcome tour and **Settings → General → Style** offer **Scrolling strip**, **Fit on screen** and **Minimal**.
+- **Undo History**: the menu bar lists recent layout changes with their times; pick one to go back to just before it.
+- **What's New** appears after each update.
+- **Beta updates**: opt in under **Settings → General** to get early versions.
+- **Workspace notes**: write a line under any workspace in the overview ("Q4 report: draft by Friday"); it shows as you switch there.
+- **Auto names**: a workspace you haven't named takes its apps' names ("Xcode & Safari").
+- **Pick several windows**: in the overview, ⌘-click (or ⇧-click) windows, then put them together in one slide, move them to a workspace, minimise or close them at once.
+- **Your week**: a notification on Monday mornings with last week's switches, where your time went and the apps you paired most.
 
 ### Even more (0.9)
 
