@@ -16,7 +16,7 @@
 <rect x="530.0" y="448" width="220" height="20" rx="8" fill="#fff" opacity="0.22"/>
 <rect x="540.0" y="451" width="15" height="14" rx="4" fill="#5B8CFF"/><rect x="565.0" y="451" width="15" height="14" rx="4" fill="#B06BFF"/><rect x="590.0" y="451" width="15" height="14" rx="4" fill="#FF5F9E"/><rect x="615.0" y="451" width="15" height="14" rx="4" fill="#FF9445"/><rect x="640.0" y="451" width="15" height="14" rx="4" fill="#45D18C"/><rect x="665.0" y="451" width="15" height="14" rx="4" fill="#33CCDB"/><rect x="690.0" y="451" width="15" height="14" rx="4" fill="#FFCC40"/><rect x="715.0" y="451" width="15" height="14" rx="4" fill="#5B8CFF"/><defs><clipPath id="focusclip"><rect x="140" y="56" width="1000" height="418" rx="14"/></clipPath></defs><g clip-path="url(#focusclip)"><g opacity="0.35">
   
-  <rect x="-154.0" y="74.0" width="408" height="356" rx="10" fill="#fff"/>
+  <rect x="-154.0" y="74.0" width="408" height="356" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M-154.0 84.0 a10 10 0 0 1 10 -10 h388 a10 10 0 0 1 10 10 v18 h-408 z" fill="#FF9445"/>
   <circle cx="-141.0" cy="88.0" r="4" fill="#FF5F57"/>
   <circle cx="-128.0" cy="88.0" r="4" fill="#FEBC2E"/>
@@ -24,7 +24,7 @@
   <rect x="-140.0" y="118.0" width="304" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="-140.0" y="134.0" width="228" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="-140.0" y="150.0" width="342" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="-140.0" y="166.0" width="190" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="-140.0" y="182.0" width="266" height="7" rx="3.5" fill="#000" opacity="0.10"/>
 </g><g opacity="1">
   
-  <rect x="286.0" y="74.0" width="348.0" height="356" rx="10" fill="#fff"/>
+  <rect x="286.0" y="74.0" width="348.0" height="356" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M286.0 84.0 a10 10 0 0 1 10 -10 h328.0 a10 10 0 0 1 10 10 v18 h-348.0 z" fill="#5B8CFF"/>
   <circle cx="299.0" cy="88.0" r="4" fill="#FF5F57"/>
   <circle cx="312.0" cy="88.0" r="4" fill="#FEBC2E"/>
@@ -32,7 +32,7 @@
   <rect x="300.0" y="118.0" width="256" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="300.0" y="134.0" width="192" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="300.0" y="150.0" width="288" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="300.0" y="166.0" width="160" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="300.0" y="182.0" width="224" height="7" rx="3.5" fill="#000" opacity="0.10"/>
 </g><g opacity="1">
   
-  <rect x="646.0" y="74.0" width="348.0" height="356" rx="10" fill="#fff"/>
+  <rect x="646.0" y="74.0" width="348.0" height="356" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M646.0 84.0 a10 10 0 0 1 10 -10 h328.0 a10 10 0 0 1 10 10 v18 h-348.0 z" fill="#B06BFF"/>
   <circle cx="659.0" cy="88.0" r="4" fill="#FF5F57"/>
   <circle cx="672.0" cy="88.0" r="4" fill="#FEBC2E"/>
@@ -40,7 +40,7 @@
   <rect x="660.0" y="118.0" width="256" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="660.0" y="134.0" width="192" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="660.0" y="150.0" width="288" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="660.0" y="166.0" width="160" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="660.0" y="182.0" width="224" height="7" rx="3.5" fill="#000" opacity="0.10"/>
 </g><g opacity="0.35">
   
-  <rect x="1018.0" y="74.0" width="408" height="356" rx="10" fill="#fff"/>
+  <rect x="1018.0" y="74.0" width="408" height="356" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M1018.0 84.0 a10 10 0 0 1 10 -10 h388 a10 10 0 0 1 10 10 v18 h-408 z" fill="#45D18C"/>
   <circle cx="1031.0" cy="88.0" r="4" fill="#FF5F57"/>
   <circle cx="1044.0" cy="88.0" r="4" fill="#FEBC2E"/>

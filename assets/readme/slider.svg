@@ -16,7 +16,7 @@
 <rect x="530.0" y="484" width="220" height="20" rx="8" fill="#fff" opacity="0.22"/>
 <rect x="540.0" y="487" width="15" height="14" rx="4" fill="#5B8CFF"/><rect x="565.0" y="487" width="15" height="14" rx="4" fill="#B06BFF"/><rect x="590.0" y="487" width="15" height="14" rx="4" fill="#FF5F9E"/><rect x="615.0" y="487" width="15" height="14" rx="4" fill="#FF9445"/><rect x="640.0" y="487" width="15" height="14" rx="4" fill="#45D18C"/><rect x="665.0" y="487" width="15" height="14" rx="4" fill="#33CCDB"/><rect x="690.0" y="487" width="15" height="14" rx="4" fill="#FFCC40"/><rect x="715.0" y="487" width="15" height="14" rx="4" fill="#5B8CFF"/><g opacity="1">
   
-  <rect x="160.0" y="80.0" width="474.0" height="308" rx="10" fill="#fff"/>
+  <rect x="160.0" y="80.0" width="474.0" height="308" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M160.0 90.0 a10 10 0 0 1 10 -10 h454.0 a10 10 0 0 1 10 10 v18 h-474.0 z" fill="#5B8CFF"/>
   <circle cx="173.0" cy="94.0" r="4" fill="#FF5F57"/>
   <circle cx="186.0" cy="94.0" r="4" fill="#FEBC2E"/>
@@ -24,7 +24,7 @@
   <rect x="174.0" y="124.0" width="357" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="174.0" y="140.0" width="268" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="174.0" y="156.0" width="401" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="174.0" y="172.0" width="223" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="174.0" y="188.0" width="312" height="7" rx="3.5" fill="#000" opacity="0.10"/>
 </g><g opacity="1">
   
-  <rect x="646.0" y="80.0" width="474.0" height="308" rx="10" fill="#fff"/>
+  <rect x="646.0" y="80.0" width="474.0" height="308" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M646.0 90.0 a10 10 0 0 1 10 -10 h454.0 a10 10 0 0 1 10 10 v18 h-474.0 z" fill="#FF5F9E"/>
   <circle cx="659.0" cy="94.0" r="4" fill="#FF5F57"/>
   <circle cx="672.0" cy="94.0" r="4" fill="#FEBC2E"/>
@@ -34,7 +34,7 @@
   <animate attributeName="x" dur="8s" repeatCount="indefinite" values="502;502;630;630;502" keyTimes="0;0.3;0.45;0.8;1"/>
 </rect><rect x="520" y="220" width="300" height="176" rx="14" fill="#fff" opacity="0.92" filter="url(#shadow)"/><text x="536" y="244" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#2A1430">3  Safari + Notes</text><rect x="530" y="254" width="280" height="132" rx="9" fill="#D63A80" opacity="0.12"/><g opacity="1">
   
-  <rect x="539.0" y="263.0" width="126.0" height="114" rx="10" fill="#fff"/>
+  <rect x="539.0" y="263.0" width="126.0" height="114" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M539.0 273.0 a10 10 0 0 1 10 -10 h106.0 a10 10 0 0 1 10 10 v18 h-126.0 z" fill="#B06BFF"/>
   <circle cx="552.0" cy="277.0" r="4" fill="#FF5F57"/>
   <circle cx="565.0" cy="277.0" r="4" fill="#FEBC2E"/>
@@ -42,7 +42,7 @@
   <rect x="553.0" y="307.0" width="78" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="553.0" y="323.0" width="59" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="553.0" y="339.0" width="88" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="553.0" y="355.0" width="49" height="7" rx="3.5" fill="#000" opacity="0.10"/>
 </g><g opacity="1">
   
-  <rect x="675.0" y="263.0" width="126.0" height="114" rx="10" fill="#fff"/>
+  <rect x="675.0" y="263.0" width="126.0" height="114" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M675.0 273.0 a10 10 0 0 1 10 -10 h106.0 a10 10 0 0 1 10 10 v18 h-126.0 z" fill="#FF9445"/>
   <circle cx="688.0" cy="277.0" r="4" fill="#FF5F57"/>
   <circle cx="701.0" cy="277.0" r="4" fill="#FEBC2E"/>

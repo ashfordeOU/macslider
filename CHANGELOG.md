@@ -4,10 +4,25 @@ All notable changes to Monorail by Ashforde® are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.6.1] - 2026-10-31
+## [0.7.0] - 2026-10-31
+
+### Added
+- Radial menu (⌃⌥E): point towards a side or corner, see where the window goes, let go to snap it.
+- Hold ⌃⌥ and drag anywhere in a window to move it; right-drag to resize.
+- Two-finger swipes on title bars: left and right move the window's slide, up makes it full width, down minimises.
+- Spiral and accordion slide layouts.
+- Even out widths and splits (⌃⌥⇧=), back to the last workspace (⌃⌥⇧⌫), move a window to an empty workspace (⌃⌥⇧N), go to the window that wants attention (⌃⌥⇧A), show desktop (⌃⌥⇧D), screenshot the slide (⌃⌥⇧C), and an overview of one app's windows (⌃⌥⇧O).
+- A size label while resizing, a gradient focus border, and a desktop picture per workspace.
+- Auto rules that run when a display is connected.
+- For status bars and scripts: state.json, a distributed notification, an event script, and live reload of settings.json.
+- New README tour with pictures of the overview, slider, menu bar panel, command palette, focus mode, snap picker, themes and Insights.
 
 ### Changed
 - Branded as Monorail by Ashforde® in the app, menus, Settings, welcome tour, overview, installer and README.
+- Animations step aside when Reduce Motion or Low Power Mode is on.
+
+### Fixed
+- Restore defaults in Settings → Shortcuts now works every time. Recording a shortcut no longer leaves Monorail's shortcuts paused if you restore defaults or close Settings before typing one. Each changed shortcut can also go back on its own, and General has Restore All Settings to Defaults.
 
 ## [0.6.0] - 2026-10-31
 

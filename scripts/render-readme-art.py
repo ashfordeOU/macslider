@@ -25,7 +25,7 @@ def window(x, y, w, h, color, focused=False, opacity=1.0):
     ring = f'<rect x="{x - 3}" y="{y - 3}" width="{w + 6}" height="{h + 6}" rx="{r + 3}" fill="none" stroke="#fff" stroke-width="3"/>' if focused else ""
     return f'''<g opacity="{opacity}">
   {ring}
-  <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{r}" fill="#fff"/>
+  <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{r}" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M{x} {y + r} a{r} {r} 0 0 1 {r} -{r} h{w - 2 * r} a{r} {r} 0 0 1 {r} {r} v18 h-{w} z" fill="{color}"/>
   <circle cx="{x + 13}" cy="{y + 14}" r="4" fill="#FF5F57"/>
   <circle cx="{x + 26}" cy="{y + 14}" r="4" fill="#FEBC2E"/>
@@ -156,19 +156,21 @@ def layouts():
         ("Main + side", [(0, 0, .6, 1), (.6, 0, .4, .5), (.6, .5, .4, .5)]),
         ("Main + bottom", [(0, 0, 1, .6), (0, .6, .5, .4), (.5, .6, .5, .4)]),
         ("Columns · 3", [(0, 0, 1 / 3, 1), (1 / 3, 0, 1 / 3, 1), (2 / 3, 0, 1 / 3, 1)]),
+        ("Spiral", [(0, 0, .6, 1), (.6, 0, .4, .5), (.8, .5, .2, .5), (.6, .5, .2, .5)]),
+        ("Accordion", [(0, 0, .88, 1), (.06, 0, .88, 1), (.12, 0, .88, 1)]),
         ("Tabs", None),
     ]
-    cw, ch, gap = 280, 160, 26
-    x0 = (W - (4 * cw + 3 * gap)) / 2
+    cw, ch, gap = 222, 140, 20
+    x0 = (W - (5 * cw + 4 * gap)) / 2
     parts = []
     for n, (title, tiles) in enumerate(cards):
-        cx = x0 + (n % 4) * (cw + gap)
-        cy = 52 + (n // 4) * (ch + 62)
-        parts.append(f'<rect x="{cx}" y="{cy}" width="{cw}" height="{ch}" rx="14" fill="#fff" stroke="#F0D5DE" stroke-width="2"/>')
+        cx = x0 + (n % 5) * (cw + gap)
+        cy = 62 + (n // 5) * (ch + 62)
+        parts.append(f'<rect x="{cx}" y="{cy}" width="{cw}" height="{ch}" rx="14" fill="#F6E9EF" stroke="#EBCFDA" stroke-width="2"/>')
         ix, iy, iw, ih = cx + 12, cy + 12, cw - 24, ch - 24
         if tiles is None:
             for t in range(3):
-                parts.append(f'<rect x="{ix + t * 72}" y="{iy}" width="66" height="18" rx="6" fill="{APPS[t]}" opacity="{1 if t == 1 else 0.35}"/>')
+                parts.append(f'<rect x="{ix + t * 66}" y="{iy}" width="60" height="18" rx="6" fill="{APPS[t]}" opacity="{1 if t == 1 else 0.35}"/>')
             parts.append(window(ix, iy + 24, iw, ih - 24, APPS[1]))
         else:
             for t, (ux, uy, uw, uh) in enumerate(tiles):
@@ -176,7 +178,7 @@ def layouts():
         parts.append(f'<text x="{cx + cw / 2}" y="{cy + ch + 30}" text-anchor="middle" font-family="{FONT}" font-size="18" font-weight="700" fill="{DEEP}">{title}</text>')
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" aria-label="Slide layouts">
 <rect width="{W}" height="{H}" rx="24" fill="#FFF8F5"/>
-<text x="{W / 2}" y="34" text-anchor="middle" font-family="{FONT}" font-size="15" font-weight="600" fill="#9A6A84" letter-spacing="2">UP TO SIX WINDOWS PER SLIDE · ⌃⌥G CYCLES · RIGHT-CLICK TO CHOOSE</text>
+<text x="{W / 2}" y="34" text-anchor="middle" font-family="{FONT}" font-size="15" font-weight="600" fill="#9A6A84" letter-spacing="2">UP TO SIX WINDOWS PER SLIDE · DESIGN YOUR OWN · ⌃⌥G CYCLES · RIGHT-CLICK TO CHOOSE</text>
 {''.join(parts)}
 </svg>
 '''
@@ -482,8 +484,11 @@ def insights():
 
 
 def features():
-    W, H = 1280, 640
-    items = [("Profiles", "Work and home, each with its own workspaces", WS[0]),
+    W, H = 1280, 812
+    items = [("Radial menu", "⌃⌥E, point at a side, let go: snapped", WS[2]),
+             ("Drag anywhere", "Hold ⌃⌥ and drag inside any window", WS[3]),
+             ("Title bar swipes", "Two fingers on a title bar move it along", WS[4]),
+             ("Status bars & scripts", "state.json, events and live-reloading config", "#33CCDB"),("Profiles", "Work and home, each with its own workspaces", WS[0]),
              ("Marks", "⌃⌥; then a letter jumps back to a window", WS[1]),
              ("Scratchpad", "One window drops in and hides with ⌃⌥`", WS[2]),
              ("App pairs", "Open two apps side by side in one go", WS[3]),

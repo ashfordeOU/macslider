@@ -20,7 +20,7 @@
   <!-- The rail runs past the screen: faint windows outside it. -->
   <g mask="url(#fade)"><g><animateTransform attributeName="transform" type="translate" dur="14s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.2;0.45;0.7;1" keySplines="0.45 0 0.2 1;0.45 0 0.2 1;0.45 0 0.2 1;0.45 0 0.2 1" values="670 92;125 92;-886 92;-264 92;670 92"/><g opacity="0.28">
   
-  <rect x="0" y="0" width="260" height="244" rx="10" fill="#fff"/>
+  <rect x="0" y="0" width="260" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M0 10 a10 10 0 0 1 10 -10 h240 a10 10 0 0 1 10 10 v18 h-260 z" fill="#5B8CFF"/>
   <circle cx="13" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="26" cy="14" r="4" fill="#FEBC2E"/>
@@ -29,7 +29,7 @@
 </g>
 <g opacity="0.28">
   
-  <rect x="274" y="0" width="170" height="244" rx="10" fill="#fff"/>
+  <rect x="274" y="0" width="170" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M274 10 a10 10 0 0 1 10 -10 h150 a10 10 0 0 1 10 10 v18 h-170 z" fill="#B06BFF"/>
   <circle cx="287" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="300" cy="14" r="4" fill="#FEBC2E"/>
@@ -38,7 +38,7 @@
 </g>
 <g opacity="0.28">
   
-  <rect x="450" y="0" width="170" height="244" rx="10" fill="#fff"/>
+  <rect x="450" y="0" width="170" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M450 10 a10 10 0 0 1 10 -10 h150 a10 10 0 0 1 10 10 v18 h-170 z" fill="#45D18C"/>
   <circle cx="463" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="476" cy="14" r="4" fill="#FEBC2E"/>
@@ -47,7 +47,7 @@
 </g>
 <g opacity="0.28">
   
-  <rect x="634" y="0" width="260" height="244" rx="10" fill="#fff"/>
+  <rect x="634" y="0" width="260" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M634 10 a10 10 0 0 1 10 -10 h240 a10 10 0 0 1 10 10 v18 h-260 z" fill="#FF5F9E"/>
   <circle cx="647" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="660" cy="14" r="4" fill="#FEBC2E"/>
@@ -56,7 +56,7 @@
 </g>
 <g opacity="0.28">
   
-  <rect x="908" y="0" width="300" height="244" rx="10" fill="#fff"/>
+  <rect x="908" y="0" width="300" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M908 10 a10 10 0 0 1 10 -10 h280 a10 10 0 0 1 10 10 v18 h-300 z" fill="#FF9445"/>
   <circle cx="921" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="934" cy="14" r="4" fill="#FEBC2E"/>
@@ -65,7 +65,7 @@
 </g>
 <g opacity="0.28">
   
-  <rect x="1222" y="0" width="160" height="244" rx="10" fill="#fff"/>
+  <rect x="1222" y="0" width="160" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M1222 10 a10 10 0 0 1 10 -10 h140 a10 10 0 0 1 10 10 v18 h-160 z" fill="#45D18C"/>
   <circle cx="1235" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="1248" cy="14" r="4" fill="#FEBC2E"/>
@@ -74,7 +74,7 @@
 </g>
 <g opacity="0.28">
   
-  <rect x="1388" y="0" width="160" height="244" rx="10" fill="#fff"/>
+  <rect x="1388" y="0" width="160" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M1388 10 a10 10 0 0 1 10 -10 h140 a10 10 0 0 1 10 10 v18 h-160 z" fill="#5B8CFF"/>
   <circle cx="1401" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="1414" cy="14" r="4" fill="#FEBC2E"/>
@@ -83,7 +83,7 @@
 </g>
 <g opacity="0.28">
   
-  <rect x="1562" y="0" width="260" height="244" rx="10" fill="#fff"/>
+  <rect x="1562" y="0" width="260" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M1562 10 a10 10 0 0 1 10 -10 h240 a10 10 0 0 1 10 10 v18 h-260 z" fill="#33CCDB"/>
   <circle cx="1575" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="1588" cy="14" r="4" fill="#FEBC2E"/>
@@ -92,7 +92,7 @@
 </g>
 <g opacity="0.28">
   
-  <rect x="1836" y="0" width="240" height="244" rx="10" fill="#fff"/>
+  <rect x="1836" y="0" width="240" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M1836 10 a10 10 0 0 1 10 -10 h220 a10 10 0 0 1 10 10 v18 h-240 z" fill="#FFCC40"/>
   <circle cx="1849" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="1862" cy="14" r="4" fill="#FEBC2E"/>
@@ -102,7 +102,7 @@
   <rect x="650" y="64" width="560" height="300" rx="16" fill="#2A1430" opacity="0.55"/>
   <g clip-path="url(#screen)"><g><animateTransform attributeName="transform" type="translate" dur="14s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.2;0.45;0.7;1" keySplines="0.45 0 0.2 1;0.45 0 0.2 1;0.45 0 0.2 1;0.45 0 0.2 1" values="670 92;125 92;-886 92;-264 92;670 92"/><g opacity="1.0">
   
-  <rect x="0" y="0" width="260" height="244" rx="10" fill="#fff"/>
+  <rect x="0" y="0" width="260" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M0 10 a10 10 0 0 1 10 -10 h240 a10 10 0 0 1 10 10 v18 h-260 z" fill="#5B8CFF"/>
   <circle cx="13" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="26" cy="14" r="4" fill="#FEBC2E"/>
@@ -111,7 +111,7 @@
 </g>
 <g opacity="1.0">
   
-  <rect x="274" y="0" width="170" height="244" rx="10" fill="#fff"/>
+  <rect x="274" y="0" width="170" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M274 10 a10 10 0 0 1 10 -10 h150 a10 10 0 0 1 10 10 v18 h-170 z" fill="#B06BFF"/>
   <circle cx="287" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="300" cy="14" r="4" fill="#FEBC2E"/>
@@ -120,7 +120,7 @@
 </g>
 <g opacity="1.0">
   
-  <rect x="450" y="0" width="170" height="244" rx="10" fill="#fff"/>
+  <rect x="450" y="0" width="170" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M450 10 a10 10 0 0 1 10 -10 h150 a10 10 0 0 1 10 10 v18 h-170 z" fill="#45D18C"/>
   <circle cx="463" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="476" cy="14" r="4" fill="#FEBC2E"/>
@@ -129,7 +129,7 @@
 </g>
 <g opacity="1.0">
   <rect x="631" y="-3" width="266" height="250" rx="13" fill="none" stroke="#fff" stroke-width="3"/>
-  <rect x="634" y="0" width="260" height="244" rx="10" fill="#fff"/>
+  <rect x="634" y="0" width="260" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M634 10 a10 10 0 0 1 10 -10 h240 a10 10 0 0 1 10 10 v18 h-260 z" fill="#FF5F9E"/>
   <circle cx="647" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="660" cy="14" r="4" fill="#FEBC2E"/>
@@ -138,7 +138,7 @@
 </g>
 <g opacity="1.0">
   
-  <rect x="908" y="0" width="300" height="244" rx="10" fill="#fff"/>
+  <rect x="908" y="0" width="300" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M908 10 a10 10 0 0 1 10 -10 h280 a10 10 0 0 1 10 10 v18 h-300 z" fill="#FF9445"/>
   <circle cx="921" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="934" cy="14" r="4" fill="#FEBC2E"/>
@@ -147,7 +147,7 @@
 </g>
 <g opacity="1.0">
   
-  <rect x="1222" y="0" width="160" height="244" rx="10" fill="#fff"/>
+  <rect x="1222" y="0" width="160" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M1222 10 a10 10 0 0 1 10 -10 h140 a10 10 0 0 1 10 10 v18 h-160 z" fill="#45D18C"/>
   <circle cx="1235" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="1248" cy="14" r="4" fill="#FEBC2E"/>
@@ -156,7 +156,7 @@
 </g>
 <g opacity="1.0">
   
-  <rect x="1388" y="0" width="160" height="244" rx="10" fill="#fff"/>
+  <rect x="1388" y="0" width="160" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M1388 10 a10 10 0 0 1 10 -10 h140 a10 10 0 0 1 10 10 v18 h-160 z" fill="#5B8CFF"/>
   <circle cx="1401" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="1414" cy="14" r="4" fill="#FEBC2E"/>
@@ -165,7 +165,7 @@
 </g>
 <g opacity="1.0">
   
-  <rect x="1562" y="0" width="260" height="244" rx="10" fill="#fff"/>
+  <rect x="1562" y="0" width="260" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M1562 10 a10 10 0 0 1 10 -10 h240 a10 10 0 0 1 10 10 v18 h-260 z" fill="#33CCDB"/>
   <circle cx="1575" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="1588" cy="14" r="4" fill="#FEBC2E"/>
@@ -174,7 +174,7 @@
 </g>
 <g opacity="1.0">
   
-  <rect x="1836" y="0" width="240" height="244" rx="10" fill="#fff"/>
+  <rect x="1836" y="0" width="240" height="244" rx="10" fill="#fff" stroke="#2A1430" stroke-opacity="0.12"/>
   <path d="M1836 10 a10 10 0 0 1 10 -10 h220 a10 10 0 0 1 10 10 v18 h-240 z" fill="#FFCC40"/>
   <circle cx="1849" cy="14" r="4" fill="#FF5F57"/>
   <circle cx="1862" cy="14" r="4" fill="#FEBC2E"/>

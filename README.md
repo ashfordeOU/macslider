@@ -27,6 +27,37 @@ strip glides just far enough to bring the window into view.
 
 <p align="center"><img src="assets/readme/how-it-works.svg" alt="How Monorail works: windows on a strip that runs past the screen" width="100%"></p>
 
+## A tour
+
+**The overview** (<kbd>⌃⌥O</kbd>, or <kbd>⌥</kbd> + pinch): every workspace and slide on one colourful canvas. Drag windows between slides, displays and workspaces, rename workspaces in place, close windows by dropping them on the bin.
+
+<p align="center"><img src="assets/readme/overview.svg" alt="The overview: workspaces Work, Chat and Design, each with its slides of windows" width="100%"></p>
+
+**The slider** glides in as the strip moves. Hover a slide for a live preview, drag to slide everything along, hold <kbd>⌥</kbd> to peek.
+
+<p align="center"><img src="assets/readme/slider.svg" alt="A desktop with a pair of windows and the slider bar, with a live preview of a slide" width="100%"></p>
+
+**Your choice:** keep the slider bar, or keep your screen clean and use just the menu bar icon, whose panel hangs right under it.
+
+<p align="center"><img src="assets/readme/choice.svg" alt="Two desktops side by side: one with the slider bar, one with only the menu bar icon" width="100%"></p>
+<p align="center"><img src="assets/readme/menubar.svg" alt="The slider panel under the menu bar icon, with slide cards" width="100%"></p>
+
+**Command palette** (<kbd>⌃⌥/</kbd>): type what you want.
+
+<p align="center"><img src="assets/readme/palette.svg" alt="The command palette with results for pair saf" width="100%"></p>
+
+**Focus mode** (<kbd>⌃⌥B</kbd>) fades everything but the slide you're in. **Snap layouts**: drag a window to the top of the screen and drop it on a zone, or press <kbd>⌃⌥E</kbd> for the radial menu.
+
+<p align="center"><img src="assets/readme/focus.svg" alt="Focus mode: the current slide bright, the windows on either side dimmed" width="100%"></p>
+<p align="center"><img src="assets/readme/snap.svg" alt="The snap layouts picker at the top of the screen with a window being dragged" width="100%"></p>
+
+**Themes** and **Insights**: five colour themes, and a private look at how you work, with app pair suggestions.
+
+<p align="center"><img src="assets/readme/themes.svg" alt="Five themes: Vivid, Ocean, Sunset, Forest and Monochrome" width="100%"></p>
+<p align="center"><img src="assets/readme/insights.svg" alt="Insights: today's counts, a week of switches and a suggested app pair" width="100%"></p>
+
+<p align="center"><img src="assets/readme/features.svg" alt="More features: radial menu, drag anywhere, title bar swipes, status bars and scripts, profiles, marks, scratchpad, app pairs, snapshots, peek, picture in picture, auto rules, title rules, quick launch, sync and Shortcuts" width="100%"></p>
+
 ## Highlights
 
 <table>
@@ -270,6 +301,13 @@ other one sliding across to the side you came from; in a main layout the
 window takes over the main spot. Drag the edge between two windows and the
 neighbour grows or shrinks to match.
 
+### Radial menu
+
+Press <kbd>⌃⌥E</kbd> and a ring appears at the pointer. Move towards a side or
+a corner and an outline shows where the focused window will go; let go of
+<kbd>⌃⌥</kbd> (or click) and it snaps there. The middle fills the screen,
+<kbd>Esc</kbd> cancels. A quick tap leaves the ring open until you click.
+
 ### Snap layouts picker
 
 Drag any window towards the top of the screen and a strip of layouts drops
@@ -393,6 +431,32 @@ When an app shows a badge on its Dock icon (unread mail, a new message), its
 windows get a small red dot on the slider bar, in the overview and in window
 search, so you can see which slide wants you.
 
+### Power moves
+
+- **Drag anywhere**: hold <kbd>⌃⌥</kbd> and drag anywhere inside a window to move it, or right-drag to resize it. A tiled window lands where you drop it.
+- **Title bar swipes**: turn them on in **Settings → Motion & Input**, then swipe with two fingers on a title bar: left or right moves the window's slide, up makes it full width, down minimises it.
+- **Spiral and accordion layouts**: spiral gives each window the main share of what's left, turning inwards; accordion overlaps windows like cards so every edge shows.
+- **Even out** (<kbd>⌃⌥⇧=</kbd>): every slide back to the default width and split.
+- **Back and forth** (<kbd>⌃⌥⇧⌫</kbd>): back to the workspace you were just on.
+- **Empty workspace** (<kbd>⌃⌥⇧N</kbd>): take the window to the first empty workspace and go with it.
+- **Attention** (<kbd>⌃⌥⇧A</kbd>): go to the window whose app has a badge in the Dock.
+- **Show desktop** (<kbd>⌃⌥⇧D</kbd>): every window slides aside; click one or press again to bring them back.
+- **Screenshot the slide** (<kbd>⌃⌥⇧C</kbd>): the slide you're in, saved to the Desktop and copied.
+- **App overview** (<kbd>⌃⌥⇧O</kbd>): the overview with just the focused app's windows.
+- **Size while resizing**: a label shows the window's size as you drag its edge.
+- **A picture per workspace**: give each workspace its own desktop picture in **Settings → General**.
+- **Gradient border**: the focus border can fade into a second colour.
+- **Less motion**: animations step aside when macOS's Reduce Motion or Low Power Mode is on.
+
+### For power users
+
+In **Settings → Automation**:
+
+- **Status bars**: turn on **Publish state** and Monorail keeps `~/Library/Application Support/Monorail/state.json` up to date (workspace, its name, profile, slide, focused app and title, focus mode) and posts the distributed notification `org.ashforde.monorail.changed`. SketchyBar, Übersicht or a script can follow along.
+- **Event script**: an executable script that runs on `workspace_changed`, `focus_changed`, `focus_mode_on` and `focus_mode_off`, with `MONORAIL_WORKSPACE`, `MONORAIL_APP`, `MONORAIL_TITLE` and more in its environment.
+- **Edit settings as text**: change `settings.json` in any editor and Monorail picks it up as you save.
+- **Auto rules on displays**: switch profile or apply a layout when you plug into a particular display.
+
 ### Focus mode
 
 <kbd>⌃⌥B</kbd> fades everything except the slide you're working in, for 25
@@ -484,6 +548,15 @@ AZERTY, QWERTZ, Dvorak and other layouts.
 | Zoom tile | <kbd>⌃⌥X</kbd> |
 | Back to the last window | <kbd>⌃⌥⌫</kbd> |
 | Quick launch | <kbd>⌃⌥U</kbd> then a letter |
+| Radial menu | <kbd>⌃⌥E</kbd> |
+| Even out widths and splits | <kbd>⌃⌥⇧=</kbd> |
+| Back to the last workspace | <kbd>⌃⌥⇧⌫</kbd> |
+| Move window to an empty workspace | <kbd>⌃⌥⇧N</kbd> |
+| Go to the window that wants attention | <kbd>⌃⌥⇧A</kbd> |
+| Show desktop | <kbd>⌃⌥⇧D</kbd> |
+| Screenshot the slide | <kbd>⌃⌥⇧C</kbd> |
+| Overview of this app's windows | <kbd>⌃⌥⇧O</kbd> |
+| Move a window from anywhere inside it | Hold <kbd>⌃⌥</kbd> and drag (right-drag resizes) |
 | Undo last layout change | <kbd>⌃⌥Z</kbd> |
 | Retile everything | <kbd>⌃⌥Esc</kbd> |
 | Pause / resume | <kbd>⌃⌥Q</kbd> |
