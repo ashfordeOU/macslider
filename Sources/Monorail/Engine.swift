@@ -3348,7 +3348,7 @@ final class Engine {
             let frames = strip.columnFrames(config: layoutConfig(for: display), viewport: viewport(of: display))
             guard let target = frames.indices.first(where: { CGRect(frames[$0].frame).contains(point) }) else {
                 // Dropped between slides: a slide of its own.
-                let slot = frames.firstIndex { CGRect(frames[$0].frame).minX > point.x } ?? frames.count
+                let slot = frames.indices.first { CGRect(frames[$0].frame).minX > point.x } ?? frames.count
                 overviewMove(id, to: key, newColumnAt: slot)
                 return
             }

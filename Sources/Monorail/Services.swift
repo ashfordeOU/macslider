@@ -240,9 +240,9 @@ final class ScriptHost {
         ]
         for (name, function) in functions { api.setObject(function, forKeyedSubscript: name as NSString) }
         context.setObject(api, forKeyedSubscript: "monorail" as NSString)
-        let log: @convention(block) (String) -> Void = { message in NSLog("Monorail script: %@", message) }
+        let consoleLog: @convention(block) (String) -> Void = { message in NSLog("Monorail script: %@", message) }
         let console = JSValue(newObjectIn: context)!
-        console.setObject(log, forKeyedSubscript: "log" as NSString)
+        console.setObject(consoleLog, forKeyedSubscript: "log" as NSString)
         context.setObject(console, forKeyedSubscript: "console" as NSString)
 
         try? FileManager.default.createDirectory(at: Self.folder, withIntermediateDirectories: true)
