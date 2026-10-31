@@ -961,6 +961,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             )
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
             window.title = "\(Brand.full) — Settings"
+            // Closing Settings mid-recording must not leave shortcuts paused.
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: window, queue: .main
+            ) { [weak self] _ in self?.store.stopRecording() }
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
             window.center()

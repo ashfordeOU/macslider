@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Combine
 import MonorailCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -131,6 +132,7 @@ private struct GeneralPane: View {
             }
             ProfilesSection(store: store)
             SyncSection(store: store)
+            RestoreSection(store: store)
             Section {
                 ForEach(checks) { check in
                     HStack(alignment: .top, spacing: 10) {
@@ -591,6 +593,34 @@ extension AppsPane {
     }
 }
 
+// MARK: - Restore
+
+private struct RestoreSection: View {
+    @ObservedObject var store: SettingsStore
+    @State private var confirming = false
+    @State private var done = false
+
+    var body: some View {
+        Section {
+            HStack {
+                Button("Restore All Settings to Defaults…") { confirming = true }
+                if done { Label("Restored", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
+            }
+            .confirmationDialog("Restore all settings to their defaults?", isPresented: $confirming) {
+                Button("Restore Defaults", role: .destructive) {
+                    store.restoreAllDefaults()
+                    done = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { done = false }
+                }
+            } message: {
+                Text("Shortcuts, gestures, layout and appearance go back to how Monorail comes. Your workspace and profile names, rules, app pairs, layouts and quick launch letters stay.")
+            }
+        } footer: {
+            Text("Export your settings first if you might want them back.").font(.callout).foregroundStyle(.secondary)
+        }
+    }
+}
+
 // MARK: - Sync, export and import
 
 private struct SyncSection: View {
@@ -1039,6 +1069,7 @@ private struct LayoutDiagram: View {
 
 private struct ShortcutsPane: View {
     @ObservedObject var store: SettingsStore
+    @State private var restored = false
 
     private static let groups: [(String, [Action])] = [
         ("Focus", [.focusLeft, .focusRight, .focusUp, .focusDown, .focusFirst, .focusLast, .overview, .windowSwitcher]),
@@ -1066,7 +1097,16 @@ private struct ShortcutsPane: View {
                     Text("Add ⇧ to move instead of focus. Click a shortcut to change it; each action can have several.")
                         .font(.callout).foregroundStyle(.secondary)
                     Spacer()
-                    Button("Restore defaults") { store.settings.keymap = .default }
+                    if restored {
+                        Label("Restored", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    }
+                    Button("Restore defaults") {
+                        store.restoreDefaultShortcuts()
+                        restored = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { restored = false }
+                    }
+                    .disabled(store.settings.keymap == .default)
+                    .help(store.settings.keymap == .default ? "Your shortcuts are the defaults" : "Put every shortcut back to its default")
                 }
             }
             ForEach(Self.groups, id: \.0) { group in
@@ -1111,6 +1151,16 @@ private struct ShortcutRow: View {
                         Button("Remove") { store.settings.keymap.unbind(action, at: index) }
                     }
                 }
+                if store.settings.keymap.shortcuts(for: action) != Keymap.default.shortcuts(for: action) {
+                    Button {
+                        capture.stop()
+                        store.settings.keymap.bindings[action] = Keymap.default.shortcuts(for: action)
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Back to the default for this action")
+                }
                 Button {
                     record(replacing: nil)
                 } label: {
@@ -1121,6 +1171,14 @@ private struct ShortcutRow: View {
                     }
                 }
                 .help("Add a shortcut")
+            }
+        }
+        // Restoring defaults or closing Settings ends a recording in progress.
+        .onReceive(store.$cancelRecording.dropFirst()) { _ in capture.stop() }
+        .onDisappear {
+            if capture.isRecording {
+                capture.stop()
+                store.isRecordingShortcut = false
             }
         }
     }

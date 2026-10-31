@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 420" width="1280" height="420" role="img" aria-label="Choose: slider bar and menu bar icon, or the menu bar icon only">
+<defs><linearGradient id="cardbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFF6F0"/><stop offset="1" stop-color="#FBE3EA"/></linearGradient>
+  <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3A2A6E"/><stop offset="0.55" stop-color="#7A2E78"/><stop offset="1" stop-color="#C2456E"/></linearGradient>
+  <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#2A1430" flood-opacity="0.28"/></filter>
+</defs>
+<rect width="1280" height="420" rx="24" fill="url(#cardbg)"/>
+<g filter="url(#shadow)"><rect x="120" y="40" width="500" height="290" rx="14" fill="url(#wall)"/></g>
+<rect x="120" y="40" width="500" height="22" rx="0" fill="#000" opacity="0.28"/>
+<rect x="120" y="40" width="500" height="14" rx="14" fill="#000" opacity="0"/>
+<text x="136" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" fill="#fff"></text>
+<text x="154" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" fill="#fff">Safari</text>
+<text x="200" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#fff" opacity="0.85">File   Edit   View   Window</text>
+<g transform="translate(470 44)"><rect x="0" y="1" width="3.5" height="12" rx="1" fill="#fff"/><rect x="5" y="4" width="3.5" height="8" rx="1" fill="#fff"/><rect x="10" y="1" width="3.5" height="12" rx="1" fill="#fff"/></g>
+<text x="492" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#fff">2 · 3/7</text>
+<text x="560" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#fff" opacity="0.85">Fri 9:41</text>
+<rect x="260.0" y="304" width="220" height="20" rx="8" fill="#fff" opacity="0.22"/>
+<rect x="270.0" y="307" width="15" height="14" rx="4" fill="#5B8CFF"/><rect x="295.0" y="307" width="15" height="14" rx="4" fill="#B06BFF"/><rect x="320.0" y="307" width="15" height="14" rx="4" fill="#FF5F9E"/><rect x="345.0" y="307" width="15" height="14" rx="4" fill="#FF9445"/><rect x="370.0" y="307" width="15" height="14" rx="4" fill="#45D18C"/><rect x="395.0" y="307" width="15" height="14" rx="4" fill="#33CCDB"/><rect x="420.0" y="307" width="15" height="14" rx="4" fill="#FFCC40"/><rect x="445.0" y="307" width="15" height="14" rx="4" fill="#5B8CFF"/><g opacity="1">
+  
+  <rect x="134.0" y="74.0" width="232.0" height="172" rx="10" fill="#fff"/>
+  <path d="M134.0 84.0 a10 10 0 0 1 10 -10 h212.0 a10 10 0 0 1 10 10 v18 h-232.0 z" fill="#5B8CFF"/>
+  <circle cx="147.0" cy="88.0" r="4" fill="#FF5F57"/>
+  <circle cx="160.0" cy="88.0" r="4" fill="#FEBC2E"/>
+  <circle cx="173.0" cy="88.0" r="4" fill="#28C840"/>
+  <rect x="148.0" y="118.0" width="163" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="148.0" y="134.0" width="122" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="148.0" y="150.0" width="184" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="148.0" y="166.0" width="102" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="148.0" y="182.0" width="143" height="7" rx="3.5" fill="#000" opacity="0.10"/>
+</g><g opacity="1">
+  
+  <rect x="374.0" y="74.0" width="232.0" height="172" rx="10" fill="#fff"/>
+  <path d="M374.0 84.0 a10 10 0 0 1 10 -10 h212.0 a10 10 0 0 1 10 10 v18 h-232.0 z" fill="#FF5F9E"/>
+  <circle cx="387.0" cy="88.0" r="4" fill="#FF5F57"/>
+  <circle cx="400.0" cy="88.0" r="4" fill="#FEBC2E"/>
+  <circle cx="413.0" cy="88.0" r="4" fill="#28C840"/>
+  <rect x="388.0" y="118.0" width="163" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="388.0" y="134.0" width="122" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="388.0" y="150.0" width="184" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="388.0" y="166.0" width="102" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="388.0" y="182.0" width="143" height="7" rx="3.5" fill="#000" opacity="0.10"/>
+</g><rect x="230" y="260" width="280" height="32" rx="16" fill="#fff" opacity="0.85"/><rect x="270" y="267" width="32" height="18" rx="5" fill="#5B8CFF" opacity="0.5"/><rect x="308" y="267" width="32" height="18" rx="5" fill="#B06BFF" opacity="0.5"/><rect x="346" y="267" width="32" height="18" rx="5" fill="#FF5F9E" opacity="0.5"/><rect x="384" y="267" width="32" height="18" rx="5" fill="#FF9445" opacity="0.5"/><rect x="422" y="267" width="32" height="18" rx="5" fill="#45D18C" opacity="0.5"/><rect x="460" y="267" width="32" height="18" rx="5" fill="#33CCDB" opacity="0.5"/><text x="370.0" y="366" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#2A1430">Slider bar + menu bar icon</text><text x="370.0" y="390" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" fill="#8A5A74">A bar of your slides above the Dock</text><g filter="url(#shadow)"><rect x="660" y="40" width="500" height="290" rx="14" fill="url(#wall)"/></g>
+<rect x="660" y="40" width="500" height="22" rx="0" fill="#000" opacity="0.28"/>
+<rect x="660" y="40" width="500" height="14" rx="14" fill="#000" opacity="0"/>
+<text x="676" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" fill="#fff"></text>
+<text x="694" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" font-weight="700" fill="#fff">Safari</text>
+<text x="740" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#fff" opacity="0.85">File   Edit   View   Window</text>
+<g transform="translate(1010 44)"><rect x="0" y="1" width="3.5" height="12" rx="1" fill="#fff"/><rect x="5" y="4" width="3.5" height="8" rx="1" fill="#fff"/><rect x="10" y="1" width="3.5" height="12" rx="1" fill="#fff"/></g>
+<text x="1032" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#fff">2 · 3/7</text>
+<text x="1100" y="55" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11" fill="#fff" opacity="0.85">Fri 9:41</text>
+<rect x="800.0" y="304" width="220" height="20" rx="8" fill="#fff" opacity="0.22"/>
+<rect x="810.0" y="307" width="15" height="14" rx="4" fill="#5B8CFF"/><rect x="835.0" y="307" width="15" height="14" rx="4" fill="#B06BFF"/><rect x="860.0" y="307" width="15" height="14" rx="4" fill="#FF5F9E"/><rect x="885.0" y="307" width="15" height="14" rx="4" fill="#FF9445"/><rect x="910.0" y="307" width="15" height="14" rx="4" fill="#45D18C"/><rect x="935.0" y="307" width="15" height="14" rx="4" fill="#33CCDB"/><rect x="960.0" y="307" width="15" height="14" rx="4" fill="#FFCC40"/><rect x="985.0" y="307" width="15" height="14" rx="4" fill="#5B8CFF"/><g opacity="1">
+  
+  <rect x="674.0" y="74.0" width="232.0" height="218" rx="10" fill="#fff"/>
+  <path d="M674.0 84.0 a10 10 0 0 1 10 -10 h212.0 a10 10 0 0 1 10 10 v18 h-232.0 z" fill="#B06BFF"/>
+  <circle cx="687.0" cy="88.0" r="4" fill="#FF5F57"/>
+  <circle cx="700.0" cy="88.0" r="4" fill="#FEBC2E"/>
+  <circle cx="713.0" cy="88.0" r="4" fill="#28C840"/>
+  <rect x="688.0" y="118.0" width="163" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="688.0" y="134.0" width="122" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="688.0" y="150.0" width="184" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="688.0" y="166.0" width="102" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="688.0" y="182.0" width="143" height="7" rx="3.5" fill="#000" opacity="0.10"/>
+</g><g opacity="1">
+  
+  <rect x="914.0" y="74.0" width="232.0" height="218" rx="10" fill="#fff"/>
+  <path d="M914.0 84.0 a10 10 0 0 1 10 -10 h212.0 a10 10 0 0 1 10 10 v18 h-232.0 z" fill="#FF9445"/>
+  <circle cx="927.0" cy="88.0" r="4" fill="#FF5F57"/>
+  <circle cx="940.0" cy="88.0" r="4" fill="#FEBC2E"/>
+  <circle cx="953.0" cy="88.0" r="4" fill="#28C840"/>
+  <rect x="928.0" y="118.0" width="163" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="928.0" y="134.0" width="122" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="928.0" y="150.0" width="184" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="928.0" y="166.0" width="102" height="7" rx="3.5" fill="#000" opacity="0.10"/><rect x="928.0" y="182.0" width="143" height="7" rx="3.5" fill="#000" opacity="0.10"/>
+</g><rect x="930" y="64" width="200" height="70" rx="10" fill="#1E1A24" opacity="0.94"/><rect x="942" y="84" width="30" height="30" rx="6" fill="#5B8CFF" opacity="0.5"/><rect x="978" y="84" width="30" height="30" rx="6" fill="#B06BFF" opacity="0.5"/><rect x="1014" y="84" width="30" height="30" rx="6" fill="#FF5F9E" opacity="0.5"/><rect x="1050" y="84" width="30" height="30" rx="6" fill="#FF9445" opacity="0.5"/><rect x="1086" y="84" width="30" height="30" rx="6" fill="#45D18C" opacity="0.5"/><text x="910.0" y="366" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#2A1430">Menu bar icon only</text><text x="910.0" y="390" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" fill="#8A5A74">Windows reach down to the Dock</text>
+<text x="1252" y="398" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" fill="#2A1430" opacity="0.55"><tspan font-weight="800">Monorail</tspan> by Ashforde®</text>
+</svg>

@@ -20,6 +20,37 @@ final class SettingsStore: ObservableObject {
         didSet { onRecordingChange(isRecordingShortcut) }
     }
 
+    /// Bumped to cancel any shortcut being recorded (restore, window closed).
+    @Published private(set) var cancelRecording = 0
+
+    func stopRecording() {
+        cancelRecording += 1
+        isRecordingShortcut = false
+    }
+
+    /// Puts every shortcut back to its default.
+    func restoreDefaultShortcuts() {
+        stopRecording()
+        settings.keymap = .default
+    }
+
+    /// Puts every preference back to its default, keeping what you made:
+    /// workspace and profile names, rules, app pairs, layouts and quick launch.
+    func restoreAllDefaults() {
+        stopRecording()
+        let mine = settings
+        var fresh = AppSettings()
+        fresh.hasCompletedOnboarding = mine.hasCompletedOnboarding
+        fresh.workspaceNames = mine.workspaceNames
+        fresh.profiles = mine.profiles
+        fresh.appRules = mine.appRules
+        fresh.appPairs = mine.appPairs
+        fresh.customLayouts = mine.customLayouts
+        fresh.autoRules = mine.autoRules
+        fresh.launchSlots = mine.launchSlots
+        settings = fresh
+    }
+
     var onChange: (AppSettings) -> Void = { _ in }
     var onRecordingChange: (Bool) -> Void = { _ in }
 
