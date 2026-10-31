@@ -44,6 +44,45 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Monorail looks at your upcoming events to open video calls a minute before they start. Your calendar never leaves your Mac.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Monorail looks at your upcoming events to open video calls a minute before they start. Your calendar never leaves your Mac.</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Monorail Layout</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.ashforde.monorail.layout</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.ashforde.monorail.layout</string>
+			<key>UTTypeDescription</key>
+			<string>Monorail Layout</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>monorail</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 	<key>NSLocationUsageDescription</key>
 	<string>Monorail reads the name of your Wi-Fi network to switch profile or layout when you join it. Your location is never stored or sent anywhere.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

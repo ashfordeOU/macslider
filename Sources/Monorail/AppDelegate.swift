@@ -28,7 +28,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let radial = RadialMenu()
     private let resizeHUD = ResizeHUD()
     private let integrations = Integrations()
+    private let hints = WindowHints()
+    private let stripZoom = StripZoom()
+    private let meetings = MeetingHelper()
+    private let api = LocalAPI()
+    private let scripts = ScriptHost()
+    private var resizeModeTimer: Timer?
+    private var demoWindows: [NSWindow] = []
     private var statsTimer: Timer?
+    private var apiStarted = false
+    private var scriptsOn = false
     private let statusMenu = NSMenu()
     private let navigation = SettingsNavigation()
     private var statusItem: NSStatusItem!
@@ -77,7 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
+        for url in urls where url.isFileURL {
+            openSharedFile(url)
+        }
+        for url in urls where !url.isFileURL {
             // monorail://layout/Coding, pair/…, snapshot/…, profile/…, workspace/2, launch/t
             let argument = url.pathComponents.dropFirst().joined(separator: "/").removingPercentEncoding ?? ""
             switch url.host?.lowercased() {
@@ -100,6 +112,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case "workspace":
                 if let n = Int(argument) { engine.switchWorkspace(to: n - 1) }
             case "launch": engine.quickLaunch(argument)
+            case "template":
+                if let template = store.settings.templates.first(where: { $0.name.caseInsensitiveCompare(argument) == .orderedSame }) {
+                    engine.runTemplate(template)
+                }
+            case "presentation-mode" where argument == "on" || argument == "off":
+                engine.setPresenting(argument == "on")
             case "focus-mode" where argument == "on" || argument == "off":
                 engine.setFocusMode(argument == "on")
             default:
@@ -141,7 +159,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             togglePause: { [weak self] in self?.engine.togglePause() },
             openSettings: { [weak self] in self?.showSettings() }
         )
-        sliderBar.mapsProvider = { [weak self] in self?.engine.miniMaps() ?? [] }
+        sliderBar.mapsProvider = { [weak self] in
+            guard let self, !self.engine.isPresenting else { return [] }
+            return self.engine.miniMaps()
+        }
         sliderBar.actions = SliderBarController.Actions(
             slide: { [weak self] x, uuid in self?.engine.slide(to: x, displayUUID: uuid) },
             endSlide: { [weak self] in self?.engine.endSlide() },
@@ -171,7 +192,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         popover.updater = updater
         engine.onShowSwitcher = { [weak self] in self?.switcher.toggle() }
         engine.onShowOverview = { [weak self] in self?.overview.toggle() }
-        engine.onNotice = { [weak self] text in self?.toast.show(text) }
+        engine.onNotice = { [weak self] text in
+            guard self?.engine.isPresenting != true else { return }
+            self?.toast.show(text)
+        }
+        engine.onWindowHints = { [weak self] in self?.showHints() }
+        engine.onResizeMode = { [weak self] on in self?.setResizeMode(on) }
+        engine.onStripZoom = { [weak self] in self?.stripZoom.toggle() }
+        engine.onWindowOpened = { [weak self] id, app, title in
+            self?.scripts.emit("windowOpened", ["id": Int(id), "app": app, "title": title])
+        }
+        stripZoom.mapProvider = { [weak self] in
+            guard let maps = self?.engine.miniMaps(), !maps.isEmpty else { return nil }
+            let mouse = NSEvent.mouseLocation
+            return maps.first { $0.screenFrame.minX <= mouse.x && mouse.x < $0.screenFrame.maxX } ?? maps.first
+        }
+        stripZoom.focus = { [weak self] id in self?.engine.focusAndReveal(id) }
+        input.onPinchProgress = { [weak self] total, ended in self?.stripZoom.pinch(total, ended: ended) }
+        trackpad.onVerticalSwipe = { [weak self] up in self?.engine.switchWorkspaceVertically(next: up) }
+        meetings.onMeeting = { [weak self] title, link in self?.joinMeeting(title, link) }
+        api.handler = { [weak self] method, path, body in self?.handleAPI(method, path, body) }
+        scripts.bridge = scriptBridge()
+        integrations.onEvent = { [weak self] event, state in
+            let payload: [String: Any] = event == "workspaceChanged"
+                ? ["index": state.workspace, "name": state.workspaceName, "profile": state.profile]
+                : ["app": state.app ?? "", "title": state.title ?? ""]
+            self?.scripts.emit(event, payload)
+        }
+        NotificationCenter.default.addObserver(forName: .monorailReloadScripts, object: nil, queue: .main) { [weak self] _ in
+            self?.reloadScripts()
+        }
+        NotificationCenter.default.addObserver(forName: .monorailRunTemplate, object: nil, queue: .main) { [weak self] note in
+            guard let self, let id = note.object as? String,
+                let template = self.store.settings.templates.first(where: { $0.id == id })
+            else { return }
+            self.engine.runTemplate(template)
+        }
         engine.onAskForLetter = { [weak self] action in self?.readMarkLetter(for: action) }
         engine.onShowPalette = { [weak self] in self?.palette.toggle() }
         engine.onAskForSnapshotName = { [weak self] in self?.takeSnapshot() }
@@ -264,6 +320,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statsTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             guard let self, self.engine.isRunning, !self.engine.isPaused else { return }
             self.stats.sample(slides: self.engine.slideApps(), slideCount: self.engine.slideCount)
+            if let state = self.currentState() {
+                self.stats.addMinute(workspace: state.workspaceName, app: state.app)
+            }
         }
     }
 
@@ -290,6 +349,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         input.slideTrigger = settings.slideTrigger
         input.pinchForOverview = settings.pinchForOverview
         input.modifierDrag = settings.modifierDrag
+        input.pinchZoomsStrip = settings.pinchZoomsStrip
+        trackpad.detectsVertical = settings.verticalWorkspaceSwipes
+        meetings.isEnabled = settings.meetingHelper
+        Localization.choose(settings.language)
+        if settings.localAPI != engine.settings.localAPI || settings.apiPort != engine.settings.apiPort || !apiStarted {
+            apiStarted = true
+            if settings.localAPI { api.start(port: settings.apiPort) } else { api.stop() }
+        }
+        if settings.scripts != scriptsOn {
+            scriptsOn = settings.scripts
+            if settings.scripts { scripts.load() } else { scripts.unload() }
+        }
         input.titleBarSwipes = settings.titleBarSwipes
         if settings.liveReloadSettings != liveReloadWasOn { store.watchFile() }
         snapPicker.isEnabled = settings.snapPicker
@@ -454,6 +525,271 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.saveSnapshot(named: trimmed.isEmpty ? Self.snapshotName() : trimmed)
     }
 
+    // MARK: - 0.8: hints, resize mode, templates, meetings, sharing, API, scripts, practice
+
+    @objc private func togglePresentation() { afterMenu { $0.engine.setPresenting(!$0.engine.isPresenting) } }
+    @objc private func stopRecording() { afterMenu { $0.engine.perform(.recordSlide) } }
+
+    private func showHints() {
+        let map = hints.show(engine.visibleWindowFrames())
+        guard !map.isEmpty else {
+            toast.show("No windows on screen")
+            return
+        }
+        input.captureNextKey = { [weak self] letter in
+            self?.hints.hide()
+            guard let letter, let id = map[letter] else { return }
+            self?.engine.focusAndReveal(id)
+        }
+    }
+
+    /// Resize mode: ← → width, ↑ ↓ the main share, 1–9 tenths, 0 full width; esc or return ends it.
+    private func setResizeMode(_ on: Bool) {
+        resizeModeTimer?.invalidate()
+        guard on else {
+            input.keyInterceptor = nil
+            return
+        }
+        toast.show("Resize mode · ← → width · ↑ ↓ split · 1–9 tenths · 0 full · esc when done")
+        let restart = { [weak self] in
+            self?.resizeModeTimer?.invalidate()
+            self?.resizeModeTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { _ in self?.setResizeMode(false) }
+        }
+        restart()
+        input.keyInterceptor = { [weak self] keyCode, modifiers in
+            guard let self else { return false }
+            if keyCode == KeyCode.escape || keyCode == KeyCode.returnKey {
+                DispatchQueue.main.async { self.setResizeMode(false) }
+                return true
+            }
+            guard modifiers.isEmpty || modifiers == [.shift] else { return false }
+            // The event tap runs on the main thread, so the engine can be asked directly.
+            let handled = self.engine.resizeKey(keyCode)
+            DispatchQueue.main.async { if handled { restart() } else { self.setResizeMode(false) } }
+            return handled
+        }
+    }
+
+    /// Templates ▸ each template to start.
+    private func templatesMenu() -> NSMenuItem {
+        let menu = NSMenu()
+        for template in store.settings.templates {
+            let entry = item(template.name, #selector(runTemplateFromMenu(_:)))
+            entry.representedObject = template.id
+            menu.addItem(entry)
+        }
+        let parent = NSMenuItem(title: L("Templates"), action: nil, keyEquivalent: "")
+        parent.submenu = menu
+        return parent
+    }
+
+    @objc private func runTemplateFromMenu(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String,
+            let template = store.settings.templates.first(where: { $0.id == id })
+        else { return }
+        afterMenu { $0.engine.runTemplate(template) }
+    }
+
+    private func joinMeeting(_ title: String, _ link: URL) {
+        if let profile = store.settings.meetingProfile { engine.switchProfile(to: profile) }
+        NSWorkspace.shared.open(link)
+        toast.show("Joining “\(title)”")
+    }
+
+    // MARK: Sharing layouts
+
+    /// A shared layout or template file (.monorail).
+    struct SharedFile: Codable {
+        var kind: String
+        var layout: SavedLayout?
+        var template: WorkspaceTemplate?
+        var appPair: AppPair?
+    }
+
+    @objc private func shareLayout(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String, let layout = engine.layouts.first(where: { $0.name == name })
+        else { return }
+        export(SharedFile(kind: "layout", layout: layout), suggested: name)
+    }
+
+    func shareTemplate(_ template: WorkspaceTemplate) {
+        export(SharedFile(kind: "template", template: template), suggested: template.name)
+    }
+
+    private func export(_ file: SharedFile, suggested: String) {
+        afterMenu { _ in
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = "\(suggested).monorail"
+            NSApp.activate(ignoringOtherApps: true)
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try? encoder.encode(file).write(to: url, options: .atomic)
+        }
+    }
+
+    /// Double-clicking a .monorail file: a layout is saved and applied, a template added and started.
+    private func openSharedFile(_ url: URL) {
+        guard let data = try? Data(contentsOf: url), let file = try? JSONDecoder().decode(SharedFile.self, from: data) else {
+            toast.show("That isn’t a Monorail layout file")
+            return
+        }
+        if let layout = file.layout {
+            engine.importLayout(layout)
+            engine.applyLayout(named: layout.name)
+        } else if let template = file.template {
+            store.settings.templates.removeAll { $0.name == template.name }
+            store.settings.templates.append(template)
+            engine.runTemplate(template)
+        } else if let pair = file.appPair {
+            store.settings.appPairs.removeAll { $0.name == pair.name }
+            store.settings.appPairs.append(pair)
+            engine.openPair(pair)
+        }
+    }
+
+    // MARK: Local API
+
+    private func handleAPI(_ method: String, _ path: [String], _ body: [String: Any]) -> Any? {
+        func int(_ key: String) -> Int? { (body[key] as? Int) ?? (body[key] as? String).flatMap { Int($0) } }
+        func text(_ key: String) -> String? { body[key] as? String }
+        switch (method, path.first ?? "") {
+        case ("GET", "state"):
+            guard let state = currentState(), let data = try? JSONEncoder().encode(state),
+                let object = try? JSONSerialization.jsonObject(with: data)
+            else { return [String: Any]() }
+            return object
+        case ("GET", "windows"):
+            return engine.windowList()
+        case ("GET", "workspaces"):
+            let windows = engine.windowList()
+            return (0..<engine.workspaceCount).map { index -> [String: Any] in
+                ["number": index + 1, "name": store.settings.workspaceName(index),
+                 "windows": windows.filter { ($0["workspace"] as? Int) == index + 1 }.count]
+            }
+        case ("GET", "layouts"):
+            return engine.layouts.map(\.name)
+        case ("GET", "pairs"):
+            return store.settings.appPairs.map(\.name)
+        case ("GET", "templates"):
+            return store.settings.templates.map(\.name)
+        case ("GET", "snapshots"):
+            return engine.snapshots.map(\.name)
+        case ("GET", "actions"):
+            return Action.allCases.map { ["name": $0.rawValue, "title": $0.title] }
+        case ("POST", "action"):
+            guard let name = text("action") ?? path.dropFirst().first, let action = Action(rawValue: name) else {
+                return ["error": "Unknown action"]
+            }
+            engine.perform(action)
+            return ["ok": true]
+        case ("POST", "focus"):
+            guard let id = int("id") else { return ["error": "Needs id"] }
+            engine.focusAndReveal(WindowID(id))
+            return ["ok": true]
+        case ("POST", "move"):
+            guard let id = int("id"), let workspace = int("workspace") else { return ["error": "Needs id and workspace"] }
+            engine.moveWindow(WindowID(id), toWorkspace: workspace - 1)
+            return ["ok": true]
+        case ("POST", "pair"):
+            let ids = (body["ids"] as? [Int] ?? []).map { WindowID($0) }
+            let arrangement = text("layout").flatMap(Arrangement.init(rawValue:)) ?? .columns
+            return ["ok": engine.pairWindows(ids, arrangement: arrangement)]
+        case ("POST", "workspace"):
+            guard let number = int("number") else { return ["error": "Needs number"] }
+            engine.switchWorkspace(to: number - 1)
+            return ["ok": true]
+        case ("POST", "layout"):
+            engine.applyLayout(named: text("name") ?? "")
+            return ["ok": true]
+        case ("POST", "pair-name"):
+            guard let pair = store.settings.appPairs.first(where: { $0.name.caseInsensitiveCompare(text("name") ?? "") == .orderedSame })
+            else { return ["error": "No such app pair"] }
+            engine.openPair(pair)
+            return ["ok": true]
+        case ("POST", "template"):
+            guard let template = store.settings.templates.first(where: { $0.name.caseInsensitiveCompare(text("name") ?? "") == .orderedSame })
+            else { return ["error": "No such template"] }
+            engine.runTemplate(template)
+            return ["ok": true]
+        case ("POST", "snapshot"):
+            engine.restoreSnapshot(named: text("name") ?? "")
+            return ["ok": true]
+        default:
+            return nil
+        }
+    }
+
+    // MARK: Scripts
+
+    private func scriptBridge() -> ScriptHost.Bridge {
+        ScriptHost.Bridge(
+            perform: { [weak self] name in if let action = Action(rawValue: name) { self?.engine.perform(action) } },
+            focus: { [weak self] id in self?.engine.focusAndReveal(id) },
+            moveToWorkspace: { [weak self] id, index in self?.engine.moveWindow(id, toWorkspace: index) },
+            park: { [weak self] index in self?.engine.parkWorkspace(index) },
+            openPair: { [weak self] name in
+                guard let self, let pair = self.store.settings.appPairs.first(where: { $0.name == name }) else { return }
+                self.engine.openPair(pair)
+            },
+            applyLayout: { [weak self] name in self?.engine.applyLayout(named: name) },
+            notify: { [weak self] text in self?.toast.show(text) },
+            windows: { [weak self] in self?.engine.windowList() ?? [] },
+            state: { [weak self] in
+                guard let state = self?.currentState(), let data = try? JSONEncoder().encode(state),
+                    let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                else { return [:] }
+                return object
+            })
+    }
+
+    func reloadScripts() {
+        guard store.settings.scripts else { return }
+        scripts.load()
+        toast.show("Scripts reloaded")
+    }
+
+    // MARK: Practice windows
+
+    /// Three of Monorail's own windows to try the moves on, tiled like real ones.
+    func openDemoWindows() {
+        closeDemoWindows()
+        let colours: [NSColor] = [.systemBlue, .systemPink, .systemOrange]
+        for (index, colour) in colours.enumerated() {
+            let window = NSWindow(
+                contentRect: NSRect(x: 200 + index * 40, y: 200, width: 640, height: 480),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            window.title = "Practice window \(index + 1)"
+            window.isReleasedWhenClosed = false
+            let label = NSTextField(labelWithString: "Practice window \(index + 1)\n\nTry ⌃⌥← ⌃⌥→ to move between windows,\n⌃⌥R for width, ⌃⌥O for the overview.")
+            label.alignment = .center
+            label.font = .systemFont(ofSize: 18, weight: .semibold)
+            label.textColor = .white
+            let view = NSView()
+            view.wantsLayer = true
+            view.layer?.backgroundColor = colour.withAlphaComponent(0.85).cgColor
+            label.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            ])
+            window.contentView = view
+            window.makeKeyAndOrderFront(nil)
+            demoWindows.append(window)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            for window in self?.demoWindows ?? [] { self?.engine.adoptDemoWindow(window.windowNumber) }
+        }
+    }
+
+    func closeDemoWindows() {
+        engine.forgetDemoWindows()
+        demoWindows.forEach { $0.close() }
+        demoWindows.removeAll()
+    }
+
     /// What status bars and scripts see (state.json, the event script).
     private func currentState() -> Integrations.State? {
         guard let status = engine.status() else { return nil }
@@ -516,6 +852,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 id: "layout-\(layout.name)", title: "Apply layout \(layout.name)", subtitle: "Saved layout",
                 symbol: "square.grid.2x2", keywords: "layout"
             ) { [weak self] in self?.engine.applyLayout(named: layout.name) })
+        }
+        for template in settings.templates {
+            list.append(PaletteCommand(
+                id: "template-\(template.id)", title: "Start template \(template.name)", subtitle: "Workspace template",
+                symbol: "square.on.square", keywords: "template start"
+            ) { [weak self] in self?.engine.runTemplate(template) })
+        }
+        for slide in engine.recentSlides().dropFirst() {
+            list.append(PaletteCommand(
+                id: "recent-\(slide.window)", title: "Back to \(slide.title)", subtitle: "Recent slide",
+                symbol: "clock.arrow.circlepath", keywords: "recent slide back"
+            ) { [weak self] in self?.engine.focusAndReveal(slide.window) })
         }
         for snapshot in engine.snapshots {
             list.append(PaletteCommand(
@@ -601,6 +949,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             var title = engine.workspaceCount > 1 ? " \(status.workspace) · \(position)" : " \(position)"
             if store.settings.menuBarShowsApp, let app = engine.focusedAppName { title = " \(app) ·" + title }
             if engine.isFocusMode { title = " ◉" + title }
+            if engine.isRecording { title = " ● REC" + title }
             button.title = title
             button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .regular)
         } else {
@@ -645,24 +994,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(
-            item(engine.isPaused ? "Resume Tiling" : "Pause Tiling", #selector(togglePause), action: .togglePause))
-        menu.addItem(item("Overview", #selector(showOverview), action: .overview))
-        menu.addItem(item("Search Windows…", #selector(showSwitcher), action: .windowSwitcher))
-        menu.addItem(item("Command Palette…", #selector(showPalette), action: .commandPalette))
+            item(engine.isPaused ? L("Resume Tiling") : L("Pause Tiling"), #selector(togglePause), action: .togglePause))
+        menu.addItem(item(L("Overview"), #selector(showOverview), action: .overview))
+        menu.addItem(item(L("Search Windows…"), #selector(showSwitcher), action: .windowSwitcher))
+        menu.addItem(item(L("Command Palette…"), #selector(showPalette), action: .commandPalette))
         let focusItem = item(
-            engine.isFocusMode ? "End Focus Mode" : "Focus Mode", #selector(toggleFocusMode), action: .toggleFocusMode)
+            engine.isFocusMode ? L("End Focus Mode") : L("Focus Mode"), #selector(toggleFocusMode), action: .toggleFocusMode)
         if let ends = engine.focusEnds {
             focusItem.toolTip = "Ends at \(DateFormatter.localizedString(from: ends, dateStyle: .none, timeStyle: .short))"
         }
         menu.addItem(focusItem)
-        menu.addItem(item("Reset to Smart Pairs", #selector(regroup), action: .regroup))
+        menu.addItem(item(L("Reset to Smart Pairs"), #selector(regroup), action: .regroup))
         menu.addItem(savedLayoutsMenu())
         menu.addItem(appPairsMenu())
         menu.addItem(snapshotsMenu())
-        let undoItem = item("Undo Layout Change", #selector(undoLayout), action: .undo)
+        if !store.settings.templates.isEmpty { menu.addItem(templatesMenu()) }
+        let recent = engine.recentSlides()
+        if recent.count > 1 {
+            let list = NSMenu()
+            for slide in recent.dropFirst() {
+                let entry = item(slide.title, #selector(focusWindowFromMenu(_:)))
+                entry.tag = Int(slide.window)
+                list.addItem(entry)
+            }
+            let parent = NSMenuItem(title: L("Recent Slides"), action: nil, keyEquivalent: "")
+            parent.submenu = list
+            menu.addItem(parent)
+        }
+        menu.addItem(item(
+            engine.isPresenting ? L("End Presentation Mode") : L("Presentation Mode"), #selector(togglePresentation),
+            action: .presentationMode))
+        if engine.isRecording { menu.addItem(item(L("Stop Recording"), #selector(stopRecording), action: .recordSlide)) }
+        let undoItem = item(L("Undo Layout Change"), #selector(undoLayout), action: .undo)
         undoItem.isEnabled = engine.canUndo
         menu.addItem(undoItem)
-        menu.addItem(item("Retile Windows", #selector(retile), action: .retile))
+        menu.addItem(item(L("Retile Windows"), #selector(retile), action: .retile))
 
         let workspaceCount = engine.workspaceCount
         if workspaceCount > 1 {
@@ -688,11 +1054,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 entry.tag = n
                 park.addItem(entry)
             }
-            let parkParent = NSMenuItem(title: "Park Workspace", action: nil, keyEquivalent: "")
+            let parkParent = NSMenuItem(title: L("Park Workspace"), action: nil, keyEquivalent: "")
             parkParent.submenu = park
             parkParent.toolTip = "Minimise a workspace’s windows to the Dock and bring them back to the same slides later"
             workspaces.addItem(parkParent)
-            let parent = NSMenuItem(title: "Workspaces", action: nil, keyEquivalent: "")
+            let parent = NSMenuItem(title: L("Workspaces"), action: nil, keyEquivalent: "")
             parent.submenu = workspaces
             menu.addItem(parent)
         }
@@ -710,13 +1076,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(item("Settings…", #selector(showSettingsFromMenu), key: ","))
+        menu.addItem(item(L("Settings…"), #selector(showSettingsFromMenu), key: ","))
         menu.addItem(shortcutsMenu())
-        menu.addItem(item("Welcome Tour…", #selector(showWelcomeFromMenu)))
-        menu.addItem(item("Check for Updates…", #selector(checkForUpdates)))
+        menu.addItem(item(L("Welcome Tour…"), #selector(showWelcomeFromMenu)))
+        menu.addItem(item(L("Check for Updates…"), #selector(checkForUpdates)))
         menu.addItem(item("About \(Brand.full)", #selector(showAbout)))
         menu.addItem(.separator())
-        menu.addItem(item("Quit Monorail", #selector(quit), key: "q"))
+        menu.addItem(item(L("Quit Monorail"), #selector(quit), key: "q"))
     }
 
     /// Every shortcut, so nobody has to remember them. Choosing one runs it.
@@ -739,8 +1105,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(entry)
         }
         menu.addItem(.separator())
-        menu.addItem(item("Change Shortcuts…", #selector(showShortcuts)))
-        let parent = NSMenuItem(title: "Keyboard Shortcuts", action: nil, keyEquivalent: "")
+        menu.addItem(item(L("Change Shortcuts…"), #selector(showShortcuts)))
+        let parent = NSMenuItem(title: L("Keyboard Shortcuts"), action: nil, keyEquivalent: "")
         parent.submenu = menu
         return parent
     }
@@ -764,7 +1130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func snapshotsMenu() -> NSMenuItem {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        menu.addItem(item("Take Snapshot…", #selector(takeSnapshotFromMenu), action: .takeSnapshot))
+        menu.addItem(item(L("Take Snapshot…"), #selector(takeSnapshotFromMenu), action: .takeSnapshot))
         let snapshots = engine.snapshots
         if !snapshots.isEmpty {
             menu.addItem(.separator())
@@ -781,11 +1147,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 entry.representedObject = snapshot.name
                 delete.addItem(entry)
             }
-            let parent = NSMenuItem(title: "Delete", action: nil, keyEquivalent: "")
+            let parent = NSMenuItem(title: L("Delete"), action: nil, keyEquivalent: "")
             parent.submenu = delete
             menu.addItem(parent)
         }
-        let parent = NSMenuItem(title: "Snapshots", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: L("Snapshots"), action: nil, keyEquivalent: "")
         parent.submenu = menu
         return parent
     }
@@ -838,11 +1204,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 entry.representedObject = pair.id
                 delete.addItem(entry)
             }
-            let parent = NSMenuItem(title: "Delete", action: nil, keyEquivalent: "")
+            let parent = NSMenuItem(title: L("Delete"), action: nil, keyEquivalent: "")
             parent.submenu = delete
             menu.addItem(parent)
         }
-        let parent = NSMenuItem(title: "App Pairs", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: L("App Pairs"), action: nil, keyEquivalent: "")
         parent.submenu = menu
         return parent
     }
@@ -865,7 +1231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func savedLayoutsMenu() -> NSMenuItem {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        menu.addItem(item("Save Current Layout…", #selector(saveLayout)))
+        menu.addItem(item(L("Save Current Layout…"), #selector(saveLayout)))
         let layouts = engine.layouts
         if !layouts.isEmpty {
             menu.addItem(.separator())
@@ -877,16 +1243,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             menu.addItem(.separator())
             let delete = NSMenu()
+            let share = NSMenu()
+            for layout in layouts {
+                let entry = item(layout.name, #selector(shareLayout(_:)))
+                entry.representedObject = layout.name
+                share.addItem(entry)
+            }
+            let shareParent = NSMenuItem(title: L("Share Layout…"), action: nil, keyEquivalent: "")
+            shareParent.submenu = share
+            menu.addItem(shareParent)
             for layout in layouts {
                 let entry = item(layout.name, #selector(deleteLayout(_:)))
                 entry.representedObject = layout.name
                 delete.addItem(entry)
             }
-            let parent = NSMenuItem(title: "Delete", action: nil, keyEquivalent: "")
+            let parent = NSMenuItem(title: L("Delete"), action: nil, keyEquivalent: "")
             parent.submenu = delete
             menu.addItem(parent)
         }
-        let parent = NSMenuItem(title: "Saved Layouts", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: L("Saved Layouts"), action: nil, keyEquivalent: "")
         parent.submenu = menu
         return parent
     }
@@ -1010,10 +1385,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func showWelcome() {
         if welcomeWindow == nil {
-            let view = WelcomeView(store: store, practice: practice) { [weak self] in
+            var view = WelcomeView(store: store, practice: practice) { [weak self] in
                 guard let self else { return }
                 self.store.settings.hasCompletedOnboarding = true
+                self.closeDemoWindows()
                 self.welcomeWindow?.close()
+            }
+            view.practiceWindows = { [weak self] open in
+                if open { self?.openDemoWindows() } else { self?.closeDemoWindows() }
             }
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
             window.title = "Welcome to \(Brand.full)"

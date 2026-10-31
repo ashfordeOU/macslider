@@ -44,6 +44,9 @@ struct WelcomeView: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject var practice: PracticeTracker
     let onFinish: () -> Void
+    /// Opens (true) or closes (false) three practice windows to try the moves on.
+    var practiceWindows: (Bool) -> Void = { _ in }
+    @State private var practising = false
     @State private var trusted = Accessibility.isTrusted(prompt: false)
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -82,7 +85,7 @@ struct WelcomeView: View {
                         .font(.title2)
                         .foregroundStyle(trusted ? Color.green : Color.orange)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("1. Allow Accessibility").fontWeight(.medium)
+                        Text(L("1. Allow Accessibility")).fontWeight(.medium)
                         Text(
                             trusted
                                 ? "Done. Monorail can now arrange your windows."
@@ -91,7 +94,7 @@ struct WelcomeView: View {
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         if !trusted {
-                            Button("Open Accessibility Settings") {
+                            Button(L("Open Accessibility Settings")) {
                                 _ = Accessibility.isTrusted(prompt: true)
                                 if let url = URL(
                                     string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
@@ -108,7 +111,7 @@ struct WelcomeView: View {
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("2. Choose how you see your slides").fontWeight(.medium)
+                    Text(L("2. Choose how you see your slides")).fontWeight(.medium)
                     HStack(spacing: 12) {
                         ViewChoice(
                             title: "Slider bar + menu bar icon",
@@ -132,7 +135,7 @@ struct WelcomeView: View {
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("3. Get around").fontWeight(.medium)
+                    Text(L("3. Get around")).fontWeight(.medium)
                     tip(
                         keys: store.settings.slideTrigger == .off ? "—" : "tap \(store.settings.slideTrigger.title)",
                         text: "Slide mode. Then just press ← → to slide between windows, ⇧← ⇧→ to move one, R for width, F to fill. Esc when done.")
@@ -153,13 +156,18 @@ struct WelcomeView: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("4. Practice").fontWeight(.medium)
+                        Text(L("4. Practice")).fontWeight(.medium)
                         Spacer()
                         Text("\(practice.done.count) of \(PracticeTracker.tasks.count)")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     Text("Open two or three windows, then try each move. They tick off as you go.")
                         .font(.callout).foregroundStyle(.secondary)
+                    Button(practising ? L("Close demo windows") : L("Practice with demo windows")) {
+                        practising.toggle()
+                        practiceWindows(practising)
+                    }
+                    .help("Three of Monorail’s own windows to practise on, so your real work stays put")
                     ForEach(PracticeTracker.tasks) { task in
                         HStack(spacing: 8) {
                             Image(systemName: practice.done.contains(task.id) ? "checkmark.circle.fill" : "circle")
@@ -175,7 +183,7 @@ struct WelcomeView: View {
             HStack {
                 Text("Every shortcut can be changed in Settings.").font(.callout).foregroundStyle(.secondary)
                 Spacer()
-                Button(trusted ? "Start sliding" : "Continue without permission") { onFinish() }
+                Button(trusted ? L("Start sliding") : L("Continue without permission")) { onFinish() }
                     .keyboardShortcut(.defaultAction)
             }
         }

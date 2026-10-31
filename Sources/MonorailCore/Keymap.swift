@@ -205,6 +205,11 @@ public struct Keymap: Equatable, Codable, Sendable {
             .showDesktop: [s(KeyCode.d, cos)],
             .screenshotSlide: [s(KeyCode.c, cos)],
             .appOverview: [s(KeyCode.o, cos)],
+            .windowHints: [s(KeyCode.v, co)],
+            .resizeMode: [s(KeyCode.e, cos)],
+            .stripZoom: [s(KeyCode.z, cos)],
+            .presentationMode: [s(KeyCode.y, cos)],
+            .recordSlide: [s(KeyCode.v, cos)],
             // Snapping (floats the window first): Control-Option-Command plus a key.
             .snapLeftHalf: [s(KeyCode.left, coc)],
             .snapRightHalf: [s(KeyCode.right, coc)],

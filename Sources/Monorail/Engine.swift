@@ -93,6 +93,12 @@ final class Engine {
     var onShowAppOverview: (String) -> Void = { _ in }
     /// While resizing by hand: the window's frame (Accessibility coordinates), or nil when done.
     var onResizeHUD: (CGRect?) -> Void = { _ in }
+    /// Window hints, resize mode and the strip zoom are drawn by the app.
+    var onWindowHints: () -> Void = {}
+    var onResizeMode: (Bool) -> Void = { _ in }
+    var onStripZoom: () -> Void = {}
+    /// A window was adopted (for scripts): id, app, title.
+    var onWindowOpened: (WindowID, String, String) -> Void = { _, _, _ in }
     var onAskForSnapshotName: () -> Void = {}
     /// A short confirmation to show the user ("Nothing to undo").
     var onNotice: (String) -> Void = { _ in }
@@ -132,6 +138,7 @@ final class Engine {
             self?.updateOverlays()
         }
         overlays.onSelectWindow = { [weak self] id in self?.focusAndReveal(id) }
+        overlays.onDropTab = { [weak self] id, point in self?.dropTab(id, at: point) }
         // The app's own move/resize notifications arrive after the write lands;
         // stamping the time then keeps them from looking like the user's moves.
         writer.didApply = { [weak self] id in
@@ -302,6 +309,21 @@ final class Engine {
             return
         case .balanceSizes:
             balanceSizes()
+            return
+        case .windowHints:
+            onWindowHints()
+            return
+        case .resizeMode:
+            onResizeMode(true)
+            return
+        case .stripZoom:
+            onStripZoom()
+            return
+        case .presentationMode:
+            setPresenting(!isPresenting)
+            return
+        case .recordSlide:
+            toggleRecording()
             return
         default:
             break
@@ -534,12 +556,12 @@ final class Engine {
                     position: .afterFocused, focus: focus)
             case .newSlide:
                 strip.insertSlide(
-                    [window.id], width: 1, arrangement: settings.arrangement(for: window.bundleID),
+                    [window.id], width: rememberedWidth(window) ?? 1, arrangement: settings.arrangement(for: window.bundleID),
                     position: position, focus: focus)
             }
         } else {
             strip.insert(
-                window.id, width: width ?? rule?.width ?? settings.layout.defaultWidth,
+                window.id, width: width ?? rule?.width ?? rememberedWidth(window) ?? settings.layout.defaultWidth,
                 position: position, focus: focus)
         }
         if focus { strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width) }
@@ -597,7 +619,8 @@ final class Engine {
     // MARK: - Workspaces
 
     /// Shows workspace `index` on the active display.
-    func switchWorkspace(to index: Int) {
+    /// `slide`: +1 brings the workspace up from below, -1 down from above, 0 as usual.
+    func switchWorkspace(to index: Int, slide: Int = 0) {
         guard index >= 0, index < workspaceLimit, let (display, key) = activeContext(),
             base + index != key.workspace
         else { return }
@@ -609,6 +632,14 @@ final class Engine {
         if var strip = strips[newKey] {
             strip.revealFocused(config: layoutConfig(for: display), viewportWidth: viewport(of: display).width)
             strips[newKey] = strip
+            if slide != 0 {
+                // Start each window a screen below (or above) where it goes, so the workspace slides in.
+                for placement in strip.layout(config: layoutConfig(for: display), viewport: viewport(of: display)) {
+                    var start = placement.frame
+                    start.y += Double(display.frame.height) * Double(slide)
+                    windows[placement.window]?.lastApplied = start
+                }
+            }
         }
         layout(animated: true)
         if let target = strips[newKey]?.focusedWindow { focus(target, warpMouse: false) }
@@ -1245,6 +1276,7 @@ final class Engine {
             }
         }
 
+        applyComfortTweaks(&targets)
         for id in skip { targets[id] = nil }
 
         if animated && settings.animate && !reduceMotion {
@@ -1295,7 +1327,7 @@ final class Engine {
     }
 
     private func updateOverlays() {
-        guard isRunning, !isPaused else {
+        guard isRunning, !isPaused, !isPresenting else {
             overlays.hideAll()
             return
         }
@@ -1330,7 +1362,7 @@ final class Engine {
                     Overlays.Tab(id: id, title: windows[id].map { window in
                         let title = displayTitle(window)
                         return title.isEmpty ? window.appName : title
-                    } ?? "")
+                    } ?? "", pid: windows[id]?.pid ?? 0)
                 }
                 bars.append(Overlays.TabBarModel(frame: CGRect(bar.frame), tabs: tabs, active: bar.active))
             }
@@ -1512,7 +1544,7 @@ final class Engine {
     /// strip changed.
     @discardableResult
     private func adopt(_ element: AXUIElement, pid: pid_t, focus: Bool, force: Bool = false) -> Bool {
-        guard pid != ownPID, let id = element.windowID else { return false }
+        guard let id = element.windowID, pid != ownPID || demoWindows.contains(id) else { return false }
         if let existing = windows[id] {
             // Known window: just follow focus.
             if focus, let key = existing.key { strips[key]?.focus(id) }
@@ -1525,7 +1557,7 @@ final class Engine {
             let frame = element.frame, frame.width >= 80, frame.height >= 60
         else { return false }
         let app = NSRunningApplication(processIdentifier: pid)
-        guard app?.activationPolicy == .regular, app?.isHidden == false else { return false }
+        guard pid == ownPID || (app?.activationPolicy == .regular && app?.isHidden == false) else { return false }
         guard !Self.isSystemUI(app?.bundleIdentifier) else { return false }
         // ⌃⌥T (force) can still tile a window the dialog heuristic got wrong.
         guard force || !Self.looksLikeDialog(element) else { return false }
@@ -1547,6 +1579,7 @@ final class Engine {
         // The scratchpad floats above every workspace.
         if id == scratchpad { return false }
         onUsage(.windowOpened)
+        onWindowOpened(id, window.appName, window.title)
 
         // A window restored from the saved layout keeps its place.
         if let restored = strips.first(where: { $0.value.contains(id) })?.key {
@@ -1563,6 +1596,15 @@ final class Engine {
         // Apps can have a home workspace ("Slack opens in Chat").
         var target = key
         if let home = rule?.workspace, home >= 0, home < workspaceLimit { target.workspace = base + home }
+        // A project's windows gather where its first window is.
+        if let project = ProjectMatcher.project(in: window.title, projects: settings.projects) {
+            projectPlaced.insert(id)
+            if let home = projectHomes[project], home.screen == key.screen, home.workspace / Self.profileStride == activeProfile {
+                target = home
+            } else {
+                projectHomes[project] = target
+            }
+        }
         place(window, in: target, display: display, focus: focus && target == key)
         return true
     }
@@ -1870,6 +1912,7 @@ final class Engine {
             }
             let fraction = layoutConfig(for: display).fraction(forColumnWidth: actual.width, viewportWidth: viewport(of: display).width)
             strips[key]?.setWidth(fraction, of: window.id)
+            if settings.rememberWidths { appWidths[Self.appKey(window)] = fraction }
         } else {
             guard abs(actual.x - applied.x) > 8 || abs(actual.y - applied.y) > 8 else { return }
             swapWhileDragging(window, key: key)
@@ -2170,6 +2213,8 @@ final class Engine {
         /// listed apps that only needed a little more room).
         var wholeSlideApps: [String]?
         var sticky: [WindowID]?
+        var appWidths: [String: Double]?
+        var projectHomes: [String: StripKey]?
     }
 
     struct SessionStrip: Codable {
@@ -2197,7 +2242,8 @@ final class Engine {
             strips: strips.filter { !$0.value.isEmpty }, activeWorkspace: activeWorkspace,
             names: names.filter { windows[$0.key] != nil }, session: session,
             activeProfile: activeProfile, profileWorkspaces: profileWorkspaces, marks: marks, scratchpad: scratchpad,
-            wholeSlideApps: roomyApps.sorted(), sticky: Array(stickyWindows))
+            wholeSlideApps: roomyApps.sorted(), sticky: Array(stickyWindows), appWidths: appWidths,
+            projectHomes: projectHomes)
         do {
             try FileManager.default.createDirectory(at: SettingsStore.directory, withIntermediateDirectories: true)
             try JSONEncoder().encode(state).write(to: Self.stateURL, options: .atomic)
@@ -2219,6 +2265,8 @@ final class Engine {
         scratchpad = state.scratchpad
         roomyApps = Set(state.wholeSlideApps ?? [])
         stickyWindows = Set(state.sticky ?? [])
+        appWidths = state.appWidths ?? [:]
+        projectHomes = state.projectHomes ?? [:]
         lastSession = state.session ?? []
         lastSessionLoaded = Date()
         savedLayouts = (try? Data(contentsOf: Self.layoutsURL))
@@ -2301,6 +2349,15 @@ final class Engine {
         savedLayouts.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         writeLayouts()
         onNotice("Saved layout “\(name)”")
+    }
+
+    /// Adds a layout someone shared (a .monorail file).
+    func importLayout(_ layout: SavedLayout) {
+        savedLayouts.removeAll { $0.name == layout.name }
+        savedLayouts.append(layout)
+        savedLayouts.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        writeLayouts()
+        onStateChange()
     }
 
     func deleteLayout(named name: String) {
@@ -2448,10 +2505,10 @@ final class Engine {
 
     /// Opens the pair's apps (launching any that aren't running) and puts one
     /// window of each in a new slide.
-    func openPair(_ pair: AppPair) {
+    func openPair(_ pair: AppPair, launch: Bool = true) {
         guard isRunning, !isPaused else { return }
         for bundleID in pair.bundleIDs
-        where NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
+        where launch && NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
                 NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
             }
@@ -2681,6 +2738,7 @@ final class Engine {
     /// Titles often arrive late (a browser tab loads "Meet" after the window
     /// opens): apply a title rule the first time one matches.
     private func applyTitleRule(_ window: ManagedWindow) {
+        gatherProject(window)
         guard isRunning, !isPaused, !titleRuled.contains(window.id),
             let rule = settings.rule(for: window.bundleID, title: window.title), rule.isTitleRule
         else { return }
@@ -3131,6 +3189,306 @@ final class Engine {
         commit(strip, key)
         focus(id, warpMouse: false)
         haptic()
+    }
+
+    // MARK: - Remembered widths, centred and growing windows
+
+    /// The width the user last gave each app's windows.
+    private var appWidths: [String: Double] = [:]
+
+    private func rememberedWidth(_ window: ManagedWindow) -> Double? {
+        settings.rememberWidths ? appWidths[Self.appKey(window)] : nil
+    }
+
+    /// A lone window centred at a comfortable width, and the focused one of
+    /// two windows in a slide growing a little.
+    private func applyComfortTweaks(_ targets: inout [WindowID: (from: Rect, to: Rect)]) {
+        guard !showingDesktop, settings.centerLoneWindow > 0 || settings.autoGrowFocus > 0 else { return }
+        let focused = settings.autoGrowFocus > 0 ? focusedWindowID() : nil
+        for display in displays {
+            let key = currentKey(display)
+            guard let strip = strips[key] else { continue }
+            let area = viewport(of: display)
+            if settings.centerLoneWindow > 0, strip.columns.count == 1, let column = strip.columns.first,
+                column.windows.count == 1, !column.isFullWidth, let id = column.windows.first, var target = targets[id]
+            {
+                let width = (area.width * min(max(settings.centerLoneWindow, 0.3), 1)).rounded()
+                target.to = Rect(x: area.x + ((area.width - width) / 2).rounded(), y: target.to.y, width: width, height: target.to.height)
+                targets[id] = target
+            }
+            guard settings.autoGrowFocus > 0, let focused, let (c, _) = strip.locate(focused) else { continue }
+            let column = strip.columns[c]
+            guard column.windows.count == 2, !column.isTabbed, column.arrangement != .accordion,
+                let a = targets[column.windows[0]], let b = targets[column.windows[1]]
+            else { continue }
+            let share = min(max(settings.autoGrowFocus, 0.5), 0.8)
+            let gap = layoutConfig(for: display).gap
+            let sideBySide = abs(a.to.y - b.to.y) < 1
+            let ordered = column.windows.sorted { sideBySide ? targets[$0]!.to.x < targets[$1]!.to.x : targets[$0]!.to.y < targets[$1]!.to.y }
+            let first = targets[ordered[0]]!.to, second = targets[ordered[1]]!.to
+            let firstShare = ordered[0] == focused ? share : 1 - share
+            if sideBySide {
+                let total = first.width + second.width
+                let left = (total * firstShare).rounded()
+                targets[ordered[0]]!.to = Rect(x: first.x, y: first.y, width: left, height: first.height)
+                targets[ordered[1]]!.to = Rect(x: first.x + left + gap, y: second.y, width: total - left, height: second.height)
+            } else {
+                let total = first.height + second.height
+                let top = (total * firstShare).rounded()
+                targets[ordered[0]]!.to = Rect(x: first.x, y: first.y, width: first.width, height: top)
+                targets[ordered[1]]!.to = Rect(x: second.x, y: first.y + top + gap, width: second.width, height: total - top)
+            }
+        }
+    }
+
+    // MARK: - Projects
+
+    /// Where each project's windows gather.
+    private var projectHomes: [String: StripKey] = [:]
+    private var projectPlaced: Set<WindowID> = []
+
+    /// A window whose title names a project (often only once its document
+    /// loads) joins that project's workspace.
+    private func gatherProject(_ window: ManagedWindow) {
+        guard isRunning, !isPaused, !projectPlaced.contains(window.id), let key = window.key,
+            let project = ProjectMatcher.project(in: window.title, projects: settings.projects)
+        else { return }
+        projectPlaced.insert(window.id)
+        guard let home = projectHomes[project], home.screen == key.screen, home != key,
+            home.workspace / Self.profileStride == activeProfile
+        else {
+            projectHomes[project] = key
+            return
+        }
+        moveWindow(window.id, toWorkspace: home.workspace - base)
+        onNotice("\(window.appName) joined \(project) in \(settings.workspaceName(home.workspace - base))")
+    }
+
+    // MARK: - Hints, resize mode, recent slides
+
+    /// The windows on screen now, with their frames (Accessibility coordinates), for window hints.
+    func visibleWindowFrames() -> [(id: WindowID, frame: CGRect, app: String)] {
+        var result: [(id: WindowID, frame: CGRect, app: String)] = []
+        for display in displays {
+            let key = currentKey(display)
+            guard let strip = strips[key] else { continue }
+            for placement in strip.layout(config: layoutConfig(for: display), viewport: viewport(of: display))
+            where !placement.isParked && !placement.isHiddenTab {
+                guard let window = windows[placement.window], let frame = window.lastApplied else { continue }
+                let visible = CGRect(frame).intersection(display.frame)
+                guard visible.width > 60, visible.height > 60 else { continue }
+                result.append((placement.window, visible, window.appName))
+            }
+        }
+        for window in windows.values where window.key == nil {
+            if let frame = window.element.frame, displays.contains(where: { $0.frame.intersects(frame) }) {
+                result.append((window.id, frame, window.appName))
+            }
+        }
+        return result.sorted { ($0.frame.minY, $0.frame.minX) < ($1.frame.minY, $1.frame.minX) }
+    }
+
+    /// A key in resize mode: ← → width, ↑ ↓ the main share, 1–9 a tenth of the
+    /// screen each, 0 full width. Returns false for keys that end the mode.
+    func resizeKey(_ keyCode: UInt16) -> Bool {
+        switch keyCode {
+        case KeyCode.left: perform(.narrower)
+        case KeyCode.right: perform(.wider)
+        case KeyCode.up: perform(.mainLarger)
+        case KeyCode.down: perform(.mainSmaller)
+        case let code where KeyCode.digits.contains(code):
+            let tenths = (KeyCode.digits.firstIndex(of: code) ?? 0) + 1
+            guard let id = focusedWindowID(), let key = windows[id]?.key, var strip = strips[key] else { return true }
+            recordHistory()
+            strip.setWidth(Double(tenths) / 10, of: id)
+            commit(strip, key)
+        case KeyCode.zero: perform(.toggleFullWidth)
+        default: return false
+        }
+        return true
+    }
+
+    /// Slides you were on recently, most recent first: a title and a window to go to.
+    func recentSlides(_ limit: Int = 8) -> [(title: String, window: WindowID)] {
+        var seen: [String] = []
+        var result: [(title: String, window: WindowID)] = []
+        for id in focusHistory.reversed() {
+            guard let key = windows[id]?.key, let strip = strips[key], let (c, _) = strip.locate(id) else { continue }
+            let mark = "\(key.display)|\(key.workspace)|\(strip.columns[c].windows.sorted())"
+            guard !seen.contains(mark) else { continue }
+            seen.append(mark)
+            var names: [String] = []
+            for name in strip.columns[c].windows.compactMap({ windows[$0]?.appName }) where !names.contains(name) { names.append(name) }
+            result.append((names.joined(separator: " + "), id))
+            if result.count == limit { break }
+        }
+        return result
+    }
+
+    /// Workspaces as a vertical stack: the next one slides up from below.
+    func switchWorkspaceVertically(next: Bool) {
+        guard let (_, key) = activeContext() else { return }
+        let current = key.workspace - base
+        let target = current + (next ? 1 : -1)
+        guard target >= 0, target < visibleWorkspaceCount(on: key.screen) else {
+            haptic()
+            return
+        }
+        switchWorkspace(to: target, slide: next ? 1 : -1)
+    }
+
+    // MARK: - Moving tabs
+
+    /// A tab dragged out of its tab bar and dropped over another slide joins it.
+    func dropTab(_ id: WindowID, at point: CGPoint) {
+        guard let window = windows[id], let source = window.key else { return }
+        for display in displays where display.frame.contains(point) {
+            let key = currentKey(display)
+            guard let strip = strips[key] else { continue }
+            let frames = strip.columnFrames(config: layoutConfig(for: display), viewport: viewport(of: display))
+            guard let target = frames.indices.first(where: { CGRect(frames[$0].frame).contains(point) }) else {
+                // Dropped between slides: a slide of its own.
+                let slot = frames.firstIndex { CGRect(frames[$0].frame).minX > point.x } ?? frames.count
+                overviewMove(id, to: key, newColumnAt: slot)
+                return
+            }
+            if source == key, strip.locate(id)?.column == target { return }
+            overviewMove(id, to: key, column: target)
+            return
+        }
+    }
+
+    // MARK: - Presentation mode
+
+    /// While presenting, Monorail's own overlays and notices stay out of sight.
+    private(set) var isPresenting = false
+
+    func setPresenting(_ on: Bool) {
+        guard on != isPresenting else { return }
+        // Say so before the notices go quiet, or after they come back.
+        if on { onNotice("Presentation mode · overlays hidden") }
+        isPresenting = on
+        if !on { onNotice("Presentation mode off") }
+        updateOverlays()
+        onStateChange()
+    }
+
+    // MARK: - Recording a slide
+
+    private var recorder: Process?
+    var isRecording: Bool { recorder?.isRunning == true }
+
+    /// Records the focused slide to a movie on the Desktop; again to stop.
+    private func toggleRecording() {
+        if let recorder, recorder.isRunning {
+            recorder.interrupt()
+            self.recorder = nil
+            onNotice("Recording saved to the Desktop")
+            onStateChange()
+            return
+        }
+        guard let (display, key) = activeContext(), let strip = strips[key], !strip.isEmpty else { return }
+        let frames = strip.columnFrames(config: layoutConfig(for: display), viewport: viewport(of: display))
+        guard frames.indices.contains(strip.focusedColumn) else { return }
+        let rect = frames[strip.focusedColumn].frame
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop")
+        let file = desktop.appendingPathComponent("Monorail slide \(formatter.string(from: Date())).mov")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-v", "-x", "-k", "-R", "\(Int(rect.x)),\(Int(rect.y)),\(Int(rect.width)),\(Int(rect.height))", file.path]
+        process.terminationHandler = { [weak self] _ in DispatchQueue.main.async { self?.onStateChange() } }
+        do {
+            try process.run()
+            recorder = process
+            onNotice("Recording the slide · ⌃⌥⇧V again to stop")
+            onStateChange()
+        } catch {
+            onNotice("Couldn’t start recording")
+        }
+    }
+
+    // MARK: - Templates
+
+    /// Opens a template: an empty workspace (if it asks), each app with its
+    /// files and links, then one window of each in a new slide.
+    func runTemplate(_ template: WorkspaceTemplate) {
+        guard isRunning, !isPaused, !template.items.isEmpty else { return }
+        if template.emptyWorkspace, let (_, key) = activeContext(),
+            let empty = (0..<workspaceLimit).first(where: { strips[StripKey(screen: key.screen, workspace: base + $0)]?.isEmpty ?? true })
+        {
+            switchWorkspace(to: empty)
+        }
+        var bundleIDs: [String] = []
+        for item in template.items {
+            if !bundleIDs.contains(item.bundleID) { bundleIDs.append(item.bundleID) }
+            guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: item.bundleID) else { continue }
+            let urls = item.targets.compactMap { target -> URL? in
+                if target.contains("://") { return URL(string: target) }
+                return URL(fileURLWithPath: (target as NSString).expandingTildeInPath)
+            }
+            let configuration = NSWorkspace.OpenConfiguration()
+            if urls.isEmpty {
+                NSWorkspace.shared.openApplication(at: appURL, configuration: configuration)
+            } else {
+                NSWorkspace.shared.open(urls, withApplicationAt: appURL, configuration: configuration)
+            }
+        }
+        openPair(AppPair(id: template.id, name: template.name, bundleIDs: bundleIDs, arrangement: template.arrangement),
+                 launch: false)
+    }
+
+    /// Puts these windows together in a new slide (for the API and AI assistants).
+    @discardableResult
+    func pairWindows(_ ids: [WindowID], arrangement: Arrangement) -> Bool {
+        let tiled = Array(ids.filter { windows[$0]?.key != nil }.prefix(Column.maximumWindows))
+        guard tiled.count >= 2, let key = windows[tiled[0]]?.key else { return false }
+        recordHistory()
+        for id in tiled { if let window = windows[id] { removeFromStrip(window) } }
+        var strip = strips[key] ?? Strip()
+        strip.insertSlide(tiled, width: 1, arrangement: arrangement, position: .afterFocused, focus: true, custom: true)
+        for id in tiled { windows[id]?.key = key }
+        commit(strip, key)
+        focus(tiled[0], warpMouse: false)
+        onStateChange()
+        return true
+    }
+
+    /// Every managed window, for the API: where it is and what it shows.
+    func windowList() -> [[String: Any]] {
+        windows.values.map { window in
+            var entry: [String: Any] = ["id": Int(window.id), "app": window.appName, "title": displayTitle(window),
+                                        "floating": window.key == nil]
+            if let bundleID = window.bundleID { entry["bundleID"] = bundleID }
+            if let key = window.key {
+                entry["workspace"] = key.workspace % Self.profileStride + 1
+                entry["profile"] = settings.profiles.indices.contains(key.workspace / Self.profileStride)
+                    ? settings.profiles[key.workspace / Self.profileStride] : "Default"
+                if let (c, _) = strips[key]?.locate(window.id) { entry["slide"] = c + 1 }
+                entry["visible"] = displays.contains { currentKey($0) == key }
+            }
+            return entry
+        }.sorted { ($0["id"] as? Int ?? 0) < ($1["id"] as? Int ?? 0) }
+    }
+
+    // MARK: - Practice windows
+
+    /// Monorail's own practice windows (the welcome tour), tiled like any other.
+    private var demoWindows: Set<WindowID> = []
+
+    func adoptDemoWindow(_ number: Int) {
+        let id = WindowID(number)
+        demoWindows.insert(id)
+        guard let element = AXUIElement.application(ownPID).windows.first(where: { $0.windowID == id }) else { return }
+        if adopt(element, pid: ownPID, focus: true, force: true) { layout(animated: true) }
+    }
+
+    func forgetDemoWindows() {
+        for id in demoWindows { forget(id) }
+        demoWindows.removeAll()
+        layout(animated: true)
     }
 
     // MARK: - Haptics

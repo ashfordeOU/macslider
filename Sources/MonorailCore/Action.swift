@@ -98,6 +98,11 @@ public enum Action: String, Codable, CaseIterable, Sendable {
     case showDesktop = "show-desktop"
     case screenshotSlide = "screenshot-slide"
     case appOverview = "app-overview"
+    case windowHints = "hints"
+    case resizeMode = "resize-mode"
+    case stripZoom = "strip-zoom"
+    case presentationMode = "presentation-mode"
+    case recordSlide = "record-slide"
     case retile
     case undo
     case togglePause = "toggle-pause"
@@ -174,6 +179,11 @@ public enum Action: String, Codable, CaseIterable, Sendable {
         case .showDesktop: return "Show desktop"
         case .screenshotSlide: return "Screenshot the slide"
         case .appOverview: return "Overview of this app’s windows"
+        case .windowHints: return "Window hints (then a letter)"
+        case .resizeMode: return "Resize mode (arrows, 1–9, esc)"
+        case .stripZoom: return "Zoom out on the strip"
+        case .presentationMode: return "Presentation mode"
+        case .recordSlide: return "Record the slide (again to stop)"
         case .retile: return "Retile everything"
         case .undo: return "Undo last layout change"
         case .togglePause: return "Pause / resume"

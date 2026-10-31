@@ -16,6 +16,22 @@ final class UsageStats: ObservableObject {
         var windowsOpened = 0
         var focusSessions = 0
         var mostSlides = 0
+        /// Minutes spent in each workspace (by name) and each app.
+        var workspaceMinutes: [String: Int] = [:]
+        var appMinutes: [String: Int] = [:]
+
+        init() {}
+
+        // Days saved before time was counted have no minutes.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            switches = try c.decodeIfPresent(Int.self, forKey: .switches) ?? 0
+            windowsOpened = try c.decodeIfPresent(Int.self, forKey: .windowsOpened) ?? 0
+            focusSessions = try c.decodeIfPresent(Int.self, forKey: .focusSessions) ?? 0
+            mostSlides = try c.decodeIfPresent(Int.self, forKey: .mostSlides) ?? 0
+            workspaceMinutes = try c.decodeIfPresent([String: Int].self, forKey: .workspaceMinutes) ?? [:]
+            appMinutes = try c.decodeIfPresent([String: Int].self, forKey: .appMinutes) ?? [:]
+        }
     }
 
     private struct Stored: Codable {
@@ -94,6 +110,29 @@ final class UsageStats: ObservableObject {
         scheduleSave()
     }
 
+    /// One more minute in this workspace and app (called once a minute).
+    func addMinute(workspace: String, app: String?) {
+        guard isEnabled else { return }
+        let key = Self.dayKey()
+        var day = stored.days[key] ?? Day()
+        day.workspaceMinutes[workspace, default: 0] += 1
+        if let app { day.appMinutes[app, default: 0] += 1 }
+        stored.days[key] = day
+        scheduleSave()
+    }
+
+    /// Minutes per workspace and per app over the last `days` days, most first.
+    func time(days: Int) -> (workspaces: [(String, Int)], apps: [(String, Int)]) {
+        var workspaces: [String: Int] = [:]
+        var apps: [String: Int] = [:]
+        for (_, day) in lastDays(days) {
+            workspaces.merge(day.workspaceMinutes, uniquingKeysWith: +)
+            apps.merge(day.appMinutes, uniquingKeysWith: +)
+        }
+        return (workspaces.sorted { $0.value > $1.value }.map { ($0.key, $0.value) },
+                apps.sorted { $0.value > $1.value }.map { ($0.key, $0.value) })
+    }
+
     var today: Day { stored.days[Self.dayKey()] ?? Day() }
 
     /// The last `count` days, oldest first.
@@ -149,6 +188,45 @@ final class UsageStats: ObservableObject {
     }
 }
 
+/// Where the time went, today and over the week.
+private struct TimeSection: View {
+    @ObservedObject var stats: UsageStats
+    @State private var week = false
+
+    var body: some View {
+        let time = stats.time(days: week ? 7 : 1)
+        let total = max(time.workspaces.map(\.1).reduce(0, +), 1)
+        Section {
+            Picker("", selection: $week) {
+                Text("Today").tag(false)
+                Text("This week").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            if time.workspaces.isEmpty {
+                Text("Nothing counted yet. Time is noted once a minute while you work.").font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(Array(time.workspaces.prefix(6).enumerated()), id: \.offset) { _, entry in
+                HStack {
+                    Text(entry.0).frame(width: 160, alignment: .leading)
+                    GeometryReader { geometry in
+                        RoundedRectangle(cornerRadius: 3).fill(Color.accentColor.opacity(0.7))
+                            .frame(width: max(3, geometry.size.width * CGFloat(entry.1) / CGFloat(total)))
+                    }
+                    .frame(height: 10)
+                    Text(InsightsPane.duration(entry.1)).monospacedDigit().foregroundStyle(.secondary).frame(width: 64, alignment: .trailing)
+                }
+            }
+            if !time.apps.isEmpty {
+                Text("Most-used apps: " + time.apps.prefix(5).map { "\($0.0) \(InsightsPane.duration($0.1))" }.joined(separator: " · "))
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Where the time went")
+        }
+    }
+}
+
 /// Settings → Insights.
 struct InsightsPane: View {
     @ObservedObject var store: SettingsStore
@@ -174,6 +252,7 @@ struct InsightsPane: View {
                 Text("Stays on this Mac. Nothing is sent anywhere.").font(.callout).foregroundStyle(.secondary)
             }
             if store.settings.collectStats {
+                TimeSection(stats: stats)
                 Section("Suggested app pairs") {
                     let suggestions = stats.suggestions(excluding: store.settings.appPairs)
                     if suggestions.isEmpty {
@@ -236,7 +315,7 @@ struct InsightsPane: View {
             + days.map { "\($0.label) \($0.day.switches)" }.joined(separator: ", "))
     }
 
-    private static func duration(_ minutes: Int) -> String {
+    static func duration(_ minutes: Int) -> String {
         minutes < 60 ? "\(minutes) min" : String(format: "%.1f h", Double(minutes) / 60)
     }
 }

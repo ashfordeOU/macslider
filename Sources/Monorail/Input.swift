@@ -51,6 +51,11 @@ final class InputMonitor {
     /// Hold ⌥ and pinch: true to open the overview (pinch in), false to close it.
     var pinchForOverview = true
     var onPinch: (Bool) -> Void = { _ in }
+    /// With strip zoom, the pinch is followed live: running total, and whether it ended.
+    var pinchZoomsStrip = false
+    var onPinchProgress: (Double, Bool) -> Void = { _, _ in }
+    /// While set (resize mode), key presses go here first; true consumes the key.
+    var keyInterceptor: ((UInt16, Modifiers) -> Bool)?
     /// Set to read the next key typed (a mark's letter); called with nil on Escape.
     var captureNextKey: ((String?) -> Void)?
     /// ⌃⌥ + drag: begin returns true if Monorail takes the drag.
@@ -195,6 +200,7 @@ final class InputMonitor {
             guard !isSuspended else { return pass }
             let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
             let modifiers = Modifiers(event.flags)
+            if let intercept = keyInterceptor, intercept(keyCode, modifiers) { return nil }
             if let capture = captureNextKey {
                 captureNextKey = nil
                 let letter = keyCode == KeyCode.escape
@@ -276,6 +282,13 @@ final class InputMonitor {
             pinchFired = false
         }
         pinchTotal += Double(gesture.magnification)
+        if pinchZoomsStrip {
+            let total = pinchTotal
+            let ended = gesture.phase == .ended || gesture.phase == .cancelled
+            DispatchQueue.main.async { self.onPinchProgress(total, ended) }
+            if ended { pinchTotal = 0 }
+            return true
+        }
         if !pinchFired && abs(pinchTotal) > 0.18 {
             pinchFired = true
             let open = pinchTotal < 0
@@ -376,6 +389,10 @@ final class TrackpadSwipe {
     /// Horizontal movement as a fraction of the trackpad width.
     var onScroll: (Double) -> Void = { _ in }
     var onEnd: () -> Void = {}
+    /// Vertical swipes with the same fingers switch workspace (true = next, swiping up).
+    var detectsVertical = false
+    var onVerticalSwipe: (Bool) -> Void = { _ in }
+    private var verticalFired = false
     /// Watch for a quick three-finger tap (opens the overview).
     var detectsTap = false
     var onThreeFingerTap: () -> Void = {}
@@ -473,6 +490,7 @@ final class TrackpadSwipe {
                 DispatchQueue.main.async { self.onEnd() }
             }
             lastX = nil
+            verticalFired = false
             return
         }
         let contacts = touches.bindMemory(to: MTTouch.self, capacity: Int(count))
@@ -492,10 +510,17 @@ final class TrackpadSwipe {
         }
         lastX = x
         if !isSwiping {
-            // Only claim clearly horizontal movement, so vertical swipes stay with macOS.
+            // Only claim clearly horizontal movement, so vertical swipes stay with macOS
+            // (unless vertical workspace swipes are on).
             let dx = abs(x - startX)
             let dy = abs(y - startY)
-            guard dx > 0.03, dx > dy * 1.5 else { return }
+            if detectsVertical, !verticalFired, dy > 0.12, dy > dx * 1.5 {
+                verticalFired = true
+                let up = y > startY  // trackpad y grows upwards
+                DispatchQueue.main.async { self.onVerticalSwipe(up) }
+                return
+            }
+            guard !verticalFired, dx > 0.03, dx > dy * 1.5 else { return }
             isSwiping = true
         }
         let delta = Double(x - previous)

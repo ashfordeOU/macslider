@@ -9,6 +9,7 @@ final class Overlays {
     struct Tab: Identifiable, Equatable {
         var id: WindowID
         var title: String
+        var pid: pid_t = 0
     }
 
     struct TabBarModel: Equatable {
@@ -18,6 +19,8 @@ final class Overlays {
     }
 
     var onSelectWindow: (WindowID) -> Void = { _ in }
+    /// A tab dragged out of its bar and dropped at a point (Accessibility coordinates).
+    var onDropTab: (WindowID, CGPoint) -> Void = { _, _ in }
 
     private var border: NSPanel?
     private var dimPanels: [NSPanel] = []
@@ -104,7 +107,9 @@ final class Overlays {
                 continue
             }
             let bar = bars[index]
-            let view = TabBarView(model: bar) { [weak self] id in self?.onSelectWindow(id) }
+            let view = TabBarView(
+                model: bar, select: { [weak self] id in self?.onSelectWindow(id) },
+                drop: { [weak self] id, point in self?.onDropTab(id, point) })
             if let host = panel.contentView as? NSHostingView<TabBarView> {
                 host.rootView = view
             } else {
@@ -174,6 +179,8 @@ private final class BorderView: NSView {
 private struct TabBarView: View {
     let model: Overlays.TabBarModel
     let select: (WindowID) -> Void
+    let drop: (WindowID, CGPoint) -> Void
+    @State private var dragging: WindowID?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -181,10 +188,15 @@ private struct TabBarView: View {
                 Button {
                     select(tab.id)
                 } label: {
-                    Text(tab.title)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .font(.system(size: 12, weight: index == model.active ? .semibold : .regular))
+                    HStack(spacing: 5) {
+                        if let icon = NSRunningApplication(processIdentifier: tab.pid)?.icon {
+                            Image(nsImage: icon).resizable().frame(width: 14, height: 14)
+                        }
+                        Text(tab.title)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .font(.system(size: 12, weight: index == model.active ? .semibold : .regular))
+                    }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
                         .background(
@@ -195,6 +207,19 @@ private struct TabBarView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .opacity(dragging == tab.id ? 0.4 : 1)
+                // Drag a tab out of the bar and drop it on another slide to move the window there.
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 12, coordinateSpace: .global)
+                        .onChanged { _ in dragging = tab.id }
+                        .onEnded { value in
+                            dragging = nil
+                            guard abs(value.translation.height) > 24 || abs(value.translation.width) > 60 else { return }
+                            let mouse = NSEvent.mouseLocation
+                            let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+                            drop(tab.id, CGPoint(x: mouse.x, y: primaryHeight - mouse.y))
+                        })
+                .help("Click to show · drag onto another slide to move it there")
             }
         }
         .padding(3)

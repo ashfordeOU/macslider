@@ -24,6 +24,8 @@ final class Integrations {
     static let notification = Notification.Name("org.ashforde.monorail.changed")
 
     private var last: State?
+    /// Events for scripts: workspaceChanged, focusChanged.
+    var onEvent: (String, State) -> Void = { _, _ in }
     private var lastWallpaper: [String: String] = [:]
     private var pending: Timer?
 
@@ -50,9 +52,11 @@ final class Integrations {
         if previous?.workspace != state.workspace || previous?.profile != state.profile {
             setWallpaper(for: state.workspace - 1, settings: settings)
             run(settings.eventScript, event: "workspace_changed", state: state)
+            onEvent("workspaceChanged", state)
         }
         if previous?.app != state.app || previous?.title != state.title {
             run(settings.eventScript, event: "focus_changed", state: state)
+            onEvent("focusChanged", state)
         }
         if previous?.focusMode != state.focusMode {
             run(settings.eventScript, event: state.focusMode ? "focus_mode_on" : "focus_mode_off", state: state)

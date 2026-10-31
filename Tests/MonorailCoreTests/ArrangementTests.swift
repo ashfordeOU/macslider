@@ -283,3 +283,32 @@ final class LayoutsV7Tests: XCTestCase {
         XCTAssertTrue(seen.isSuperset(of: [.spiral, .accordion]))
     }
 }
+
+final class V8Tests: XCTestCase {
+    func testProjectMatcherFindsWholeNames() {
+        let projects = ["monorail", "Kshana"]
+        XCTAssertEqual(ProjectMatcher.project(in: "Engine.swift — monorail", projects: projects), "monorail")
+        XCTAssertEqual(ProjectMatcher.project(in: "user@mac: ~/code/kshana", projects: projects), "Kshana")
+        XCTAssertNil(ProjectMatcher.project(in: "monorails and trains", projects: projects))
+        XCTAssertNil(ProjectMatcher.project(in: "Inbox", projects: projects))
+        XCTAssertNil(ProjectMatcher.project(in: "a", projects: ["a"]), "too short to be a project")
+    }
+
+    func testTemplateTargetsOnePerLine() {
+        let item = WorkspaceTemplate.Item(bundleID: "com.apple.Safari", open: "https://github.com\n\n  ~/Code/monorail  \n")
+        XCTAssertEqual(item.targets, ["https://github.com", "~/Code/monorail"])
+        XCTAssertTrue(WorkspaceTemplate.Item(bundleID: "x").targets.isEmpty)
+    }
+
+    func testNewSettingsRoundTrip() throws {
+        var settings = AppSettings()
+        settings.templates = [WorkspaceTemplate(name: "Coding", items: [.init(bundleID: "com.apple.dt.Xcode")])]
+        settings.meetingProfile = 1
+        settings.projects = ["monorail"]
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(decoded, settings)
+        let old = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        XCTAssertNil(old.meetingProfile)
+        XCTAssertTrue(old.templates.isEmpty)
+    }
+}

@@ -11,15 +11,15 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .general: return "General"
-        case .layout: return "Layout"
-        case .input: return "Motion & Input"
-        case .appearance: return "Appearance"
-        case .apps: return "Apps"
-        case .automation: return "Automation"
-        case .insights: return "Insights"
-        case .shortcuts: return "Shortcuts"
-        case .about: return "About"
+        case .general: return L("General")
+        case .layout: return L("Layout")
+        case .input: return L("Motion & Input")
+        case .appearance: return L("Appearance")
+        case .apps: return L("Apps")
+        case .automation: return L("Automation")
+        case .insights: return L("Insights")
+        case .shortcuts: return L("Shortcuts")
+        case .about: return L("About")
         }
     }
 
@@ -96,6 +96,10 @@ private struct GeneralPane: View {
     var body: some View {
         Form {
             Section {
+                Picker("Language", selection: $store.settings.language) {
+                    ForEach(Localization.languages, id: \.code) { Text($0.name).tag($0.code) }
+                }
+                .help("Menus, Settings tabs and the welcome tour. Reopen Settings after changing it.")
                 Toggle("Launch Monorail at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { LoginItem.setEnabled($0) }
                 Toggle("Pause tiling", isOn: $paused)
@@ -219,6 +223,18 @@ private struct LayoutPane: View {
                 LabeledSlider(title: "Gap at screen edges", value: $store.settings.layout.edgeGap, range: 0...40)
                 Toggle("Smart gaps: none around a lone window, wider on big displays", isOn: $store.settings.smartGaps)
             }
+            Section("Comfort") {
+                Toggle("Open each app’s windows at the width you last gave it", isOn: $store.settings.rememberWidths)
+                Picker("A lone window", selection: $store.settings.centerLoneWindow) {
+                    Text("Fills its slide").tag(0.0)
+                    ForEach([0.5, 0.6, 0.7, 0.8], id: \.self) { Text("Sits centred at \(Int($0 * 100))%").tag($0) }
+                }
+                Picker("The focused one of two windows", selection: $store.settings.autoGrowFocus) {
+                    Text("Stays the same size").tag(0.0)
+                    ForEach([0.55, 0.6, 0.65, 0.7], id: \.self) { Text("Grows to \(Int($0 * 100))%").tag($0) }
+                }
+            }
+            ProjectsSection(store: store)
             DisplaysSection(store: store)
             Section("Widths") {
                 Picker("New window width", selection: $store.settings.layout.defaultWidth) {
@@ -342,6 +358,10 @@ private struct InputPane: View {
                 Toggle("Hot edges: rest the pointer on the left or right screen edge to slide", isOn: $store.settings.hotEdges)
                 Toggle("Hold ⌥ and pinch on the trackpad for the overview", isOn: $store.settings.pinchForOverview)
                 Toggle("Tap with three fingers for the overview", isOn: $store.settings.threeFingerTapOverview)
+                Toggle("Swipe up and down to switch workspace (with the swipe fingers above)", isOn: $store.settings.verticalWorkspaceSwipes)
+                    .disabled(store.settings.swipeFingers == .off)
+                    .help("Turn off Mission Control and App Exposé swipes for those fingers in System Settings → Trackpad")
+                Toggle("⌥ + pinch zooms out on the strip (otherwise it opens the overview)", isOn: $store.settings.pinchZoomsStrip)
                     .help("If macOS uses a three-finger tap for Look Up, change that in System Settings → Trackpad")
                 Toggle("Hold ⌥ over a slide in the slider to peek at it", isOn: $store.settings.peekWithOption)
                 Toggle("Hold ⌃⌥ and drag anywhere in a window to move it (right-drag to resize)", isOn: $store.settings.modifierDrag)
@@ -577,6 +597,7 @@ private struct AppsPane: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             QuickLaunchSection(store: store, apps: allRunningApps)
+            TemplatesSection(store: store, apps: allRunningApps)
             Section {
                 if store.settings.appPairs.isEmpty {
                     Text("No app pairs yet.").foregroundStyle(.secondary)
@@ -613,6 +634,162 @@ extension AppsPane {
             .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
             ?? bundleID
     }
+}
+
+// MARK: - Projects
+
+/// Windows naming a project gather in one workspace.
+private struct ProjectsSection: View {
+    @ObservedObject var store: SettingsStore
+    @State private var newName = ""
+
+    var body: some View {
+        Section {
+            ForEach(store.settings.projects, id: \.self) { name in
+                HStack {
+                    Image(systemName: "folder")
+                    Text(name)
+                    Spacer()
+                    Button {
+                        store.settings.projects.removeAll { $0 == name }
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            HStack {
+                TextField("Project name, as it appears in window titles", text: $newName)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(add)
+                Button("Add", action: add).disabled(newName.trimmingCharacters(in: .whitespaces).count < 2)
+            }
+        } header: {
+            Text("Projects")
+        } footer: {
+            Text("Windows whose titles name a project (your editor, terminal and browser showing “monorail”) gather in the workspace where its first window is.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    private func add() {
+        let name = newName.trimmingCharacters(in: .whitespaces)
+        guard name.count >= 2, !store.settings.projects.contains(name) else { return }
+        store.settings.projects.append(name)
+        newName = ""
+    }
+}
+
+// MARK: - Templates
+
+/// Workspace templates: apps with files or links, started together in one slide.
+private struct TemplatesSection: View {
+    @ObservedObject var store: SettingsStore
+    let apps: [NSRunningApplication]
+
+    var body: some View {
+        Section {
+            ForEach($store.settings.templates) { $template in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        TextField("Name", text: $template.name).textFieldStyle(.roundedBorder).frame(width: 200)
+                        Picker("", selection: $template.arrangement) {
+                            ForEach(Arrangement.standard, id: \.self) { Text($0.title).tag($0) }
+                        }
+                        .labelsHidden()
+                        .frame(width: 150)
+                        Toggle("In an empty workspace", isOn: $template.emptyWorkspace)
+                        Spacer()
+                        Button("Start") { NotificationCenter.default.post(name: .monorailRunTemplate, object: template.id) }
+                        Button {
+                            store.settings.templates.removeAll { $0.id == template.id }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    ForEach($template.items) { $entry in
+                        HStack(alignment: .top) {
+                            Text(UsageStats.appName(entry.bundleID)).frame(width: 120, alignment: .leading)
+                            TextField("Files, folders or links to open, one per line", text: $entry.open, axis: .vertical)
+                                .textFieldStyle(.roundedBorder)
+                                .lineLimit(1...3)
+                            Button {
+                                template.items.removeAll { $0.id == entry.id }
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                    Menu("Add an app…") {
+                        ForEach(apps, id: \.processIdentifier) { app in
+                            Button(app.localizedName ?? app.bundleIdentifier ?? "App") {
+                                if template.items.count < Column.maximumWindows {
+                                    template.items.append(.init(bundleID: app.bundleIdentifier!))
+                                }
+                            }
+                        }
+                    }
+                    .fixedSize()
+                }
+                .padding(.vertical, 3)
+            }
+            Button("New Template") { store.settings.templates.append(WorkspaceTemplate(name: "Coding")) }
+        } header: {
+            Text("Workspace templates")
+        } footer: {
+            Text("Start a template from the menu bar, the command palette or monorail://template/Name: Monorail opens each app with its files and links and puts them side by side in one slide. Share one as a .monorail file from Saved Layouts.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Local API
+
+private struct APISection: View {
+    @ObservedObject var store: SettingsStore
+    @State private var copied = ""
+
+    private var mcpConfig: String {
+        let binary = Bundle.main.executablePath ?? "/Applications/Monorail.app/Contents/MacOS/Monorail"
+        return """
+        "monorail": { "command": "\(binary)", "args": ["--mcp"] }
+        """
+    }
+
+    var body: some View {
+        Section {
+            Toggle("Local API on this Mac only (needed by the MCP server and the Raycast extension)", isOn: $store.settings.localAPI)
+            if store.settings.localAPI {
+                LabeledContent("Address") {
+                    Text("http://127.0.0.1:\(store.settings.apiPort)").font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                }
+                HStack {
+                    Button("Copy Token") { copy(LocalAPI.token(), "Token copied") }
+                    Button("Copy MCP Server Config") { copy(mcpConfig, "Config copied") }
+                    if !copied.isEmpty { Text(copied).font(.callout).foregroundStyle(.green) }
+                }
+            }
+        } header: {
+            Text("API and AI assistants")
+        } footer: {
+            Text("Add the MCP config to Claude Desktop (or any MCP client) and ask: “put my editor and browser side by side”. Requests need the token, which only you can read; the API only listens on this Mac.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    private func copy(_ text: String, _ message: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copied = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = "" }
+    }
+}
+
+extension Notification.Name {
+    static let monorailReloadScripts = Notification.Name("org.ashforde.monorail.reloadScripts")
+    static let monorailRunTemplate = Notification.Name("org.ashforde.monorail.runTemplate")
 }
 
 // MARK: - Wallpapers
@@ -988,6 +1165,38 @@ private struct AutomationPane: View {
                 Text("For power users")
             } footer: {
                 Text("The event script runs with workspace_changed, focus_changed, focus_mode_on or focus_mode_off, and MONORAIL_WORKSPACE, MONORAIL_APP, MONORAIL_TITLE and more in its environment. It must be executable (chmod +x).")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Open video calls a minute before they start", isOn: $store.settings.meetingHelper)
+                Picker("And switch to profile", selection: $store.settings.meetingProfile) {
+                    Text("Keep the current one").tag(Int?.none)
+                    ForEach(store.settings.profiles.indices, id: \.self) { Text(store.settings.profiles[$0]).tag(Int?.some($0)) }
+                }
+                .disabled(!store.settings.meetingHelper)
+            } header: {
+                Text("Meetings")
+            } footer: {
+                Text("Looks for Zoom, Meet, Teams, Webex and FaceTime links in your calendar events. macOS asks for calendar access first; nothing leaves your Mac.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            APISection(store: store)
+            Section {
+                Toggle("Run JavaScript plugins from the Scripts folder", isOn: $store.settings.scripts)
+                HStack {
+                    Button("Open Scripts Folder") {
+                        try? FileManager.default.createDirectory(at: ScriptHost.folder, withIntermediateDirectories: true)
+                        NSWorkspace.shared.open(ScriptHost.folder)
+                    }
+                    Button("Reload Scripts") {
+                        NotificationCenter.default.post(name: .monorailReloadScripts, object: nil)
+                    }
+                    .disabled(!store.settings.scripts)
+                }
+            } header: {
+                Text("Scripts")
+            } footer: {
+                Text("monorail.on(\"windowOpened\", w => …), on(\"workspaceChanged\"), on(\"focusChanged\"); call perform(\"focus-left\"), moveToWorkspace(id, 2), park(3), openPair(name), applyLayout(name), notify(text). An example is in the folder.")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }

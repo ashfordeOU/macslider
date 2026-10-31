@@ -122,6 +122,61 @@ public struct AutoRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     }
 }
 
+/// A workspace template: apps (with files or links to open) that start in
+/// one slide together, ready to work.
+public struct WorkspaceTemplate: Equatable, Hashable, Codable, Sendable, Identifiable {
+    public struct Item: Equatable, Hashable, Codable, Sendable, Identifiable {
+        public var id: String
+        public var bundleID: String
+        /// Files, folders or links to open in the app (one per line); empty opens the app.
+        public var open: String
+
+        public init(id: String = UUID().uuidString, bundleID: String, open: String = "") {
+            self.id = id
+            self.bundleID = bundleID
+            self.open = open
+        }
+
+        /// The links and paths to open, one per non-empty line.
+        public var targets: [String] {
+            open.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+    }
+
+    public var id: String
+    public var name: String
+    public var items: [Item]
+    public var arrangement: Arrangement
+    /// Start in an empty workspace (otherwise the current one).
+    public var emptyWorkspace: Bool
+
+    public init(id: String = UUID().uuidString, name: String, items: [Item] = [], arrangement: Arrangement = .columns,
+                emptyWorkspace: Bool = true) {
+        self.id = id
+        self.name = name
+        self.items = items
+        self.arrangement = arrangement
+        self.emptyWorkspace = emptyWorkspace
+    }
+}
+
+/// Finds a project name in a window title, for gathering a project's windows.
+public enum ProjectMatcher {
+    /// The first of `projects` that the title mentions (any case, whole word-ish).
+    public static func project(in title: String, projects: [String]) -> String? {
+        let lower = title.lowercased()
+        return projects.first { name in
+            let needle = name.trimmingCharacters(in: .whitespaces).lowercased()
+            guard needle.count >= 2, let range = lower.range(of: needle) else { return false }
+            // Not just part of a longer word: "mono" shouldn't match "monorail".
+            let before = range.lowerBound == lower.startIndex ? nil : lower[lower.index(before: range.lowerBound)]
+            let after = range.upperBound == lower.endIndex ? nil : lower[range.upperBound]
+            func isWordCharacter(_ c: Character?) -> Bool { c.map { $0.isLetter || $0.isNumber } ?? false }
+            return !isWordCharacter(before) && !isWordCharacter(after)
+        }
+    }
+}
+
 /// Colours for the overview, the slider bar and workspace dots.
 public enum Theme: String, Codable, CaseIterable, Sendable {
     case vivid, ocean, sunset, forest, mono
@@ -314,6 +369,30 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var followReduceMotion = true
     /// While resizing by hand, show the window's size.
     public var resizeHUD = true
+    /// New windows of an app open at the width you last gave it.
+    public var rememberWidths = true
+    /// A lone window sits centred at this share of the screen (0 = off).
+    public var centerLoneWindow = 0.0
+    /// The focused one of two windows in a slide grows to this share (0 = off).
+    public var autoGrowFocus = 0.0
+    /// Windows whose titles name one of these projects gather in one workspace.
+    public var projects: [String] = []
+    /// Workspace templates.
+    public var templates: [WorkspaceTemplate] = []
+    /// Before a calendar event with a meeting link: open it and switch profile.
+    public var meetingHelper = false
+    public var meetingProfile: Int?
+    /// Three- or four-finger vertical swipes switch workspace (sliding up or down).
+    public var verticalWorkspaceSwipes = false
+    /// ⌥ + pinch zooms out on the strip (instead of opening the overview).
+    public var pinchZoomsStrip = true
+    /// A local API (and MCP server) for other apps and AI assistants.
+    public var localAPI = false
+    public var apiPort = 4767
+    /// Run JavaScript plugins from the Scripts folder.
+    public var scripts = false
+    /// Interface language: empty follows macOS.
+    public var language = ""
     /// Snap windows back when an app moves or resizes one by itself.
     public var keepWindowsInPlace = true
     /// After resizing a window in a slide, offer to rearrange the slide.
@@ -428,6 +507,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case peekWithOption, collectStats, autoRules, smartGaps, launchSlots, menuBarShowsApp
         case modifierDrag, titleBarSwipes, focusBorderGradient, focusBorderColor2, workspaceWallpapers
         case liveReloadSettings, publishState, eventScript, followReduceMotion, resizeHUD
+        case rememberWidths, centerLoneWindow, autoGrowFocus, projects, templates, meetingHelper, meetingProfile
+        case verticalWorkspaceSwipes, pinchZoomsStrip, localAPI, apiPort, scripts, language
     }
 
     public init(from decoder: Decoder) throws {
@@ -509,6 +590,19 @@ public struct AppSettings: Equatable, Codable, Sendable {
         eventScript = value(.eventScript, d.eventScript)
         followReduceMotion = value(.followReduceMotion, d.followReduceMotion)
         resizeHUD = value(.resizeHUD, d.resizeHUD)
+        rememberWidths = value(.rememberWidths, d.rememberWidths)
+        centerLoneWindow = value(.centerLoneWindow, d.centerLoneWindow)
+        autoGrowFocus = value(.autoGrowFocus, d.autoGrowFocus)
+        projects = value(.projects, d.projects)
+        templates = value(.templates, d.templates)
+        meetingHelper = value(.meetingHelper, d.meetingHelper)
+        meetingProfile = try? c.decodeIfPresent(Int.self, forKey: .meetingProfile)
+        verticalWorkspaceSwipes = value(.verticalWorkspaceSwipes, d.verticalWorkspaceSwipes)
+        pinchZoomsStrip = value(.pinchZoomsStrip, d.pinchZoomsStrip)
+        localAPI = value(.localAPI, d.localAPI)
+        apiPort = value(.apiPort, d.apiPort)
+        scripts = value(.scripts, d.scripts)
+        language = value(.language, d.language)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {
