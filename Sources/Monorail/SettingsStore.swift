@@ -93,6 +93,41 @@ final class SettingsStore: ObservableObject {
         if settings.syncThroughICloud { scheduleCloudPush() }
     }
 
+    // MARK: - Live reload
+
+    private var watcher: DispatchSourceFileSystemObject?
+
+    /// Watches settings.json so changes made in a text editor apply at once.
+    /// Editors save by replacing the file, so the watch is renewed each time.
+    func watchFile() {
+        watcher?.cancel()
+        watcher = nil
+        guard settings.liveReloadSettings else { return }
+        let descriptor = open(Self.fileURL.path, O_EVTONLY)
+        guard descriptor >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor, eventMask: [.write, .delete, .rename, .extend], queue: .main)
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            let renewed = source.data.contains(.delete) || source.data.contains(.rename)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self.reloadFromDisk()
+                if renewed { self.watchFile() }
+            }
+        }
+        source.setCancelHandler { close(descriptor) }
+        source.resume()
+        watcher = source
+    }
+
+    private func reloadFromDisk() {
+        guard let data = try? Data(contentsOf: Self.fileURL),
+            let decoded = try? JSONDecoder().decode(AppSettings.self, from: data), decoded != settings
+        else { return }
+        settings = decoded
+        log.info("Settings reloaded from settings.json")
+    }
+
     // MARK: - Export, import and iCloud Drive
 
     /// Everything worth moving to another Mac: settings (with app pairs,

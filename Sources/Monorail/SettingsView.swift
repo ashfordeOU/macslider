@@ -109,9 +109,12 @@ private struct GeneralPane: View {
                 }
                 ForEach(0..<store.settings.workspaceCount, id: \.self) { index in
                     LabeledContent {
-                        TextField("Workspace \(index + 1)", text: workspaceName(index))
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 220)
+                        HStack {
+                            TextField("Workspace \(index + 1)", text: workspaceName(index))
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 220)
+                            WallpaperButton(store: store, index: index)
+                        }
                     } label: {
                         HStack(spacing: 6) {
                             Circle().fill(WorkspaceColor.color(index)).frame(width: 9, height: 9)
@@ -283,6 +286,8 @@ private struct InputPane: View {
         Form {
             Section("Animation") {
                 Toggle("Animate windows", isOn: $store.settings.animate)
+                Toggle("Skip animations with Reduce Motion or Low Power Mode", isOn: $store.settings.followReduceMotion)
+                    .disabled(!store.settings.animate)
                 LabeledContent("Speed") {
                     Picker("", selection: $store.settings.animationDuration) {
                         Text("Fast").tag(0.12)
@@ -339,6 +344,10 @@ private struct InputPane: View {
                 Toggle("Tap with three fingers for the overview", isOn: $store.settings.threeFingerTapOverview)
                     .help("If macOS uses a three-finger tap for Look Up, change that in System Settings → Trackpad")
                 Toggle("Hold ⌥ over a slide in the slider to peek at it", isOn: $store.settings.peekWithOption)
+                Toggle("Hold ⌃⌥ and drag anywhere in a window to move it (right-drag to resize)", isOn: $store.settings.modifierDrag)
+                Toggle("Swipe with two fingers on a title bar to move, widen or minimise", isOn: $store.settings.titleBarSwipes)
+                    .help("Left and right move the window's slide, up toggles full width, down minimises")
+                Toggle("Show the size while resizing", isOn: $store.settings.resizeHUD)
                 Toggle("Haptic tap as the strip lands on a slide (Force Touch trackpads)", isOn: $store.settings.hapticFeedback)
             } header: {
                 Text("Gestures & screen edges")
@@ -415,6 +424,12 @@ private struct AppearancePane: View {
                 Toggle("Outline the focused window", isOn: $store.settings.focusBorder)
                 ColorPicker("Colour", selection: borderColor, supportsOpacity: false)
                     .disabled(!store.settings.focusBorder)
+                Toggle("Fade into a second colour", isOn: $store.settings.focusBorderGradient)
+                    .disabled(!store.settings.focusBorder)
+                if store.settings.focusBorderGradient {
+                    ColorPicker("Second colour", selection: borderColor2, supportsOpacity: false)
+                        .disabled(!store.settings.focusBorder)
+                }
                 LabeledContent("Width") {
                     Stepper(value: $store.settings.focusBorderWidth, in: 1...10, step: 1) {
                         Text("\(Int(store.settings.focusBorderWidth)) pt").monospacedDigit()
@@ -437,6 +452,13 @@ private struct AppearancePane: View {
         Binding(
             get: { Color(nsColor: NSColor(hex: store.settings.focusBorderColor) ?? .controlAccentColor) },
             set: { store.settings.focusBorderColor = NSColor($0).hexString }
+        )
+    }
+
+    private var borderColor2: Binding<Color> {
+        Binding(
+            get: { Color(nsColor: NSColor(hex: store.settings.focusBorderColor2) ?? .systemPink) },
+            set: { store.settings.focusBorderColor2 = NSColor($0).hexString }
         )
     }
 }
@@ -590,6 +612,44 @@ extension AppsPane {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
             .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
             ?? bundleID
+    }
+}
+
+// MARK: - Wallpapers
+
+/// Choose a desktop picture for one workspace; it is set as you switch to it.
+private struct WallpaperButton: View {
+    @ObservedObject var store: SettingsStore
+    let index: Int
+
+    private var path: String? { store.settings.workspaceWallpapers[String(index)] }
+
+    var body: some View {
+        Menu {
+            Button("Choose Picture…") { choose() }
+            if path != nil {
+                Button("No Picture of Its Own") { store.settings.workspaceWallpapers[String(index)] = nil }
+            }
+        } label: {
+            if let path, let image = NSImage(contentsOfFile: path) {
+                Image(nsImage: image).resizable().scaledToFill().frame(width: 28, height: 18).clipShape(RoundedRectangle(cornerRadius: 3))
+            } else {
+                Image(systemName: "photo")
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(path.map { "Desktop picture: \(($0 as NSString).lastPathComponent)" } ?? "Give this workspace its own desktop picture")
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.directoryURL = URL(fileURLWithPath: "/System/Library/Desktop Pictures")
+        NSApp.activate(ignoringOtherApps: true)
+        if panel.runModal() == .OK, let url = panel.url {
+            store.settings.workspaceWallpapers[String(index)] = url.path
+        }
     }
 }
 
@@ -803,6 +863,7 @@ private struct AutomationPane: View {
                             Picker("", selection: $rule.trigger) {
                                 Text("At a time").tag(AutoRule.Trigger.time)
                                 Text("On Wi-Fi").tag(AutoRule.Trigger.wifi)
+                                Text("On a display").tag(AutoRule.Trigger.display)
                             }
                             .labelsHidden()
                             .frame(width: 120)
@@ -831,11 +892,20 @@ private struct AutomationPane: View {
                                     }
                                 }
                                 .help("Days it runs; none means every day")
-                            } else {
+                            } else if rule.trigger == .wifi {
                                 TextField("Network name", text: $rule.network).textFieldStyle(.roundedBorder).frame(width: 180)
                                 if let current = AutoRules.currentNetwork() {
                                     Button("Use “\(current)”") { rule.network = current }
                                 }
+                            } else {
+                                Picker("When connected", selection: $rule.network) {
+                                    Text("Choose a display").tag("")
+                                    ForEach(NSScreen.screens.map(\.localizedName), id: \.self) { Text($0).tag($0) }
+                                    if !rule.network.isEmpty && !NSScreen.screens.contains(where: { $0.localizedName == rule.network }) {
+                                        Text(rule.network).tag(rule.network)
+                                    }
+                                }
+                                .frame(width: 280)
                             }
                         }
                         HStack(spacing: 12) {
@@ -889,6 +959,35 @@ private struct AutomationPane: View {
                 Text("Shortcuts app, scripts and Raycast")
             } footer: {
                 Text("In the Shortcuts app add “Open URLs” with one of these; in a script use open \"monorail://…\". Every action in the Shortcuts list works too, like monorail://focus-left.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Publish state for status bars (SketchyBar and others)", isOn: $store.settings.publishState)
+                if store.settings.publishState {
+                    LabeledContent("State file") {
+                        Text(Integrations.stateURL.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                            .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                    }
+                    LabeledContent("Notification") {
+                        Text(Integrations.notification.rawValue).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                    }
+                }
+                HStack {
+                    TextField("Event script (optional)", text: $store.settings.eventScript)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Choose…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseDirectories = false
+                        NSApp.activate(ignoringOtherApps: true)
+                        if panel.runModal() == .OK, let url = panel.url { store.settings.eventScript = url.path }
+                    }
+                }
+                Toggle("Apply changes made to settings.json in a text editor", isOn: $store.settings.liveReloadSettings)
+                Button("Reveal settings.json") { NSWorkspace.shared.activateFileViewerSelecting([SettingsStore.fileURL]) }
+            } header: {
+                Text("For power users")
+            } footer: {
+                Text("The event script runs with workspace_changed, focus_changed, focus_mode_on or focus_mode_off, and MONORAIL_WORKSPACE, MONORAIL_APP, MONORAIL_TITLE and more in its environment. It must be executable (chmod +x).")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }
@@ -1084,6 +1183,8 @@ private struct ShortcutsPane: View {
         ("Marks, scratchpad & profiles", [.setMark, .jumpToMark, .lastWindow, .toggleScratchpad, .makeScratchpad,
                                           .toggleSticky, .pictureInPicture, .nextProfile]),
         ("Focus, launch & more", [.toggleFocusMode, .zoomTile, .commandPalette, .quickLaunch, .takeSnapshot]),
+        ("Power moves", [.radialMenu, .balanceSizes, .workspaceBackAndForth, .moveToEmptyWorkspace, .focusAttention,
+                         .showDesktop, .screenshotSlide, .appOverview]),
         ("Monorail", [.undo, .togglePause, .retile]),
     ]
 

@@ -13,9 +13,15 @@ public enum Arrangement: String, Codable, CaseIterable, Sendable {
     /// A user-designed layout: columns side by side, each split into rows
     /// (see `Column.customRows`).
     case custom
+    /// Windows overlap like cards, each a little to the right of the last,
+    /// so every one's edge shows and the focused one is raised on top.
+    case accordion
+    /// Each window takes the main share of what's left, turning inwards:
+    /// right, down, left, up.
+    case spiral
 
     /// The built-in layouts, for pickers (custom ones come from Settings).
-    public static let standard: [Arrangement] = [.columns, .stack, .grid, .mainLeft, .mainTop]
+    public static let standard: [Arrangement] = [.columns, .stack, .grid, .mainLeft, .mainTop, .spiral, .accordion]
 
     public var title: String {
         switch self {
@@ -25,6 +31,8 @@ public enum Arrangement: String, Codable, CaseIterable, Sendable {
         case .mainLeft: return "Main + side"
         case .mainTop: return "Main + bottom"
         case .custom: return "Custom"
+        case .accordion: return "Accordion"
+        case .spiral: return "Spiral"
         }
     }
 
@@ -36,6 +44,8 @@ public enum Arrangement: String, Codable, CaseIterable, Sendable {
         case .mainLeft: return "rectangle.lefthalf.inset.filled"
         case .mainTop: return "rectangle.tophalf.inset.filled"
         case .custom: return "square.grid.3x1.below.line.grid.1x2"
+        case .accordion: return "rectangle.stack"
+        case .spiral: return "square.split.bottomrightquarter"
         }
     }
 
@@ -46,7 +56,9 @@ public enum Arrangement: String, Codable, CaseIterable, Sendable {
         case .columns: return .mainLeft
         case .mainLeft: return .mainTop
         case .mainTop: return .stack
-        case .stack: return .grid
+        case .stack: return .spiral
+        case .spiral: return .accordion
+        case .accordion: return .grid
         case .custom: return .grid
         }
     }
@@ -105,8 +117,41 @@ public enum Arrangement: String, Codable, CaseIterable, Sendable {
                 + (1..<count).map {
                     Rect(x: Double($0 - 1) / rest, y: main, width: 1 / rest, height: 1 - main)
                 }
+        case .accordion:
+            // Each window is offset by a strip as wide as accordionStep.
+            let step = min(Self.accordionStep, 0.5 / Double(count - 1))
+            let width = 1 - step * Double(count - 1)
+            return (0..<count).map { Rect(x: Double($0) * step, y: 0, width: width, height: 1) }
+        case .spiral:
+            var frames: [Rect] = []
+            var area = Rect(x: 0, y: 0, width: 1, height: 1)
+            for i in 0..<count {
+                if i == count - 1 {
+                    frames.append(area)
+                    break
+                }
+                let share = i == 0 ? main : 0.5
+                switch i % 4 {
+                case 0:  // take the left part, the rest goes right
+                    frames.append(Rect(x: area.x, y: area.y, width: area.width * share, height: area.height))
+                    area = Rect(x: area.x + area.width * share, y: area.y, width: area.width * (1 - share), height: area.height)
+                case 1:  // the top part, the rest below
+                    frames.append(Rect(x: area.x, y: area.y, width: area.width, height: area.height * share))
+                    area = Rect(x: area.x, y: area.y + area.height * share, width: area.width, height: area.height * (1 - share))
+                case 2:  // the right part, the rest to its left
+                    frames.append(Rect(x: area.x + area.width * (1 - share), y: area.y, width: area.width * share, height: area.height))
+                    area = Rect(x: area.x, y: area.y, width: area.width * (1 - share), height: area.height)
+                default:  // the bottom part, the rest above
+                    frames.append(Rect(x: area.x, y: area.y + area.height * (1 - share), width: area.width, height: area.height * share))
+                    area = Rect(x: area.x, y: area.y, width: area.width, height: area.height * (1 - share))
+                }
+            }
+            return frames
         }
     }
+
+    /// How much of the slide each card of an accordion shows beside the next.
+    public static let accordionStep = 0.06
 
     /// Cells of a custom layout: equal-width columns, each split into `rows[i]`
     /// equal rows. Extra windows go into the last column; missing ones leave

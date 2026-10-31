@@ -524,7 +524,7 @@ public struct Strip: Equatable, Codable, Sendable {
         let count = column.windows.count
         let share: Double
         switch column.arrangement {
-        case .mainLeft:
+        case .mainLeft, .spiral:
             share = r == 0 ? fraction.width : 1 - fraction.width
         case .mainTop:
             share = r == 0 ? fraction.height : 1 - fraction.height
@@ -577,6 +577,16 @@ public struct Strip: Equatable, Codable, Sendable {
             columns[c].active = first.row
         }
         return true
+    }
+
+    /// Evens everything out: every slide back to the default width, every
+    /// main window back to the default share.
+    public mutating func balance(width: Double) {
+        for c in columns.indices {
+            columns[c].width = width
+            columns[c].isFullWidth = false
+            columns[c].split = Arrangement.defaultSplit
+        }
     }
 
     /// Replaces the strip's columns, e.g. when a saved layout is applied.

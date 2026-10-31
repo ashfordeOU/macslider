@@ -236,3 +236,50 @@ final class SettingsV6Tests: XCTestCase {
         XCTAssertTrue(AutoRule(name: "Daily", trigger: .time, minuteOfDay: 60).isDue(minuteOfDay: 60, weekday: 7))
     }
 }
+
+final class LayoutsV7Tests: XCTestCase {
+    func testAccordionOverlapsWithEveryEdgeShowing() {
+        let frames = Arrangement.accordion.unitFrames(count: 3)
+        XCTAssertEqual(frames.count, 3)
+        XCTAssertEqual(frames[0].minX, 0, accuracy: 1e-9)
+        XCTAssertEqual(frames[2].maxX, 1, accuracy: 1e-9)
+        XCTAssertEqual(frames[1].minX - frames[0].minX, Arrangement.accordionStep, accuracy: 1e-9)
+        XCTAssertTrue(frames.allSatisfy { $0.height == 1 })
+    }
+
+    func testSpiralFillsTheSlideWithoutOverlap() {
+        for count in 2...6 {
+            let frames = Arrangement.spiral.unitFrames(count: count)
+            XCTAssertEqual(frames.count, count)
+            let area = frames.reduce(0.0) { $0 + $1.width * $1.height }
+            XCTAssertEqual(area, 1, accuracy: 1e-9, "\(count) windows cover the slide")
+            for i in frames.indices {
+                for j in frames.indices where j > i {
+                    let a = frames[i], b = frames[j]
+                    let overlap = max(0, min(a.maxX, b.maxX) - max(a.minX, b.minX)) * max(0, min(a.maxY, b.maxY) - max(a.minY, b.minY))
+                    XCTAssertEqual(overlap, 0, accuracy: 1e-9)
+                }
+            }
+        }
+        XCTAssertEqual(Arrangement.spiral.unitFrames(count: 2, split: 0.6)[0].width, 0.6, accuracy: 1e-9)
+    }
+
+    func testBalanceEvensOutTheStrip() {
+        var strip = Strip()
+        strip.insertSlide([1, 2], width: 0.8, arrangement: .mainLeft)
+        strip.insert(3, width: 0.3, position: .end, focus: false)
+        strip.toggleFullWidth()
+        strip.balance(width: 0.5)
+        XCTAssertTrue(strip.columns.allSatisfy { $0.width == 0.5 && !$0.isFullWidth && $0.split == Arrangement.defaultSplit })
+    }
+
+    func testCyclingVisitsTheNewLayouts() {
+        var seen: Set<Arrangement> = []
+        var arrangement = Arrangement.grid
+        for _ in 0..<10 {
+            seen.insert(arrangement)
+            arrangement = arrangement.next
+        }
+        XCTAssertTrue(seen.isSuperset(of: [.spiral, .accordion]))
+    }
+}

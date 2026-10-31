@@ -16,6 +16,7 @@ final class AutoRules: NSObject, CLLocationManagerDelegate {
     private var timer: Timer?
     private var lastMinute = -1
     private var lastNetwork: String?
+    private var lastDisplays: Set<String> = []
     private let location = CLLocationManager()
 
     override init() {
@@ -26,6 +27,7 @@ final class AutoRules: NSObject, CLLocationManagerDelegate {
     func start() {
         timer?.invalidate()
         lastNetwork = Self.currentNetwork()
+        lastDisplays = Set(NSScreen.screens.map(\.localizedName))
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.check() }
     }
 
@@ -53,6 +55,17 @@ final class AutoRules: NSObject, CLLocationManagerDelegate {
             lastMinute = minute
             let weekday = calendar.component(.weekday, from: now)
             for rule in rules where rule.isDue(minuteOfDay: minute, weekday: weekday) { fire(rule) }
+        }
+        // A display with a rule's name was just connected (docking at a desk).
+        let displays = Set(NSScreen.screens.map(\.localizedName))
+        if displays != lastDisplays {
+            let added = displays.subtracting(lastDisplays)
+            lastDisplays = displays
+            for rule in rules where rule.trigger == .display && rule.isEnabled
+                && added.contains(where: { $0.caseInsensitiveCompare(rule.network) == .orderedSame })
+            {
+                fire(rule)
+            }
         }
         let network = Self.currentNetwork()
         if network != lastNetwork {

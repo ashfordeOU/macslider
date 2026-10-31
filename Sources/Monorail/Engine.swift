@@ -88,6 +88,11 @@ final class Engine {
     var onShowPalette: () -> Void = {}
     /// Called to float a live picture of a window in a corner.
     var onPictureInPicture: (WindowID) -> Void = { _ in }
+    /// Called for the radial menu and the overview of one app's windows.
+    var onRadialMenu: () -> Void = {}
+    var onShowAppOverview: (String) -> Void = { _ in }
+    /// While resizing by hand: the window's frame (Accessibility coordinates), or nil when done.
+    var onResizeHUD: (CGRect?) -> Void = { _ in }
     var onAskForSnapshotName: () -> Void = {}
     /// A short confirmation to show the user ("Nothing to undo").
     var onNotice: (String) -> Void = { _ in }
@@ -264,6 +269,39 @@ final class Engine {
             return
         case .pictureInPicture:
             if let id = focusedWindowID() { onPictureInPicture(id) }
+            return
+        case .radialMenu:
+            onRadialMenu()
+            return
+        case .workspaceBackAndForth:
+            if let (_, key) = activeContext(), let previous = previousWorkspace[key.screen],
+                previous / Self.profileStride == activeProfile
+            {
+                switchWorkspace(to: previous - base)
+            }
+            return
+        case .moveToEmptyWorkspace:
+            moveFocusedToEmptyWorkspace()
+            return
+        case .focusAttention:
+            if let id = windows.values.first(where: { attentionApps.contains($0.appName) })?.id {
+                focusAndReveal(id)
+            } else {
+                onNotice("Nothing needs your attention")
+            }
+            return
+        case .showDesktop:
+            showingDesktop.toggle()
+            layout(animated: true)
+            return
+        case .screenshotSlide:
+            screenshotSlide()
+            return
+        case .appOverview:
+            if let id = focusedWindowID(), let window = windows[id] { onShowAppOverview(Self.appKey(window)) }
+            return
+        case .balanceSizes:
+            balanceSizes()
             return
         default:
             break
@@ -563,6 +601,8 @@ final class Engine {
         guard index >= 0, index < workspaceLimit, let (display, key) = activeContext(),
             base + index != key.workspace
         else { return }
+        previousWorkspace[key.screen] = key.workspace
+        showingDesktop = false
         activeWorkspace[key.screen] = base + index
         let newKey = currentKey(display)
         carryStickyWindows(to: newKey)
@@ -777,7 +817,8 @@ final class Engine {
     }
 
     /// Every workspace on the displays' current Spaces, for the overview.
-    func overview() -> [OverviewStrip] {
+    /// Every workspace, or with `onlyApp` just that app's windows.
+    func overview(onlyApp: String? = nil) -> [OverviewStrip] {
         let focused = focusedWindowID()
         var result: [OverviewStrip] = []
         for display in displays {
@@ -800,7 +841,15 @@ final class Engine {
                         pin: column.pin,
                         customRows: column.customRows
                     )
+                }.compactMap { column -> OverviewColumn? in
+                    guard let onlyApp else { return column }
+                    var column = column
+                    column.windows = column.windows.filter { summary in
+                        windows[summary.id].map(Self.appKey) == onlyApp
+                    }
+                    return column.windows.isEmpty ? nil : column
                 }
+                if onlyApp != nil && columns.isEmpty { continue }
                 var title = count > 1 ? settings.workspaceName(workspace) : "Windows"
                 if settings.profiles.count > 1 { title = "\(profileName) · \(title)" }
                 if displays.count > 1 { title = "\(display.name) · \(title)" }
@@ -1162,6 +1211,13 @@ final class Engine {
             for placement in strip.layout(config: layoutConfig(for: display), viewport: viewport(of: display)) {
                 guard let window = windows[placement.window] else { continue }
                 var frame = placement.frame
+                if showingDesktop {
+                    // Show desktop: everything slides off to the corner.
+                    let from = window.lastApplied ?? window.element.frame.map(Rect.init) ?? frame
+                    targets[placement.window] = (from, Rect(
+                        x: display.frame.maxX - 1, y: display.frame.maxY - 1, width: frame.width, height: frame.height))
+                    continue
+                }
                 if placement.window == zoomed, let (c, _) = strip.locate(placement.window) {
                     // A zoomed tile fills its whole slide, over its slide-mates.
                     frame = strip.columnFrames(config: layoutConfig(for: display), viewport: viewport(of: display))[c].frame
@@ -1191,7 +1247,7 @@ final class Engine {
 
         for id in skip { targets[id] = nil }
 
-        if animated && settings.animate {
+        if animated && settings.animate && !reduceMotion {
             disableEnhancedUI(for: Set(targets.keys.compactMap { windows[$0]?.pid }))
             overlays.hideTransient()
             animator.animate(targets, duration: settings.animationDuration)
@@ -1740,6 +1796,11 @@ final class Engine {
             focusHistory.append(id)
             if focusHistory.count > 30 { focusHistory.removeFirst() }
         }
+        if showingDesktop, windows[id]?.key != nil {
+            // Going to a window brings everything back.
+            showingDesktop = false
+            layout(animated: true)
+        }
         if let zoomed, zoomed != id {
             // Focusing another window ends the zoom.
             self.zoomed = nil
@@ -1799,6 +1860,7 @@ final class Engine {
 
         if resized {
             guard abs(actual.width - applied.width) > 4, let display = display(for: key) else { return }
+            if settings.resizeHUD { onResizeHUD(frame) }
             // Resizing a tile in a slide: the others follow live, then Monorail offers options.
             if let strip = strips[key], let (c, _) = strip.locate(window.id), strip.columns[c].windows.count > 1,
                 strip.columns[c].isTiled || strip.columns[c].isTabbed
@@ -1864,6 +1926,7 @@ final class Engine {
 
     private func finishResize(_ window: ManagedWindow) {
         resizing = nil
+        onResizeHUD(nil)
         window.lastApplied = nil
         layout(animated: true)
         scheduleSave()
@@ -2878,6 +2941,197 @@ final class Engine {
 
     /// The focused window's app, for the menu bar.
     var focusedAppName: String? { focusedWindowID().flatMap { windows[$0]?.appName } }
+
+    // MARK: - Power moves
+
+    /// The workspace each screen showed before the current one.
+    private var previousWorkspace: [ScreenKey: Int] = [:]
+    /// Show desktop: every window on the screens in view waits in the corner.
+    private var showingDesktop = false
+
+    /// Animations stay off while macOS asks for less motion or saves power.
+    private var reduceMotion: Bool {
+        settings.followReduceMotion
+            && (NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || ProcessInfo.processInfo.isLowPowerModeEnabled)
+    }
+
+    private func moveFocusedToEmptyWorkspace() {
+        guard let (_, key) = activeContext() else { return }
+        let empty = (0..<workspaceLimit).first { index in
+            base + index != key.workspace && (strips[StripKey(screen: key.screen, workspace: base + index)]?.isEmpty ?? true)
+        }
+        guard let empty else {
+            onNotice("Every workspace has windows")
+            return
+        }
+        moveFocusedWindow(toWorkspace: empty)
+        switchWorkspace(to: empty)
+        onNotice("Moved to \(settings.workspaceName(empty))")
+    }
+
+    /// Evens out every slide's width and split on the strip in view.
+    private func balanceSizes() {
+        guard let (display, key) = activeContext(), var strip = strips[key] else { return }
+        recordHistory()
+        strip.balance(width: layoutConfig(for: display).defaultWidth)
+        commit(strip, key)
+        onNotice("Evened out")
+    }
+
+    /// Saves a picture of the focused slide to the Desktop and the clipboard.
+    private func screenshotSlide() {
+        guard let (display, key) = activeContext(), let strip = strips[key], !strip.isEmpty else { return }
+        let frames = strip.columnFrames(config: layoutConfig(for: display), viewport: viewport(of: display))
+        guard frames.indices.contains(strip.focusedColumn) else { return }
+        let rect = frames[strip.focusedColumn].frame
+        let region = "\(Int(rect.x)),\(Int(rect.y)),\(Int(rect.width)),\(Int(rect.height))"
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop")
+        let file = desktop.appendingPathComponent("Monorail slide \(formatter.string(from: Date())).png")
+        for arguments in [["-x", "-R", region, file.path], ["-x", "-c", "-R", region]] {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            process.arguments = arguments
+            try? process.run()
+        }
+        onNotice("Slide saved to the Desktop and copied")
+    }
+
+    /// Where a snap would put the focused window, for the radial menu's preview.
+    func snapPreview(_ position: SnapPosition) -> CGRect? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+            let frame = AXUIElement.application(app.processIdentifier).focusedWindow?.frame,
+            let display = display(containing: frame) ?? displays.first
+        else { return nil }
+        return CGRect(position.frame(in: display.viewport, gap: layoutConfig(for: display).gap))
+    }
+
+    func snapFocused(_ position: SnapPosition) {
+        guard isRunning, !isPaused else { return }
+        recordHistory()
+        snap(position)
+    }
+
+    // MARK: - Dragging with the modifier keys
+
+    private struct ModifierDrag {
+        var id: WindowID
+        var start: CGPoint
+        var frame: CGRect
+        var resize: Bool
+    }
+
+    private var modifierDrag: ModifierDrag?
+
+    /// ⌃⌥ + drag anywhere in a window moves it; ⌃⌥ + right-drag resizes it.
+    /// Returns true if a window is under the pointer (the click is then Monorail's).
+    func beginModifierDrag(at point: CGPoint, resize: Bool) -> Bool {
+        guard isRunning, !isPaused, settings.modifierDrag, let id = topWindow(at: point), let window = windows[id],
+            let frame = window.element.frame
+        else { return false }
+        animator.cancel()
+        modifierDrag = ModifierDrag(id: id, start: point, frame: frame, resize: resize)
+        focus(id, warpMouse: false)
+        return true
+    }
+
+    func continueModifierDrag(to point: CGPoint) {
+        guard let drag = modifierDrag, let window = windows[drag.id] else { return }
+        let dx = point.x - drag.start.x, dy = point.y - drag.start.y
+        var frame = drag.frame
+        if drag.resize {
+            frame.size.width = max(160, drag.frame.width + dx)
+            frame.size.height = max(120, drag.frame.height + dy)
+            if settings.resizeHUD { onResizeHUD(frame) }
+        } else {
+            frame.origin.x += dx
+            frame.origin.y += dy
+        }
+        writer.set(frame, of: drag.id, element: window.element, pid: window.pid, sizeChanged: drag.resize)
+    }
+
+    /// Lets go: a tiled window lands where it was dropped (or takes its new
+    /// width), like a drag by the title bar.
+    func endModifierDrag() {
+        guard let drag = modifierDrag, let window = windows[drag.id] else {
+            modifierDrag = nil
+            return
+        }
+        modifierDrag = nil
+        onResizeHUD(nil)
+        guard let key = window.key, let display = display(for: key) else { return }
+        // Give the last write a moment to land, then settle the strip.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            guard let self else { return }
+            if drag.resize, let frame = window.element.frame {
+                if var strip = self.strips[key], let (c, _) = strip.locate(window.id), strip.columns[c].windows.count > 1 {
+                    let column = strip.columnFrames(config: self.layoutConfig(for: display), viewport: self.viewport(of: display))[c].frame
+                    _ = strip.resizeTile(window.id, toFraction: (
+                        width: Double(frame.width) / max(column.width, 1), height: Double(frame.height) / max(column.height, 1)))
+                    self.strips[key] = strip
+                } else {
+                    let fraction = self.layoutConfig(for: display).fraction(
+                        forColumnWidth: Double(frame.width), viewportWidth: self.viewport(of: display).width)
+                    self.strips[key]?.setWidth(fraction, of: window.id)
+                }
+                window.lastApplied = nil
+                self.layout(animated: true)
+                self.scheduleSave()
+            } else {
+                self.finishUserMove(window, resized: false)
+            }
+        }
+    }
+
+    var isModifierDragging: Bool { modifierDrag != nil }
+
+    // MARK: - Title bar swipes
+
+    /// The managed window whose title bar is under `point`, if any.
+    func titleBarWindow(at point: CGPoint) -> WindowID? {
+        guard isRunning, !isPaused, settings.titleBarSwipes, let id = topWindow(at: point), let window = windows[id],
+            let frame = window.element.frame, point.y - frame.minY < 30
+        else { return nil }
+        return id
+    }
+
+    enum Swipe { case left, right, up, down }
+
+    /// A two-finger swipe on a title bar: left and right move the window's
+    /// slide, up toggles full width, down minimises.
+    func titleBarSwipe(_ swipe: Swipe, on id: WindowID) {
+        guard let window = windows[id] else { return }
+        if window.key == nil {
+            // A floating window snaps to that side instead.
+            let element = window.element
+            switch swipe {
+            case .left: snap(element, to: .leftHalf)
+            case .right: snap(element, to: .rightHalf)
+            case .up: snap(element, to: .maximize)
+            case .down: minimizeWindow(id)
+            }
+            return
+        }
+        if swipe == .down {
+            minimizeWindow(id)
+            return
+        }
+        guard let key = window.key, var strip = strips[key] else { return }
+        recordHistory()
+        strip.focus(id)
+        // Left and right are what you see, also on a right-to-left strip.
+        let mirrored = settings.layout.direction == .rightToLeft
+        switch swipe {
+        case .left: strip.moveFocused(mirrored ? .right : .left)
+        case .right: strip.moveFocused(mirrored ? .left : .right)
+        default: strip.toggleFullWidth()
+        }
+        commit(strip, key)
+        focus(id, warpMouse: false)
+        haptic()
+    }
 
     // MARK: - Haptics
 

@@ -85,7 +85,9 @@ public struct DisplayOverride: Equatable, Hashable, Codable, Sendable {
 /// when the Mac joins a Wi-Fi network.
 public struct AutoRule: Equatable, Hashable, Codable, Sendable, Identifiable {
     public enum Trigger: String, Codable, CaseIterable, Sendable {
-        case time, wifi
+        /// At a time of day; on joining a Wi-Fi network; when a display
+        /// with this name is connected (`network` holds the name).
+        case time, wifi, display
     }
 
     public var id: String
@@ -290,6 +292,28 @@ public struct AppSettings: Equatable, Codable, Sendable {
     public var launchSlots: [String: String] = [:]
     /// The menu bar shows the focused app's name next to the position.
     public var menuBarShowsApp = false
+    /// Hold ⌃⌥ and drag anywhere in a window to move it; right-drag to resize.
+    public var modifierDrag = true
+    /// Two-finger swipes on a window's title bar: left and right move its
+    /// slide, up toggles full width, down minimises.
+    public var titleBarSwipes = false
+    /// The focus border fades from its colour into a second one.
+    public var focusBorderGradient = false
+    public var focusBorderColor2 = "#FF5F9E"
+    /// A desktop picture per workspace (index → file path).
+    public var workspaceWallpapers: [String: String] = [:]
+    /// Watch settings.json and pick up changes made in a text editor.
+    public var liveReloadSettings = true
+    /// Write state.json and post a notification on changes, for SketchyBar
+    /// and other status bars.
+    public var publishState = false
+    /// A script run on events (workspace and focus changes), with details
+    /// in environment variables.
+    public var eventScript = ""
+    /// Skip animations when macOS's Reduce Motion or Low Power Mode is on.
+    public var followReduceMotion = true
+    /// While resizing by hand, show the window's size.
+    public var resizeHUD = true
     /// Snap windows back when an app moves or resizes one by itself.
     public var keepWindowsInPlace = true
     /// After resizing a window in a slide, offer to rearrange the slide.
@@ -402,6 +426,8 @@ public struct AppSettings: Equatable, Codable, Sendable {
         case hapticFeedback, pinchForOverview, attentionMarkers, snapPicker
         case focusMinutes, focusDim, displayOverrides, theme, syncThroughICloud, threeFingerTapOverview
         case peekWithOption, collectStats, autoRules, smartGaps, launchSlots, menuBarShowsApp
+        case modifierDrag, titleBarSwipes, focusBorderGradient, focusBorderColor2, workspaceWallpapers
+        case liveReloadSettings, publishState, eventScript, followReduceMotion, resizeHUD
     }
 
     public init(from decoder: Decoder) throws {
@@ -473,6 +499,16 @@ public struct AppSettings: Equatable, Codable, Sendable {
         smartGaps = value(.smartGaps, d.smartGaps)
         launchSlots = value(.launchSlots, d.launchSlots)
         menuBarShowsApp = value(.menuBarShowsApp, d.menuBarShowsApp)
+        modifierDrag = value(.modifierDrag, d.modifierDrag)
+        titleBarSwipes = value(.titleBarSwipes, d.titleBarSwipes)
+        focusBorderGradient = value(.focusBorderGradient, d.focusBorderGradient)
+        focusBorderColor2 = value(.focusBorderColor2, d.focusBorderColor2)
+        workspaceWallpapers = value(.workspaceWallpapers, d.workspaceWallpapers)
+        liveReloadSettings = value(.liveReloadSettings, d.liveReloadSettings)
+        publishState = value(.publishState, d.publishState)
+        eventScript = value(.eventScript, d.eventScript)
+        followReduceMotion = value(.followReduceMotion, d.followReduceMotion)
+        resizeHUD = value(.resizeHUD, d.resizeHUD)
         installUpdatesAutomatically = value(.installUpdatesAutomatically, d.installUpdatesAutomatically)
         rulesVersion = value(.rulesVersion, 1)
         if rulesVersion < Self.currentRulesVersion {

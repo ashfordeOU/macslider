@@ -25,6 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let stats = UsageStats()
     private let autoRules = AutoRules()
     private let pictureInPicture = PictureInPicture()
+    private let radial = RadialMenu()
+    private let resizeHUD = ResizeHUD()
+    private let integrations = Integrations()
     private var statsTimer: Timer?
     private let statusMenu = NSMenu()
     private let navigation = SettingsNavigation()
@@ -119,7 +122,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.onRecordingChange = { [weak self] recording in self?.input.isSuspended = recording }
 
         engine.onStateChange = { [weak self] in
-            self?.updateStatusItem()
+            guard let self else { return }
+            self.integrations.update({ [weak self] in self?.currentState() }, settings: self.store.settings)
+            self.updateStatusItem()
             self?.sliderBar.update()
             self?.popover.refresh()
         }
@@ -187,6 +192,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.toast.show("Picture in picture needs Screen Recording · turn on live previews in the overview")
         }
         trackpad.onThreeFingerTap = { [weak self] in self?.overview.toggle() }
+        radial.preview = { [weak self] position in self?.engine.snapPreview(position) }
+        radial.apply = { [weak self] position in self?.engine.snapFocused(position) }
+        engine.onRadialMenu = { [weak self] in self?.radial.toggle() }
+        engine.onResizeHUD = { [weak self] frame in self?.resizeHUD.show(frame) }
+        engine.onShowAppOverview = { [weak self] app in
+            let name = self?.engine.allWindowSummaries().first { $0.id == self?.engine.focusedWindowID() }?.appName
+            self?.overview.show(onlyApp: app, appName: name)
+        }
+        input.onFlagsChanged = { [weak self] modifiers in self?.radial.modifiersChanged(modifiers) }
+        input.onDragBegin = { [weak self] point, resize in self?.engine.beginModifierDrag(at: point, resize: resize) ?? false }
+        input.onDragMove = { [weak self] point in self?.engine.continueModifierDrag(to: point) }
+        input.onDragEnd = { [weak self] in self?.engine.endModifierDrag() }
+        input.titleBarWindow = { [weak self] point in self?.engine.titleBarWindow(at: point) }
+        input.onTitleBarSwipe = { [weak self] swipe, id in self?.engine.titleBarSwipe(swipe, on: id) }
         engine.onWindowDrag = { [weak self] id in self?.snapPicker.windowDragStarted(id) }
         snapPicker.snap = { [weak self] id, position in self?.engine.snapWindow(id, to: position) }
         engine.onResized = { [weak self] id, frame, name, hasOthers in
@@ -239,6 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         apply(store.settings)
         updateStatusItem()
         store.startCloudSync()
+        store.watchFile()
         autoRules.start()
         // Once a minute, note which apps share slides (for Insights).
         statsTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -257,6 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func apply(_ settings: AppSettings) {
         let syncWasOn = engine.settings.syncThroughICloud
+        let liveReloadWasOn = engine.settings.liveReloadSettings
         engine.settings = settings
         WorkspaceColor.theme = settings.theme
         stats.isEnabled = settings.collectStats
@@ -268,6 +289,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         input.scrollOverMenuBar = settings.scrollOverMenuBar
         input.slideTrigger = settings.slideTrigger
         input.pinchForOverview = settings.pinchForOverview
+        input.modifierDrag = settings.modifierDrag
+        input.titleBarSwipes = settings.titleBarSwipes
+        if settings.liveReloadSettings != liveReloadWasOn { store.watchFile() }
         snapPicker.isEnabled = settings.snapPicker
         updateArrowItems(visible: settings.showNavigationArrows)
         updater.setAutomatic(settings.checkForUpdates)
@@ -428,6 +452,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         else { return }
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         engine.saveSnapshot(named: trimmed.isEmpty ? Self.snapshotName() : trimmed)
+    }
+
+    /// What status bars and scripts see (state.json, the event script).
+    private func currentState() -> Integrations.State? {
+        guard let status = engine.status() else { return nil }
+        let focused = engine.focusedWindowID().flatMap { id in engine.allWindowSummaries().first { $0.id == id } }
+        return Integrations.State(
+            workspace: status.workspace, workspaceName: store.settings.workspaceName(status.workspace - 1),
+            workspaceCount: engine.workspaceCount, profile: engine.profileName,
+            slide: status.focusedColumn, slides: status.columnCount,
+            app: focused?.appName, title: focused?.title, focusMode: engine.isFocusMode)
     }
 
     /// Runs an auto rule: its profile, then its layout.

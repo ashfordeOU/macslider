@@ -63,6 +63,7 @@ final class Overlays {
             panel.contentView = view
         }
         view.color = NSColor(hex: settings.focusBorderColor) ?? .controlAccentColor
+        view.color2 = settings.focusBorderGradient ? NSColor(hex: settings.focusBorderColor2) : nil
         view.lineWidth = width
         view.needsDisplay = true
         panel.setFrame(cocoaFrame(frame.insetBy(dx: -width, dy: -width)), display: true)
@@ -144,14 +145,29 @@ final class Overlays {
 
 private final class BorderView: NSView {
     var color: NSColor = .controlAccentColor
+    /// With a second colour, the border fades from one to the other.
+    var color2: NSColor?
     var lineWidth: CGFloat = 3
 
     override func draw(_ dirtyRect: NSRect) {
         let inset = lineWidth / 2
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset), xRadius: 11, yRadius: 11)
         path.lineWidth = lineWidth
-        color.setStroke()
-        path.stroke()
+        guard let color2, let gradient = NSGradient(starting: color, ending: color2) else {
+            color.setStroke()
+            path.stroke()
+            return
+        }
+        // Fill the ring (the stroke's outline) with the gradient, corner to corner.
+        let inner = NSBezierPath(
+            roundedRect: bounds.insetBy(dx: lineWidth, dy: lineWidth),
+            xRadius: max(11 - inset, 2), yRadius: max(11 - inset, 2))
+        let outer = NSBezierPath(roundedRect: bounds, xRadius: 11 + inset, yRadius: 11 + inset)
+        let shape = NSBezierPath()
+        shape.append(outer)
+        shape.append(inner)
+        shape.windingRule = .evenOdd
+        gradient.draw(in: shape, angle: -35)
     }
 }
 

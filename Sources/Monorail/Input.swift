@@ -53,6 +53,17 @@ final class InputMonitor {
     var onPinch: (Bool) -> Void = { _ in }
     /// Set to read the next key typed (a mark's letter); called with nil on Escape.
     var captureNextKey: ((String?) -> Void)?
+    /// ⌃⌥ + drag: begin returns true if Monorail takes the drag.
+    var modifierDrag = true
+    var onDragBegin: (CGPoint, _ resize: Bool) -> Bool = { _, _ in false }
+    var onDragMove: (CGPoint) -> Void = { _ in }
+    var onDragEnd: () -> Void = {}
+    /// Title bar swipes: which window's title bar a scroll starts on, and the swipe.
+    var titleBarSwipes = false
+    var titleBarWindow: (CGPoint) -> WindowID? = { _ in nil }
+    var onTitleBarSwipe: (Engine.Swipe, WindowID) -> Void = { _, _ in }
+    /// Called when the modifier keys change (for the radial menu).
+    var onFlagsChanged: (Modifiers) -> Void = { _ in }
 
     private(set) var isSlideMode = false
     private var tap: CFMachPort?
@@ -64,6 +75,10 @@ final class InputMonitor {
     private var lastStep: CFTimeInterval = 0
     private var pinchTotal: Double = 0
     private var pinchFired = false
+    private var dragging = false
+    private var swipeWindow: WindowID?
+    private var swipeTotal: (x: Double, y: Double) = (0, 0)
+    private var swipeFired = false
 
     /// Trackpad pinches (NSEvent.EventType.magnify).
     private static let magnifyType: UInt32 = 30
@@ -74,7 +89,10 @@ final class InputMonitor {
     @discardableResult
     func start() -> Bool {
         guard tap == nil else { return true }
-        let types: [CGEventType] = [.keyDown, .flagsChanged, .scrollWheel]
+        let types: [CGEventType] = [
+            .keyDown, .flagsChanged, .scrollWheel, .leftMouseDown, .leftMouseDragged, .leftMouseUp,
+            .rightMouseDown, .rightMouseDragged, .rightMouseUp,
+        ]
         let mask = types.reduce(CGEventMask(1) << Self.magnifyType) { $0 | (CGEventMask(1) << $1.rawValue) }
         guard
             let tap = CGEvent.tapCreate(
@@ -153,7 +171,25 @@ final class InputMonitor {
             return pass
         case .flagsChanged:
             handleFlagsChanged(event)
+            let mods = Modifiers(event.flags)
+            DispatchQueue.main.async { self.onFlagsChanged(mods) }
             return pass
+        case .leftMouseDown, .rightMouseDown:
+            guard modifierDrag, !isSuspended, !isPaused(), Modifiers(event.flags) == [.control, .option] else {
+                return pass
+            }
+            // Runs on the main thread already (the tap's run loop is the main one).
+            dragging = onDragBegin(event.location, type == .rightMouseDown)
+            return dragging ? nil : pass
+        case .leftMouseDragged, .rightMouseDragged:
+            guard dragging else { return pass }
+            onDragMove(event.location)
+            return nil
+        case .leftMouseUp, .rightMouseUp:
+            guard dragging else { return pass }
+            dragging = false
+            onDragEnd()
+            return nil
         case .keyDown:
             if triggerDownAt != nil { triggerInterrupted = true }
             guard !isSuspended else { return pass }
@@ -194,6 +230,38 @@ final class InputMonitor {
         }
     }
 
+    /// A two-finger swipe that starts on a window's title bar. Returns true
+    /// while the gesture is Monorail's.
+    private func handleTitleBarSwipe(_ event: CGEvent) -> Bool {
+        guard event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0,
+            Modifiers(event.flags).isEmpty
+        else { return false }
+        let phase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
+        let momentum = event.getIntegerValueField(.scrollWheelEventMomentumPhase)
+        if phase == 1 {  // began
+            swipeWindow = titleBarWindow(event.location)
+            swipeTotal = (0, 0)
+            swipeFired = false
+        }
+        guard let id = swipeWindow else { return false }
+        if momentum != 0 { return true }  // swallow the coast after a swipe
+        // Measure what the fingers did, whichever way scrolling is set to go.
+        let sign = (NSEvent(cgEvent: event)?.isDirectionInvertedFromDevice ?? true) ? 1.0 : -1.0
+        swipeTotal.x += sign * event.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
+        swipeTotal.y += sign * event.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
+        if !swipeFired, max(abs(swipeTotal.x), abs(swipeTotal.y)) > 60 {
+            swipeFired = true
+            let swipe: Engine.Swipe = abs(swipeTotal.x) > abs(swipeTotal.y)
+                ? (swipeTotal.x > 0 ? .right : .left)
+                : (swipeTotal.y > 0 ? .down : .up)
+            DispatchQueue.main.async { self.onTitleBarSwipe(swipe, id) }
+        }
+        if phase == 4 || phase == 8 {  // ended or cancelled
+            swipeWindow = nil
+        }
+        return true
+    }
+
     /// ⌥ + pinch: returns true if the gesture is Monorail's.
     private func handleMagnify(_ event: CGEvent) -> Bool {
         guard pinchForOverview, !isSuspended, !isPaused(), Modifiers(event.flags) == [.option],
@@ -223,6 +291,7 @@ final class InputMonitor {
     /// Returns true if the scroll moved the strip (and should not reach the app).
     private func handleScroll(_ event: CGEvent) -> Bool {
         guard !isSuspended, !isPaused() else { return false }
+        if titleBarSwipes, handleTitleBarSwipe(event) { return true }
         var mods = Modifiers(event.flags)
         mods.remove(.shift)  // Shift turns a mouse wheel sideways; allow it.
         let withModifier = modifierSwipe && !scrollModifier.isEmpty && mods == scrollModifier

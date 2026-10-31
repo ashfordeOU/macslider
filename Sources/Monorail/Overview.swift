@@ -15,6 +15,8 @@ final class OverviewModel: ObservableObject {
     /// Room for the menu bar above the overview's content.
     @Published var topInset: CGFloat = 0
     @Published var theme: Theme = .vivid
+    /// "Overview", or the app whose windows are shown.
+    @Published var heading = "Overview"
 
     func loadThumbnails() {
         previewsAllowed = WindowThumbnails.isAllowed
@@ -146,7 +148,7 @@ struct OverviewView: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text("Overview").font(.system(size: 32, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    Text(model.heading).font(.system(size: 32, weight: .bold, design: .rounded)).foregroundStyle(.white)
                     Text(Brand.full).font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
                 }
@@ -579,10 +581,15 @@ final class OverviewController {
         isVisible ? close() : show()
     }
 
-    func show() {
+    /// The app the overview is showing alone, if any.
+    private var onlyApp: String?
+
+    func show(onlyApp: String? = nil, appName: String? = nil) {
         guard let engine else { return }
+        self.onlyApp = onlyApp
+        model.heading = appName.map { "\($0) windows" } ?? "Overview"
         model.theme = WorkspaceColor.theme
-        model.strips = engine.overview()
+        model.strips = engine.overview(onlyApp: onlyApp)
         model.selection = nil
         model.editing = nil
         model.thumbnails = [:]
@@ -723,7 +730,7 @@ final class OverviewController {
 
     private func refresh() {
         guard let engine else { return }
-        model.strips = engine.overview()
+        model.strips = engine.overview(onlyApp: onlyApp)
         model.loadThumbnails()
     }
 
